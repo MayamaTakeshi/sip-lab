@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "install": "./install.sh",
+    "install": "./install.sh"
   },
   "repository": {
     "type": "git",
