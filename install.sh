@@ -21,10 +21,6 @@ EOF
 	cd ..
 fi
 
-npm install
-
-npm install -y node-gyp
-
 node-gyp configure
 
 node-gyp build

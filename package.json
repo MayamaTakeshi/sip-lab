@@ -4,8 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "build": "node-gyp build",
-    "rebuild": "node-gyp rebuild"
+    "install": "./install.sh",
   },
   "repository": {
     "type": "git",
