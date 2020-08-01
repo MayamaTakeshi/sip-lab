@@ -1,0 +1,26 @@
+2009/06/18: takeshi
+
+When compiling chainlink_dtmfdet.c using g++, it failed with:
+
+g++ -DPJ_AUTOCONF=1 -O2 -I/usr/local/src/svn/pjproject/pjlib/include -I/usr/local/src/svn/pjproject/pjlib-util/include -I/usr/local/
+src/svn/pjproject/pjnath/include -I/usr/local/src/svn/pjproject/pjmedia/include -I/usr/local/src/svn/pjproject/pjsip/include -I incl
+ude/pjmedia -DPJ_AUTOCONF=1 -O2 -I/usr/local/src/svn/pjproject/pjlib/include -I/usr/local/src/svn/pjproject/pjlib-util/include -I/us
+r/local/src/svn/pjproject/pjnath/include -I/usr/local/src/svn/pjproject/pjmedia/include -I/usr/local/src/svn/pjproject/pjsip/include
+   -c -o chainlink_dtmfdet.o src/pjmedia/chainlink_dtmfdet.c
+/usr/local/include/spandsp/dc_restore.h: In function ât16_t saturate(int32_t)â/usr/local/include/spandsp/dc_restore.h:129: error: âT16_MAXâas not declared in this scope
+/usr/local/include/spandsp/dc_restore.h:131: error: âT16_MINâas not declared in this scope
+/usr/local/include/spandsp/dc_restore.h: In function ât16_t fsaturatef(float)â/usr/local/include/spandsp/dc_restore.h:138: error: âT16_MAXâas not declared in this scope
+/usr/local/include/spandsp/dc_restore.h:140: error: âT16_MINâas not declared in this scope
+/usr/local/include/spandsp/dc_restore.h: In function ât16_t fsaturate(double)â/usr/local/include/spandsp/dc_restore.h:148: error: âT16_MAXâas not declared in this scope
+/usr/local/include/spandsp/dc_restore.h:150: error: âT16_MINâas not declared in this scope
+
+Using gcc, I was able to compile it, but this will cause problems with linking to sip-tester (which is compiled using g++) due to name mangling. So, to resolve the above problem I added the definitions before the call to include spandsp.h:
+
+#define INT16_MAX 0x7fff
+#define INT16_MIN (-INT16_MAX - 1) 
+#include <spandsp.h>
+
+
+
+
+

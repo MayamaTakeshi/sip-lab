@@ -1,0 +1,225 @@
+------------------------------------------------------------
+2019/05/25 takeshi:
+Development and test using node v10.15.3
+
+------------------------------------------------------------
+2019/06/08 takeshi:
+
+We needed to use pjproject built from source to permit to debug it as pjw_call_respond gets stuck.
+
+
+To be able to generate addon.node SO file we needed to build pjsip with -pPIC by doing:
+
+cd pjproject-2.7.2
+cat > user.mak <<EOF
+export CFLAGS += -fPIC -g
+export LDFLAGS +=
+EOF
+
+./configure
+make dep && make clean && make
+
+
+
+After preparing binding.gyp to use pjproject built from source, build of addon was successful:
+
+takeshi@takeshi-desktop:node-sip$ node-gyp configure
+gyp info it worked if it ends with ok
+gyp info using node-gyp@3.8.0
+gyp info using node@10.15.3 | linux | x64
+gyp info spawn /usr/bin/python2
+gyp info spawn args [ '/home/takeshi/.nvm/versions/node/v10.15.3/lib/node_modules/node-gyp/gyp/gyp_main.py',
+gyp info spawn args   'binding.gyp',
+gyp info spawn args   '-f',
+gyp info spawn args   'make',
+gyp info spawn args   '-I',
+gyp info spawn args   '/home/takeshi/src/git/themonks/node-sip/build/config.gypi',
+gyp info spawn args   '-I',
+gyp info spawn args   '/home/takeshi/.nvm/versions/node/v10.15.3/lib/node_modules/node-gyp/addon.gypi',
+gyp info spawn args   '-I',
+gyp info spawn args   '/home/takeshi/.node-gyp/10.15.3/include/node/common.gypi',
+gyp info spawn args   '-Dlibrary=shared_library',
+gyp info spawn args   '-Dvisibility=default',
+gyp info spawn args   '-Dnode_root_dir=/home/takeshi/.node-gyp/10.15.3',
+gyp info spawn args   '-Dnode_gyp_dir=/home/takeshi/.nvm/versions/node/v10.15.3/lib/node_modules/node-gyp',
+gyp info spawn args   '-Dnode_lib_file=/home/takeshi/.node-gyp/10.15.3/<(target_arch)/node.lib',
+gyp info spawn args   '-Dmodule_root_dir=/home/takeshi/src/git/themonks/node-sip',
+gyp info spawn args   '-Dnode_engine=v8',
+gyp info spawn args   '--depth=.',
+gyp info spawn args   '--no-parallel',
+gyp info spawn args   '--generator-output',
+gyp info spawn args   'build',
+gyp info spawn args   '-Goutput_dir=.' ]
+ngyp info ok 
+takeshi@takeshi-desktop:node-sip$ node-gyp build
+gyp info it worked if it ends with ok
+gyp info using node-gyp@3.8.0
+gyp info using node@10.15.3 | linux | x64
+gyp info spawn make
+gyp info spawn args [ 'BUILDTYPE=Release', '-C', 'build' ]
+make: Entering directory '/home/takeshi/src/git/themonks/node-sip/build'
+  SOLINK_MODULE(target) Release/obj.target/addon.node
+  COPY Release/addon.node
+make: Leaving directory '/home/takeshi/src/git/themonks/node-sip/build'
+gyp info ok 
+
+
+Howevever, when trying to use it we got:
+
+takeshi@takeshi-desktop:node-sip$ node test.js 
+internal/modules/cjs/loader.js:730
+  return process.dlopen(module, path.toNamespacedPath(filename));
+                 ^
+
+Error: /home/takeshi/src/git/themonks/node-sip/build/Release/addon.node: undefined symbol: srtp_crypto_policy_set_aes_cm_256_hmac_sha1_80
+    at Object.Module._extensions..node (internal/modules/cjs/loader.js:730:18)
+    at Module.load (internal/modules/cjs/loader.js:600:32)
+    at tryModuleLoad (internal/modules/cjs/loader.js:539:12)
+    at Function.Module._load (internal/modules/cjs/loader.js:531:3)
+    at Module.require (internal/modules/cjs/loader.js:637:17)
+    at require (internal/modules/cjs/helpers.js:22:18)
+    at Object.<anonymous> (/home/takeshi/src/git/themonks/node-sip/index.js:1:77)
+    at Module._compile (internal/modules/cjs/loader.js:701:30)
+    at Object.Module._extensions..js (internal/modules/cjs/loader.js:712:10)
+    at Module.load (internal/modules/cjs/loader.js:600:32)
+
+
+This was solved by checking the pjproject from apt dependencies:
+
+takeshi@takeshi-desktop:node-sip$ pkg-config --libs libpjproject
+-lpjsua2 -lstdc++ -lpjsua -lpjsip-ua -lpjsip-simple -lpjsip -lpjmedia-codec -lpjmedia -lpjmedia-videodev -lpjmedia-audiodev -lpjmedia -lpjnath -lpjlib-util -lsrtp2 -lpj -lopus -lssl -lcrypto -luuid -lm -lrt -lpthread -lasound -lSDL2 -lavdevice -lavformat -lavcodec -lswscale -lavutil -lv4l2 -lopencore-amrnb -lopencore-amrwb -lvo-amrwbenc
+
+and adding them to the binding.gyp link_settings.libraries.
+
+
+It also complained about a function from libspeex which was not mentioned in the the pkg-config output. So we addded it.
+
+
+Then, it failed with:
+
+takeshi@takeshi-desktop:node-sip$ node test.js 
+pjw_init thread_id=1319614176
+
+22:39:16.787         os_core_unix.c !pjlib 2.7.2 for POSIX initialized
+node: symbol lookup error: /home/takeshi/src/git/themonks/node-sip/build/Release/addon.node: undefined symbol: pj_cis_buf_init
+
+
+We found this in libpjlib-util:
+
+takeshi@takeshi-desktop:node-sip$ nm pjproject-2.7.2/pjlib-util/lib/libpjlib-util-x86_64-unknown-linux-gnu.a  |grep pj_cis
+                 U pj_cis_add_str
+                 U pj_cis_buf_init
+                 U pj_cis_init
+0000000000000170 T pj_cis_add_alpha
+00000000000001f0 T pj_cis_add_cis
+00000000000001a0 T pj_cis_add_num
+0000000000000100 T pj_cis_add_range
+00000000000001b0 T pj_cis_add_str
+0000000000000000 T pj_cis_buf_init
+0000000000000230 T pj_cis_del_range
+0000000000000270 T pj_cis_del_str
+0000000000000090 T pj_cis_dup
+0000000000000040 T pj_cis_init
+00000000000002b0 T pj_cis_invert
+takeshi@takeshi-desktop:node-sip$ nm pjproject-2.7.2/pjlib-util/lib/libpjlib-util-x86_64-unknown-linux-gnu.a  |grep pj_cis_buf_init
+                 U pj_cis_buf_init
+0000000000000000 T pj_cis_buf_init
+
+
+We solved the above by putting -lpjlib-util-x86_64-unknown-linux-gnu as the last library in the list of pjprojects libs.
+
+------------------------------------------------------------
+2019/06/08 takeshi:
+
+Problem of having pjw_call_respond stuck was narrowed down to:
+  pjsip/src/pjsip-ua/sip_inv.c 
+in function
+  pjsip_inv_answer
+
+The code stops at this line:
+  pjsip_dlg_inc_lock(inv->dlg);
+
+We tried to use latest pjproject 2.8 but the same problem happens.
+
+UPDATE:
+  this is happening because pjsip get stuck in call to pjsip_mutex_lock.
+  It seems the cause is because we are using a separate thread (boost/thread) to do periodic poll of events
+So we changed to make js to periodically do the poll and after that pjw_call_respond worked as expected.
+
+
+
+Obs: while investigating this issue, we found this:
+
+#####
+Deadlocks
+A deadlock is a situation wherein two or more competing actions are waiting for the other to finish, and thus neither ever does.
+
+The internal PJSIP synchronization should be free from deadlock problem. However, deadlock may still arise when PJSIP has to interract with application's mutex.
+
+To avoid deadlock introduced by application's mutex, the following rule MUST be obeyed at all times:
+
+Mutexes MUST always be acquired with the same order, and the order is:
+acquire PJSIP mutex first, then
+acquire application mutex.
+###
+
+https://www.pjsip.org/locking.htm
+
+However, to confirm this is not related to the problem we replaced this:
+
+#define PJW_LOCK()      pthread_mutex_lock(&g_mutex)
+#define PJW_UNLOCK()    pthread_mutex_unlock(&g_mutex)
+
+with this:
+
+#define PJW_LOCK()      printf("");
+#define PJW_UNLOCK()    printf("");
+
+and the problem persisted.
+
+------------------------------------------------------------
+2019/06/08 takeshi:
+Due to:
+  https://trac.pjsip.org/repos/changeset/5942
+we reverted from pjproject-2.8 to pjproject-2.7.2
+
+
+------------------------------------------------------------
+2019/06/08 takeshi:
+
+Failure to compile due change in definition of struct pjmedia_port_info:
+
+takeshi@takeshi-desktop:node-sip$ node-gyp build
+gyp info it worked if it ends with ok
+gyp info using node-gyp@3.8.0
+gyp info using node@10.15.3 | linux | x64
+gyp info spawn make
+gyp info spawn args [ 'BUILDTYPE=Release', '-C', 'build' ]
+make: Entering directory '/home/takeshi/src/git/themonks/node-sip/build'
+  CC(target) Release/obj.target/addon/src/pjmedia/src/pjmedia/dtmfdet.o
+../src/pjmedia/src/pjmedia/dtmfdet.c: In function ‘pjmedia_dtmfdet_create’:
+../src/pjmedia/src/pjmedia/dtmfdet.c:90:29: warning: assignment from incompatible pointer type [-Wincompatible-pointer-types]
+     dtmfdet->base.put_frame = &dtmfdet_put_frame;
+                             ^
+../src/pjmedia/src/pjmedia/dtmfdet.c: In function ‘dtmfdet_put_frame’:
+../src/pjmedia/src/pjmedia/dtmfdet.c:115:19: error: ‘pjmedia_port_info {aka struct pjmedia_port_info}’ has no member named ‘samples_per_frame’
+   dport->base.info.samples_per_frame);
+                   ^
+addon.target.mk:133: recipe for target 'Release/obj.target/addon/src/pjmedia/src/pjmedia/dtmfdet.o' failed
+make: *** [Release/obj.target/addon/src/pjmedia/src/pjmedia/dtmfdet.o] Error 1
+make: Leaving directory '/home/takeshi/src/git/themonks/node-sip/build'
+gyp ERR! build error 
+gyp ERR! stack Error: `make` failed with exit code: 2
+gyp ERR! stack     at ChildProcess.onExit (/home/takeshi/.nvm/versions/node/v10.15.3/lib/node_modules/node-gyp/lib/build.js:262:23)
+gyp ERR! stack     at ChildProcess.emit (events.js:189:13)
+gyp ERR! stack     at Process.ChildProcess._handle.onexit (internal/child_process.js:248:12)
+gyp ERR! System Linux 4.15.0-43-generic
+gyp ERR! command "/home/takeshi/.nvm/versions/node/v10.15.3/bin/node" "/home/takeshi/.nvm/versions/node/v10.15.3/bin/node-gyp" "build"
+gyp ERR! cwd /home/takeshi/src/git/themonks/node-sip
+gyp ERR! node -v v10.15.3
+gyp ERR! node-gyp -v v3.8.0
+gyp ERR! not ok 
+
+UPDATE: actually dtmfdet.c is not necessary as it was just a plain pjmedia sample. Same for simpleua_dtmfdet.c.
+So these were removed from binding.gyp target sources list. 
+

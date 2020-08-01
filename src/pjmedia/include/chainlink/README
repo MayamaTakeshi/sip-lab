@@ -1,0 +1,3 @@
+Q: What is chainlink?
+A: there is a shortcoming of the pjmedia_port implementation that the ports don't propagate calls to put_frame/get_frame to the downstream port (the other port they are connected to). So this complicates things when you need to do simultaneous media operations (there is some things that may help like the bidirectional port). So, to resolve this, we reimplemented the ports we needed with this capability of being chained to each other so that when put_frame/get_frame is called, the call is propagated between them. And to avoid collision of names, we renamed our implementation with the prefix 'chainlink_'.
+

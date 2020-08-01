@@ -1,0 +1,3 @@
+About pjmedia_port dtmfdet: 
+  currently, although pjmedia provides generation of in-band (audio) DTMF tones by means of the tonegen port, there is no port that is able to detect in-band DTMF. So we added this functionality by simply using Steve Underwood's spandsp library.
+
