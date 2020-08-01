@@ -1,17 +1,27 @@
 ## sip-lab
 
-Node module that helps to write functional tests for SIP (including media operations).
-It will require pjproject.
+Node module that helps to write functional tests for SIP systems (including media operations).
+It uses pjproject for SIP and media processing.
 
-To install and build, just do:
+This will require for you to have some libraries installed. So do:
 ```
-  sudo ./install_libs.sh # to install apt packages
-```
-
-Then:
-```
-  ./install.sh
+apt install libsrtp0-dev libspeex-dev libopus-dev libsdl2-dev libavdevice-dev libswscale-dev libv4l-dev libopencore-amrnb-dev libopencore-amrwb-dev libvo-amrwbenc-dev libopus-dev libsdl2-dev libopencore-amrnb-dev libopencore-amrwb-dev libvo-amrwbenc-dev libspandsp-dev
 ```
 
-It was tested on both Ubuntu 18.04 and Debian GNU/Linux 8
+Then install sip-lab by doing:
+```
+  npm install sip-lab --save-dev
+```
+
+However, since it takes a long time to fetch and build pjproject and the node addon for it, you could install sip-lab globally:
+```
+  npm install -g sip-lab
+```
+
+But if you do so, you will need to set NODE_PATH for node to find it by doing:
+```
+  export NODE_PATH=$(npm root --quiet -g)
+```
+
+
 

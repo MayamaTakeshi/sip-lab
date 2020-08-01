@@ -223,3 +223,7 @@ gyp ERR! not ok
 UPDATE: actually dtmfdet.c is not necessary as it was just a plain pjmedia sample. Same for simpleua_dtmfdet.c.
 So these were removed from binding.gyp target sources list. 
 
+------------------------------------------------------------
+2020/08/02 takeshi:
+
+Installation using 'npm install' tested on Ubuntu 18.04.
