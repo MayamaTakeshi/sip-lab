@@ -13,13 +13,13 @@ z.trap_events(sip.event_source, 'event', (evt) => {
 
 console.log(sip.start((data) => { console.log(data)} ))
 
-t1 = sip.transport_create("127.0.0.1", 5090, 1)
-t2 = sip.transport_create("127.0.0.1", 5092, 1)
+t1 = sip.transport.create("127.0.0.1", 5090, 1)
+t2 = sip.transport.create("127.0.0.1", 5092, 1)
 
 console.log("t1", t1)
 console.log("t2", t2)
 
-oc = sip.call_create(t1.id, 'sip:a@t', 'sip:b@127.0.0.1:5092')
+oc = sip.call.create(t1.id, 'sip:a@t', 'sip:b@127.0.0.1:5092')
 
 z.wait([
 	{
@@ -48,7 +48,7 @@ ic = {
 	sip_call_id: z.store.sip_call_id,
 }
 
-sip.call_respond(ic.id, 200, 'OK')
+sip.call.respond(ic.id, 200, 'OK')
 
 z.wait([
 	{
@@ -77,8 +77,8 @@ z.wait([
 	},
 ], 1000)
 
-sip.call_send_dtmf(oc.id, '1234', 0)
-sip.call_send_dtmf(ic.id, '4321', 1)
+sip.call.send_dtmf(oc.id, '1234', 0)
+sip.call.send_dtmf(ic.id, '4321', 1)
 
 z.wait([
 	{
@@ -96,7 +96,7 @@ z.wait([
 ], 2000)
 
 
-sip.call_reinvite(oc.id, true)
+sip.call.reinvite(oc.id, true)
 
 z.wait([
 	{
@@ -126,7 +126,7 @@ z.wait([
 	},
 ], 500)
 
-sip.call_reinvite(ic.id, false)
+sip.call.reinvite(ic.id, false)
 
 z.wait([
 	{
@@ -156,7 +156,7 @@ z.wait([
 	},
 ], 500)
 
-sip.call_send_request(oc.id, 'INFO')
+sip.call.send_request(oc.id, 'INFO')
 
 z.wait([
 	{
@@ -177,7 +177,7 @@ z.wait([
 	},
 ], 500)
 
-sip.call_reinvite(oc.id, false)
+sip.call.reinvite(oc.id, false)
 
 z.wait([
 	{
@@ -207,7 +207,7 @@ z.wait([
 	},
 ], 500)
 
-sip.call_terminate(oc.id)
+sip.call.terminate(oc.id)
 
 z.wait([
 	{
