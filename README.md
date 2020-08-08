@@ -20,6 +20,7 @@ try:
   npm install --unsafe-perm
 ```
 
+
 However, since it takes a long time to fetch and build pjproject and the node addon for it, you could install sip-lab globally:
 ```
   npm install -g sip-lab
@@ -30,5 +31,13 @@ But if you do so, you will need to set NODE_PATH for node to find it by doing:
   export NODE_PATH=$(npm root --quiet -g)
 ```
 
+To test it just run:
+```
+  node samples/simple.js
+```
+
+
+The module is known to work properly in Ubuntu 18.04.4 and Debian 8 (and it is expected to work in Debian 9).
+However, in Debian 10, running the sample above frequently results in segfault (under investigation).
 
 
