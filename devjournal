@@ -227,3 +227,175 @@ So these were removed from binding.gyp target sources list.
 2020/08/02 takeshi:
 
 Installation using 'npm install' tested on Ubuntu 18.04.
+------------------------------------------------------------
+
+2020/08/08 takeshi:
+
+When trying to build on Debian 10 I got:
+
+$ npm install
+npm WARN lifecycle sip-lab@1.0.0~install: cannot run in wd sip-lab@1.0.0 ./install.sh (wd=/usr/local/src/git/github_MayamaTakeshi/sip-lab)
+audited 124 packages in 2.618s
+found 0 vulnerabilities
+
+But the process exit without error:
+$ echo $?
+0
+
+which is bad because the addon was left unbuilt.
+
+I had to use:
+  npm install --unsafe-perm
+otherwise, it doesn't run the install.sh script
+
+Then build went further but now I got:
+
+  CXX(target) Release/obj.target/addon/src/addon.o                                                                                                                                                          
+../src/addon.cpp: In function 'Napi::Object init(Napi::Env, Napi::Object)':                                                                                                                                 
+../src/addon.cpp:1361:60: error: no matching function for call to 'Napi::Function::New(Napi::Env&, <unresolved overloaded function type>)'                                                                  
+   exports.Set("shutdown", Napi::Function::New(env, shutdown));                                                                                                                                             
+                                                            ^                                                                                                                                               
+In file included from /usr/local/src/git/github_MayamaTakeshi/sip-lab/node_modules/node-addon-api/napi.h:2051,                                                                                              
+                 from ../src/addon.cpp:3:                                                                                                                                                                   
+/usr/local/src/git/github_MayamaTakeshi/sip-lab/node_modules/node-addon-api/napi-inl.h:1678:17: note: candidate: 'template<class Callable> static Napi::Function Napi::Function::New(napi_env, Callable, con
+st char*, void*)'                                                                                                                                                                                           
+ inline Function Function::New(napi_env env,                                                                                                                                                                
+                 ^~~~~~~~                                                                                                                                                                                   
+/usr/local/src/git/github_MayamaTakeshi/sip-lab/node_modules/node-addon-api/napi-inl.h:1678:17: note:   template argument deduction/substitution failed:                                                    
+../src/addon.cpp:1361:60: note:   couldn't deduce template parameter 'Callable'                                                                                                                             
+   exports.Set("shutdown", Napi::Function::New(env, shutdown));                                                                                                                                             
+                                                            ^         
+
+Suspecting the name shutdown was conflicting with something else, I renamed the function as 
+  shutdown_
+and after that, build went further.
+
+But then I got:
+
+/usr/bin/ld: cannot find -lsrtp
+collect2: error: ld returned 1 exit status
+make: *** [addon.target.mk:226: Release/obj.target/addon.node] Error 1
+make: Leaving directory '/usr/local/src/git/github_MayamaTakeshi/sip-lab/build'
+
+This seems to be because in Debian 10, srtp library changed from libsrtp to libsrtp2.
+But, actually, we should not use OS libs and instead we should the ThirdParty ones.
+And in the binding.gyp we were actually using this unnecessary line:
+
+           '-lsrtp',
+
+But we already got this one:
+
+           '-L ../pjproject/third_party/lib',
+
+
+So, I removed '-lsrtp' and built was successful but then when running the sample I got:
+
+
+$ node samples/simple.js 
+internal/modules/cjs/loader.js:730
+  return process.dlopen(module, path.toNamespacedPath(filename));
+                 ^
+
+Error: /usr/local/src/git/github_MayamaTakeshi/sip-lab/build/Release/addon.node: undefined symbol: crypto_policy_set_aes_cm_256_hmac_sha1_80
+    at Object.Module._extensions..node (internal/modules/cjs/loader.js:730:18)
+    at Module.load (internal/modules/cjs/loader.js:600:32)
+    at tryModuleLoad (internal/modules/cjs/loader.js:539:12)
+    at Function.Module._load (internal/modules/cjs/loader.js:531:3)
+    at Module.require (internal/modules/cjs/loader.js:637:17)
+    at require (internal/modules/cjs/helpers.js:22:18)
+    at Object.<anonymous> (/usr/local/src/git/github_MayamaTakeshi/sip-lab/index.js:1:77)
+    at Module._compile (internal/modules/cjs/loader.js:701:30)
+    at Object.Module._extensions..js (internal/modules/cjs/loader.js:712:10)
+    at Module.load (internal/modules/cjs/loader.js:600:32)
+
+
+So I disable SRTP by setting:
+
+#define PJMEDIA_HAS_SRTP  0
+
+in config_site.h
+
+
+However, when trying to run
+  node samples/simple.js
+we are frequently (almost all the time) getting this:
+
+$ node samples/simple.js 
+pjw_init thread_id=583253000
+
+21:12:20.187 os_core_unix.c !pjlib 2.5.5-svn for POSIX initialized
+undefined
+t1 { id: 0, ip: '127.0.0.1', port: 5090 }
+t2 { id: 1, ip: '127.0.0.1', port: 5092 }
+inv=22c3c118 tdata=3779318
+
+on_state_changed
+
+status=583254296
+
+21:12:20.260                !: Success
+wait (line /usr/local/src/git/github_MayamaTakeshi/sip-lab/samples/simple.js:24) started. Waiting for expected_events:
+[
+  partial_match({
+    event: 'incoming_call',
+    call_id: collect['call_id']()
+  }),
+  partial_match({
+    event: 'response',
+    call_id: 0,
+    method: 'INVITE',
+    msg: sip_msg({
+      $rs: '100',
+      $rr: 'Trying',
+      $(hdrcnt(via)): 1,
+      $hdr(call-id): collect['sip_call_id'](),
+      $fU: 'a',
+      $fd: 't',
+      $tU: 'b',
+      $hdr(l): '0'
+    })
+  })
+]
+Segmentation fault
+
+
+
+Checking with gdb:
+Thread 1 "node" received signal SIGSEGV, Segmentation fault.
+__strlen_sse2 () at ../sysdeps/x86_64/multiarch/../strlen.S:120
+120     ../sysdeps/x86_64/multiarch/../strlen.S: No such file or directory.
+(gdb) bt                     
+#0  0x00007ffff7b40206 in __strlen_sse2 () at ../sysdeps/x86_64/multiarch/../strlen.S:120
+#1  0x00007ffff7af99ef in _IO_vfprintf_internal (s=0x7fffffff6af0, format=0x7ffff52533ec "on_rx_request %.*s\n\n", ap=0x7fffffff91b0) at vfprintf.c:1638
+#2  0x00007ffff7afa866 in buffered_vfprintf (s=s@entry=0x7ffff7c64760 <_IO_2_1_stdout_>, format=format@entry=0x7ffff52533ec "on_rx_request %.*s\n\n", args=args@entry=0x7fffffff91b0) at vfprintf.c:2322
+#3  0x00007ffff7af7eb2 in _IO_vfprintf_internal (s=0x7ffff7c64760 <_IO_2_1_stdout_>, format=0x7ffff52533ec "on_rx_request %.*s\n\n", ap=ap@entry=0x7fffffff91b0) at vfprintf.c:1296
+#4  0x00007ffff7b00606 in __printf (format=<optimized out>) at printf.c:33
+#5  0x00007ffff51ccbe6 in _addon_log(int, char const*, ...) () at /usr/local/src/git/github_MayamaTakeshi/sip-lab/build/Release/addon.node
+#6  0x00007ffff51d81a9 in on_rx_request(pjsip_rx_data*) () at /usr/local/src/git/github_MayamaTakeshi/sip-lab/build/Release/addon.node
+#7  0x00007ffff520b94b in pjsip_endpt_process_rx_data (p_handled=0x7fffffffa75c, p=0x7fffffffa780, rdata=0x266f488, endpt=0x261e7a8) at ../src/pjsip/sip_endpoint.c:887
+#8  0x00007ffff520b94b in pjsip_endpt_process_rx_data (endpt=0x261e7a8, rdata=0x266f488, p=<optimized out>, p_handled=0x7fffffffa75c) at ../src/pjsip/sip_endpoint.c:824
+#9  0x00007ffff520bb56 in endpt_on_rx_msg (endpt=0x261e7a8, status=<optimized out>, rdata=0x266f488) at ../src/pjsip/sip_endpoint.c:1037
+#10 0x00007ffff52117a6 in pjsip_tpmgr_receive_packet (mgr=<optimized out>, rdata=rdata@entry=0x266f488) at ../src/pjsip/sip_transport.c:1938
+#11 0x00007ffff5213a4f in udp_on_read_complete (key=0x26257e8, op_key=<optimized out>, bytes_read=<optimized out>) at ../src/pjsip/sip_transport_udp.c:170
+#12 0x00007ffff5236e28 in ioqueue_dispatch_read_event (h=0x26257e8, ioqueue=0x2629600) at ../src/pj/ioqueue_common_abs.c:605
+#13 0x00007ffff5236e28 in ioqueue_dispatch_read_event (ioqueue=0x2629600, h=0x26257e8) at ../src/pj/ioqueue_common_abs.c:433
+#14 0x00007ffff52386cf in pj_ioqueue_poll (ioqueue=0x2629600, timeout=timeout@entry=0x7fffffffb190) at ../src/pj/ioqueue_select.c:981
+#15 0x00007ffff520b70a in pjsip_endpt_handle_events2 (endpt=0x261e7a8, max_timeout=0x7fffffffb1d0, p_count=0x0) at ../src/pjsip/sip_endpoint.c:742
+#16 0x00007ffff51cf824 in handle_events() () at /usr/local/src/git/github_MayamaTakeshi/sip-lab/build/Release/addon.node
+#17 0x00007ffff51d00a4 in __pjw_poll(char*) () at /usr/local/src/git/github_MayamaTakeshi/sip-lab/build/Release/addon.node
+#18 0x00007ffff51dab71 in do_poll(Napi::CallbackInfo const&) () at /usr/local/src/git/github_MayamaTakeshi/sip-lab/build/Release/addon.node
+#19 0x00007ffff51e4923 in Napi::details::CallbackData<Napi::Value (*)(Napi::CallbackInfo const&), Napi::Value>::Wrapper(napi_env__*, napi_callback_info__*) ()
+    at /usr/local/src/git/github_MayamaTakeshi/sip-lab/build/Release/addon.node
+#20 0x00000000008e85b5 in (anonymous namespace)::v8impl::FunctionCallbackWrapper::Invoke(v8::FunctionCallbackInfo<v8::Value> const&) ()
+#21 0x0000000000b62a3f in v8::internal::MaybeHandle<v8::internal::Object> v8::internal::(anonymous namespace)::HandleApiCallHelper<false>(v8::internal::Isolate*, v8::internal::Handle<v8::internal::HeapObj
+ect>, v8::internal::Handle<v8::internal::HeapObject>, v8::internal::Handle<v8::internal::FunctionTemplateInfo>, v8::internal::Handle<v8::internal::Object>, v8::internal::BuiltinArguments) ()
+#22 0x0000000000b635a9 in v8::internal::Builtin_HandleApiCall(int, v8::internal::Object**, v8::internal::Isolate*) ()
+#23 0x0000309d62fdbe1d in  ()
+
+
+So it is a bug in our code.
+
+
+But building it with these changes in on ubuntu 18.04.4 doesn't cause this crash which means in Debian 10 a condition that increases the chances of crash was introduced.
+Anyway, we will commit these changes and solve the crash later.
+

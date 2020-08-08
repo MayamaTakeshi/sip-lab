@@ -15,7 +15,7 @@
   "gypfile": true,
   "homepage": "https://github.com/MayamaTakeshi/sip-lab",
   "dependencies": {
-    "node-addon-api": "^1.6.3",
+    "node-addon-api": "^1.7.2",
     "node-gyp": "^7.0.0"
   },
   "devDependencies": {

@@ -16,6 +16,9 @@ then
 EOF
 
 	./configure
+	cat > pjlib/include/pj/config_site.h <<EOF
+#define PJMEDIA_HAS_SRTP  0
+EOF
 	make dep && make clean && make
 
 	cd ..

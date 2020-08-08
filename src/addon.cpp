@@ -1315,7 +1315,7 @@ Napi::Value do_poll(const Napi::CallbackInfo& info) {
   } 
 }
  
-Napi::Value shutdown(const Napi::CallbackInfo& info) {
+Napi::Value shutdown_(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
 
   int res = __pjw_shutdown();
@@ -1358,7 +1358,7 @@ Napi::Object init(Napi::Env env, Napi::Object exports) {
   exports.Set("set_log_level", Napi::Function::New(env, set_log_level));
 
   exports.Set("do_poll", Napi::Function::New(env, do_poll));
-  exports.Set("shutdown", Napi::Function::New(env, shutdown));
+  exports.Set("shutdown", Napi::Function::New(env, shutdown_));
 
   exports.Set("dtmf_aggregation_on", Napi::Function::New(env, dtmf_aggregation_on));
   exports.Set("dtmf_aggregation_off", Napi::Function::New(env, dtmf_aggregation_off));
