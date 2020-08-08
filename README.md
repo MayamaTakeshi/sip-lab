@@ -13,16 +13,6 @@ Then install sip-lab by doing:
   npm install sip-lab
 ```
 
-If the above completes but shows a message like 
-```
-  "npm install" cannot run in wd %s %s (wd=%s)
-```
-try:
-```
-  npm install --unsafe-perm
-```
-
-
 However, since it takes a long time to fetch and build pjproject and the node addon for it, you could install sip-lab globally:
 ```
   npm install -g sip-lab
@@ -33,8 +23,10 @@ But if you do so, you will need to set NODE_PATH for node to find it by doing:
   export NODE_PATH=$(npm root --quiet -g)
 ```
 
-To test it just run:
+To test from within this repo just run:
 ```
+  npm install --unsafe-perm
+
   node samples/simple.js
 ```
 
