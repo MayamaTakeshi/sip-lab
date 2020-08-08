@@ -2,15 +2,17 @@
 #include <stdio.h>
 
 void _addon_log(int level, const char *fmt, ...) {
-    va_list arg;
+    va_list args;
 
     /* Check if the message should be logged */
     if (level > _log_level)
         return;
 
-    va_start(arg, fmt);
-    printf(fmt, arg);
-    va_end(arg);
+    va_start(args, fmt);
+    flockfile(stdout);
+    printf(fmt, args);
+    funlockfile(stdout);
+    va_end(args);
 }
 
 

@@ -13,8 +13,10 @@ Then install sip-lab by doing:
   npm install sip-lab
 ```
 
-If the above fails with a message like 
+If the above completes but shows a message like 
+```
   "npm install" cannot run in wd %s %s (wd=%s)
+```
 try:
 ```
   npm install --unsafe-perm
@@ -37,7 +39,5 @@ To test it just run:
 ```
 
 
-The module is known to work properly in Ubuntu 18.04.4 and Debian 8 (and it is expected to work in Debian 9).
-However, in Debian 10, running the sample above frequently results in segfault (under investigation).
-
+The module is known to work properly in Ubuntu 18.04.4, Debian 8 and Debian 10 (and it is expected to work in Debian 9).
 
