@@ -228,7 +228,6 @@ So these were removed from binding.gyp target sources list.
 
 Installation using 'npm install' tested on Ubuntu 18.04.
 ------------------------------------------------------------
-
 2020/08/08 takeshi:
 
 When trying to build on Debian 10 I got:
@@ -398,4 +397,27 @@ So it is a bug in our code.
 
 But building it with these changes in on ubuntu 18.04.4 doesn't cause this crash which means in Debian 10 a condition that increases the chances of crash was introduced.
 Anyway, we will commit these changes and solve the crash later.
+
+------------------------------------------------------------
+2020/08/09 takeshi:
+
+We had to disable SRTP pjsip support (config_site.h) because of this:
+
+$ node samples/simple.js 
+internal/modules/cjs/loader.js:730
+  return process.dlopen(module, path.toNamespacedPath(filename));
+                 ^
+
+Error: /mnt/backup/takeshi_tmp/sip-lab/build/Release/addon.node: undefined symbol: crypto_policy_set_aes_cm_256_hmac_sha1_80
+    at Object.Module._extensions..node (internal/modules/cjs/loader.js:730:18)
+    at Module.load (internal/modules/cjs/loader.js:600:32)
+    at tryModuleLoad (internal/modules/cjs/loader.js:539:12)
+    at Function.Module._load (internal/modules/cjs/loader.js:531:3)
+    at Module.require (internal/modules/cjs/loader.js:637:17)
+    at require (internal/modules/cjs/helpers.js:22:18)
+    at Object.<anonymous> (/mnt/backup/takeshi_tmp/sip-lab/index.js:1:77)
+    at Module._compile (internal/modules/cjs/loader.js:701:30)
+    at Object.Module._extensions..js (internal/modules/cjs/loader.js:712:10)
+    at Module.load (internal/modules/cjs/loader.js:600:32)
+
 
