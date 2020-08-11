@@ -3,6 +3,9 @@
   "version": "1.2.0",
   "description": "",
   "main": "index.js",
+  "engines": {
+    "node": ">=10.22"
+  },
   "scripts": {
     "install": "./install.sh"
   },
