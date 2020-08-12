@@ -19,7 +19,7 @@ t2 = sip.transport.create("127.0.0.1", 5092, 1)
 console.log("t1", t1)
 console.log("t2", t2)
 
-flags = 0
+flags = 1 // late negotiation
 
 oc = sip.call.create(t1.id, flags, 'sip:a@t', 'sip:b@127.0.0.1:5092')
 
@@ -103,7 +103,7 @@ z.wait([
 ], 2000)
 
 
-sip.call.reinvite(oc.id, true, 0)
+sip.call.reinvite(oc.id, true, flags)
 
 z.wait([
 	{
@@ -113,7 +113,7 @@ z.wait([
 		msg: sip_msg({
 			$rs: '200',
 			$rr: 'OK',
-			$rb: '!{_}a=recvonly',
+			$rb: '!{_}a=sendrecv',
 		}),
 	},
 	{
@@ -121,7 +121,7 @@ z.wait([
 		call_id: oc.id,
 		status: 'setup_ok',
 		local_mode: 'sendonly',
-		remote_mode: 'recvonly',
+		remote_mode: 'sendrecv',
 	},
 	{
 		event: 'media_status',
@@ -133,7 +133,7 @@ z.wait([
 ], 500)
 
 sip.call.send_dtmf(oc.id, '1234', 0)
-sip.call.send_dtmf(ic.id, '4321', 1) // this will not generate event 'dtmf' as the call is on hold
+sip.call.send_dtmf(ic.id, '4321', 1) // This will not generate event 'dtmf'
 
 z.wait([
 	{
@@ -144,7 +144,7 @@ z.wait([
 	},
 ], 2000)
 
-sip.call.reinvite(ic.id, false, 0)
+sip.call.reinvite(ic.id, false, flags)
 
 z.wait([
 	{
@@ -174,7 +174,7 @@ z.wait([
 ], 500)
 
 sip.call.send_dtmf(oc.id, '1234', 0)
-sip.call.send_dtmf(ic.id, '4321', 1) // this will not generate event 'dtmf' as the call is on hold
+sip.call.send_dtmf(ic.id, '4321', 1) // This will not generate event 'dtmf'
 
 z.wait([
 	{
@@ -206,7 +206,7 @@ z.wait([
 	},
 ], 500)
 
-sip.call.reinvite(oc.id, false, 0)
+sip.call.reinvite(oc.id, false, flags)
 
 z.wait([
 	{
@@ -216,7 +216,7 @@ z.wait([
 		msg: sip_msg({
 			$rs: '200',
 			$rr: 'OK',
-			$rb: '!{_}a=sendrecv',
+			$rb: '!{_}a=recvonly',
 		}),
 	},
 	{
@@ -235,6 +235,7 @@ z.wait([
 	},
 ], 500)
 
+
 sip.call.send_dtmf(oc.id, '1234', 0)
 sip.call.send_dtmf(ic.id, '4321', 1)
 
@@ -252,6 +253,7 @@ z.wait([
 		mode: 1,
 	},
 ], 2000)
+
 
 sip.call.terminate(oc.id)
 

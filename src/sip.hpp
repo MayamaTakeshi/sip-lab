@@ -11,7 +11,7 @@
 
 #define FLAG_NO_AUTO_100_TRYING 1
 
-#define CALL_CREATE_FLAG_LATE_NEGOTIATION 1
+#define CALL_FLAG_LATE_NEGOTIATION 1
 
 
 int __pjw_init();
@@ -27,7 +27,7 @@ int pjw_call_create(long t_id, unsigned flags, const char *from_uri, const char 
 int pjw_call_respond(long call_id, int code, const char *reason, const char *additional_headers);
 int pjw_call_terminate(long call_id, int code, const char *reason, const char *additional_headers);
 int pjw_call_send_dtmf(long call_id, const char *digits, int mode);
-int pjw_call_reinvite(long call_id, int hold);
+int pjw_call_reinvite(long call_id, int hold, unsigned flags);
 int pjw_call_send_request(long call_id, const char *method_name, const char *additional_headers, const char *body, const char *ct_type, const char *ct_subtype);
 int pjw_call_start_record_wav(long call_id, const char *file);
 int pjw_call_start_play_wav(long call_id, const char *file);

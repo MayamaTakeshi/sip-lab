@@ -420,4 +420,16 @@ Error: /mnt/backup/takeshi_tmp/sip-lab/build/Release/addon.node: undefined symbo
     at Object.Module._extensions..js (internal/modules/cjs/loader.js:712:10)
     at Module.load (internal/modules/cjs/loader.js:600:32)
 
+------------------------------------------------------------
+2020/08/12 takeshi:
+
+We did adjustments to support late negotiation.
+For this we split original callback on_rx_offer in new callbacks on_rx_offer and on_rx_reinvite.
+This worked with initial INVITE late negotiation.
+However, it crashed with RE-INVITE late negotiation.
+The problem is that on_rx_reinvite is getting an offer without media (due RE-INVITE without SDP).
+Instead, I think we should go back to use original on_rx_offer because it seems this is called only when we get media offer and so we would avoid this problem.
+
+
+
 

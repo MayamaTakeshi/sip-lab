@@ -499,8 +499,8 @@ Napi::Value call_send_dtmf(const Napi::CallbackInfo& info) {
 Napi::Value call_reinvite(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
 
-  if (info.Length() != 2) {
-    Napi::Error::New(env, "Wrong number of arguments. Expected: call_id, hold").ThrowAsJavaScriptException();
+  if (info.Length() != 3) {
+    Napi::Error::New(env, "Wrong number of arguments. Expected: call_id, hold, flags").ThrowAsJavaScriptException();
     return env.Null();
   }
 
@@ -516,7 +516,13 @@ Napi::Value call_reinvite(const Napi::CallbackInfo& info) {
   }
   bool hold = info[1].As<Napi::Boolean>().Value();
 
-  int res = pjw_call_reinvite(call_id, hold);
+  if (!info[2].IsNumber()) {
+    Napi::TypeError::New(env, "flags must be number.").ThrowAsJavaScriptException();
+    return env.Null();
+  }
+  unsigned flags = info[2].As<Napi::Number>().Uint32Value();
+
+  int res = pjw_call_reinvite(call_id, hold, flags);
 
   if(res != 0) {
     Napi::Error::New(env, pjw_get_error()).ThrowAsJavaScriptException();

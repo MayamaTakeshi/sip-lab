@@ -52,6 +52,12 @@ PacketDumper *g_PacketDumper = 0;
 #define DEFAULT_ILBC_MODE	(30)
 #define DEFAULT_CODEC_QUALITY	(5)
 
+#define UNKNOWN  0 
+#define SENDRECV 1
+#define SENDONLY 2
+#define RECVONLY 3
+#define INACTIVE 4
+
 static pjsip_endpoint *g_sip_endpt;
 static pj_caching_pool cp;
 static pj_pool_t *g_pool;
@@ -279,7 +285,7 @@ static pj_bool_t on_rx_response( pjsip_rx_data *rdata );
 static void on_rx_offer(pjsip_inv_session *inv, const pjmedia_sdp_session *offer);
 
 /* Callback to be called when REINVITE is received */
-static pj_status_t on_rx_reinvite(pjsip_inv_session *inv, const pjmedia_sdp_session *offer, pjsip_rx_data *rdata);
+//static pj_status_t on_rx_reinvite(pjsip_inv_session *inv, const pjmedia_sdp_session *offer, pjsip_rx_data *rdata);
 
 /* Callback to be called when Redirect is received */
 static pjsip_redirect_op on_redirected(pjsip_inv_session *inv, const pjsip_uri *target, const pjsip_event *e);
@@ -459,6 +465,31 @@ void dispatch_event(const char * evt)
 	g_events.push_back(evt);
 }
 
+static char *get_media_mode_str(int mode) {
+	if(mode == SENDRECV) return "sendrecv";
+	if(mode == SENDONLY) return "sendonly";
+	if(mode == RECVONLY) return "recvonly";
+	if(mode == INACTIVE) return "inactive";
+	if(mode == UNKNOWN) return "unknown";
+}
+
+static int get_media_mode(pjmedia_sdp_attr **attrs, int count) {
+        int i;
+        for(i=0 ; i<count ; ++i) {
+                pjmedia_sdp_attr *a = attrs[i];
+                if(pj_strcmp2(&a->name, "sendrecv")==0) {
+                        return SENDRECV;
+                } else if(pj_strcmp2(&a->name, "sendonly")==0) {
+                        return SENDONLY;
+                } else if(pj_strcmp2(&a->name, "recvonly")==0) {
+                        return RECVONLY;
+				} else if(pj_strcmp2(&a->name, "inactive")==0) {
+                        return INACTIVE;
+				}
+        }
+        return UNKNOWN;
+}
+
 int __pjw_init()
 {
 	addon_log(LOG_LEVEL_DEBUG, "pjw_init thread_id=%i\n", syscall(SYS_gettid));
@@ -568,7 +599,7 @@ int __pjw_init()
 	inv_cb.on_new_session = &on_forked;
 	inv_cb.on_media_update = &on_media_update;
 	inv_cb.on_rx_offer = &on_rx_offer;
-	inv_cb.on_rx_reinvite = &on_rx_reinvite;
+	//inv_cb.on_rx_reinvite = &on_rx_reinvite;
 	inv_cb.on_tsx_state_changed = &on_tsx_state_changed;
 	inv_cb.on_redirected = &on_redirected;
 
@@ -1544,7 +1575,7 @@ int call_create(Transport *t, unsigned flags, pjsip_dialog *dlg, const char *pro
 	
 	pjmedia_sdp_session *sdp = 0;
 
-	if(!(flags & CALL_CREATE_FLAG_LATE_NEGOTIATION)) {
+	if(!(flags & CALL_FLAG_LATE_NEGOTIATION)) {
 		status = pjmedia_endpt_create_sdp( g_med_endpt, 
 				dlg->pool, 
 				1,
@@ -1738,7 +1769,7 @@ int pjw_call_send_dtmf(long call_id, const char *digits, int mode)
 	return 0;
 }		
 
-int pjw_call_reinvite(long call_id, int hold)
+int pjw_call_reinvite(long call_id, int hold, unsigned flags)
 {
 	PJW_LOCK();
 
@@ -1754,50 +1785,58 @@ int pjw_call_reinvite(long call_id, int hold)
 
 	pj_status_t status;
 
-	pjmedia_transport_info tpinfo;
-	pjmedia_transport_info_init(&tpinfo);
-	pjmedia_transport_get_info(call->med_transport,&tpinfo);
+	pjmedia_sdp_session *sdp = 0;
 
-	pjmedia_sdp_session *sdp;
-	status = pjmedia_endpt_create_sdp(g_med_endpt,
-					call->inv->pool,
-					1,
-					&tpinfo.sock_info,
-					&sdp);
-	if(status != PJ_SUCCESS){
-		PJW_UNLOCK();
-		set_error("pjmedia_endpt_create_sdp failed");
-		return -1;
-	}
+	call->local_hold = hold;
 
-	if(hold){
-		/*
-		sdp->conn = (pjmedia_sdp_conn*)pj_pool_zalloc(call->inv->pool, sizeof(pjmedia_sdp_conn));
-		sdp->conn->net_type = pj_str("IN");	
-		sdp->conn->addr_type = pj_str("IP4");
-		sdp->conn->addr = pj_str("0.0.0.0");
-		*/
+	if(!(flags & CALL_FLAG_LATE_NEGOTIATION)) {
+		pjmedia_transport_info tpinfo;
+		pjmedia_transport_info_init(&tpinfo);
+		pjmedia_transport_get_info(call->med_transport,&tpinfo);
+
+		status = pjmedia_endpt_create_sdp(g_med_endpt,
+						call->inv->pool,
+						1,
+						&tpinfo.sock_info,
+						&sdp);
+		if(status != PJ_SUCCESS){
+			PJW_UNLOCK();
+			set_error("pjmedia_endpt_create_sdp failed");
+			return -1;
+		}
 	
+		pjmedia_sdp_attr *attr;
+
 		pjmedia_sdp_media_remove_all_attr(sdp->media[0], "sendrecv");
 		pjmedia_sdp_media_remove_all_attr(sdp->media[0], "sendonly");
 		pjmedia_sdp_media_remove_all_attr(sdp->media[0], "recvonly");
 		pjmedia_sdp_media_remove_all_attr(sdp->media[0], "inactive");
 
-		pjmedia_sdp_attr *attr;
-		attr = pjmedia_sdp_attr_create(call->inv->pool, "sendonly", NULL);
+		if(call->local_hold){
+			if(call->remote_hold) {
+				attr = pjmedia_sdp_attr_create(call->inv->pool, "inactive", NULL);
+			} else {
+				attr = pjmedia_sdp_attr_create(call->inv->pool, "sendonly", NULL);
+			}
+		} else if(call->remote_hold) {
+			attr = pjmedia_sdp_attr_create(call->inv->pool, "recvonly", NULL);
+		} else {
+			attr = pjmedia_sdp_attr_create(call->inv->pool, "sendrecv", NULL);
+		}
+
 		pjmedia_sdp_media_add_attr(sdp->media[0], attr);
-	}	
 
-	const pjmedia_sdp_session *old_sdp = NULL;
+		const pjmedia_sdp_session *old_sdp = NULL;
 
-	status = pjmedia_sdp_neg_get_active_local(call->inv->neg, &old_sdp);
-	if (status != PJ_SUCCESS || old_sdp == NULL){
-		PJW_UNLOCK();
-		set_error("pjmedia_sdp_neg_get_active failed");
-		return -1;
+		status = pjmedia_sdp_neg_get_active_local(call->inv->neg, &old_sdp);
+		if (status != PJ_SUCCESS || old_sdp == NULL){
+			PJW_UNLOCK();
+			set_error("pjmedia_sdp_neg_get_active failed");
+			return -1;
+		}
+
+		sdp->origin.version = old_sdp->origin.version + 1;
 	}
-
-	sdp->origin.version = old_sdp->origin.version + 1;
 
 	pjsip_tx_data *tdata;
 	status = pjsip_inv_reinvite(call->inv, NULL, sdp, &tdata);
@@ -2133,7 +2172,7 @@ static void on_media_update( pjsip_inv_session *inv, pj_status_t status){
 	ostringstream oss;
 
 	if(status != PJ_SUCCESS){
-		make_evt_media_status(evt, sizeof(evt), call_id, "negotiation_failed");
+		make_evt_media_status(evt, sizeof(evt), call_id, "negotiation_failed", "", "");
 		dispatch_event(evt);
 		return;
 	}
@@ -2141,7 +2180,7 @@ static void on_media_update( pjsip_inv_session *inv, pj_status_t status){
 	if(call->master_port){
 		status = pjmedia_master_port_stop(call->master_port);
 		if(status != PJ_SUCCESS){
-			make_evt_media_status(evt, sizeof(evt), call_id, "setup_failed");
+			make_evt_media_status(evt, sizeof(evt), call_id, "setup_failed", "", "");
 			dispatch_event(evt);
 			return;
 		}
@@ -2149,14 +2188,14 @@ static void on_media_update( pjsip_inv_session *inv, pj_status_t status){
 
 	status = pjmedia_sdp_neg_get_active_local(inv->neg, &local_sdp);
 	if(status != PJ_SUCCESS){
-		make_evt_media_status(evt, sizeof(evt), call_id, "setup_failed");
+		make_evt_media_status(evt, sizeof(evt), call_id, "setup_failed", "", "");
 		dispatch_event(evt);
 		return;
 	}		
 
 	status = pjmedia_sdp_neg_get_active_remote(inv->neg, &remote_sdp);
 	if(status != PJ_SUCCESS){
-		make_evt_media_status(evt, sizeof(evt), call_id, "setup_failed");
+		make_evt_media_status(evt, sizeof(evt), call_id, "setup_failed", "", "");
 		dispatch_event(evt);
 		return;
 	}
@@ -2169,7 +2208,7 @@ static void on_media_update( pjsip_inv_session *inv, pj_status_t status){
 					remote_sdp,
 					0);
 	if(status != PJ_SUCCESS){
-		make_evt_media_status(evt, sizeof(evt), call_id, "setup_failed");
+		make_evt_media_status(evt, sizeof(evt), call_id, "setup_failed", "", "");
 		dispatch_event(evt);
 		return;
 	}
@@ -2177,7 +2216,7 @@ static void on_media_update( pjsip_inv_session *inv, pj_status_t status){
 	if(call->med_stream){
 		status = pjmedia_stream_destroy(call->med_stream);
 		if(status != PJ_SUCCESS){
-			make_evt_media_status(evt, sizeof(evt), call_id, "setup_failed");
+			make_evt_media_status(evt, sizeof(evt), call_id, "setup_failed", "", "");
 			dispatch_event(evt);
 			return;
 		}
@@ -2191,14 +2230,14 @@ static void on_media_update( pjsip_inv_session *inv, pj_status_t status){
 				NULL,
 				&call->med_stream);
 	if(status != PJ_SUCCESS){
-		make_evt_media_status(evt, sizeof(evt), call_id, "setup_failed");
+		make_evt_media_status(evt, sizeof(evt), call_id, "setup_failed", "", "");
 		dispatch_event(evt);
 		return;
 	}
 
 	status = pjmedia_stream_start(call->med_stream);
 	if(status != PJ_SUCCESS){
-		make_evt_media_status(evt, sizeof(evt), call_id, "setup_failed");
+		make_evt_media_status(evt, sizeof(evt), call_id, "setup_failed", "", "");
 		dispatch_event(evt);
 		return;
 	}
@@ -2207,7 +2246,7 @@ static void on_media_update( pjsip_inv_session *inv, pj_status_t status){
 						&on_dtmf,
 						call);
 	if(status != PJ_SUCCESS){
-		make_evt_media_status(evt, sizeof(evt), call_id, "setup_failed");
+		make_evt_media_status(evt, sizeof(evt), call_id, "setup_failed", "", "");
 		dispatch_event(evt);
 		return;
 	}
@@ -2215,7 +2254,7 @@ static void on_media_update( pjsip_inv_session *inv, pj_status_t status){
 	pjmedia_port *stream_port;
 	status = pjmedia_stream_get_port(call->med_stream, &stream_port);
 	if(status != PJ_SUCCESS){
-		make_evt_media_status(evt, sizeof(evt), call_id, "setup_failed");
+		make_evt_media_status(evt, sizeof(evt), call_id, "setup_failed", "", "");
 		dispatch_event(evt);
 		return;
 	}
@@ -2225,19 +2264,25 @@ static void on_media_update( pjsip_inv_session *inv, pj_status_t status){
 				PJMEDIA_PIA_CCNT(&stream_port->info),
 				PJMEDIA_PIA_SPF(&stream_port->info),
 				PJMEDIA_PIA_BITS(&stream_port->info))) {
-		make_evt_media_status(evt, sizeof(evt), call_id, "setup_failed");
+		make_evt_media_status(evt, sizeof(evt), call_id, "setup_failed", "", "");
 		dispatch_event(evt);
 		return;
 	}
 
 	if(!set_ports(call, stream_port, (pjmedia_port*)call->dtmfdet))
 	{
-		make_evt_media_status(evt, sizeof(evt), call_id, "setup_failed");
+		make_evt_media_status(evt, sizeof(evt), call_id, "setup_failed", "", "");
 		dispatch_event(evt);
 		return;
 	}
 
-	make_evt_media_status(evt, sizeof(evt), call_id, "setup_ok");
+	int local_media_mode = get_media_mode(local_sdp->media[0]->attr, local_sdp->media[0]->attr_count); 
+	int remote_media_mode = get_media_mode(remote_sdp->media[0]->attr, remote_sdp->media[0]->attr_count); 
+
+	char *local_mode = get_media_mode_str(local_media_mode);
+	char *remote_mode = get_media_mode_str(remote_media_mode);
+
+	make_evt_media_status(evt, sizeof(evt), call_id, "setup_ok", local_mode, remote_mode);
 	dispatch_event(evt);
 }
 
@@ -2881,31 +2926,19 @@ static pjsip_redirect_op on_redirected(pjsip_inv_session *inv, const pjsip_uri *
 	return PJSIP_REDIRECT_ACCEPT;
 }
 
-static bool has_attr_sendonly(pjmedia_sdp_attr **attrs, int count) {
-        //addon_log(LOG_LEVEL_DEBUG, "has_attr_send_only count=%i\n", count);
-        int i;
-        for(i=0 ; i<count ; ++i) {
-                pjmedia_sdp_attr *a = attrs[i];
-                //addon_log(LOG_LEVEL_DEBUG, "Checking name=%.*s value=%.*s\n", a->name.slen, a->name.ptr, a->value.slen, a->value.ptr); 
-                if(pj_strcmp2(&a->name,"sendonly")==0) {
-                        return true;
-                }
-        }
-        return false;
-}
-
 static void on_rx_offer(pjsip_inv_session *inv, const pjmedia_sdp_session *offer){
-	addon_log(LOG_LEVEL_DEBUG, "on_rx_offer\n");
-	if(g_shutting_down) return;	
+	addon_log(LOG_LEVEL_DEBUG, "on_rx_offer offer=%x\n", offer);
+	if(g_shutting_down) return;
+
+	bool is_reinvite = false;
 
 	if(inv->state == PJSIP_INV_STATE_CONFIRMED) {
-		addon_log(LOG_LEVEL_DEBUG, "on_rx_offer: this is REINVITE so we leave its processing to on_rx_reinvite\n");
-		return;
+		is_reinvite = true;
 	}
 
-	// This is offer in '200 OK' (late negotiation)
-
 	char evt[2048];
+
+	char *type;
 
 	Call *call = (Call*)inv->dlg->mod_data[mod_tester.id];
 
@@ -2931,8 +2964,48 @@ static void on_rx_offer(pjsip_inv_session *inv, const pjmedia_sdp_session *offer
 		return; 
 	}
 
-	addon_log(LOG_LEVEL_DEBUG, "on_rx_offer: conn->addr = %s\n", conn->addr);
+	int remote_mode = get_media_mode(offer->media[0]->attr, offer->media[0]->attr_count);
+	if(remote_mode == SENDONLY) {
+		call->remote_hold = 1;
+	} else if(remote_mode == INACTIVE) {
+		call->remote_hold = 1;
+	} else if(remote_mode == SENDRECV) {
+		call->remote_hold = 0;
+	} else if(remote_mode == RECVONLY) {
+		call->remote_hold = 0;
+	} else {
+		call->remote_hold = 0;
+	}
+
+	char *mode = get_media_mode_str(remote_mode);
 	
+	pjmedia_sdp_attr *attr;
+
+	// Remove existing directions attributes
+	pjmedia_sdp_media_remove_all_attr(answer->media[0], "sendrecv");
+	pjmedia_sdp_media_remove_all_attr(answer->media[0], "sendonly");
+	pjmedia_sdp_media_remove_all_attr(answer->media[0], "recvonly");
+	pjmedia_sdp_media_remove_all_attr(answer->media[0], "inactive");
+
+	if(call->local_hold) {
+		// Keep call on-hold by setting 'sendonly' attribute.
+		// (See RFC 3264 Section 8.4 and RFC 4317 Section 3.1)
+		if(call->remote_hold) {
+			printf("p1\n");
+			attr = pjmedia_sdp_attr_create(inv->pool, "inactive", NULL);
+		} else {
+			printf("p2\n");
+			attr = pjmedia_sdp_attr_create(inv->pool, "sendonly", NULL);
+		}
+	} else if(call->remote_hold) {
+		printf("p3\n");
+		attr = pjmedia_sdp_attr_create(inv->pool, "recvonly", NULL);
+	} else {
+		printf("p4\n");
+		attr = pjmedia_sdp_attr_create(inv->pool, "sendrecv", NULL);
+	}
+	pjmedia_sdp_media_add_attr(answer->media[0], attr);
+
 	status = pjsip_inv_set_sdp_answer(inv, answer);
 	if(status != PJ_SUCCESS){
 		make_evt_internal_error(evt, sizeof(evt), "on_rx_offer: pjsip_inv_set_sdp_answer failed");
@@ -2940,96 +3013,21 @@ static void on_rx_offer(pjsip_inv_session *inv, const pjmedia_sdp_session *offer
 		return;
 	}
 
-	addon_log(LOG_LEVEL_DEBUG, "on_rx_offer done\n");
-}
-
-static pj_status_t on_rx_reinvite(pjsip_inv_session *inv, const pjmedia_sdp_session *offer, pjsip_rx_data *rdata){
-	// Returning PJ_SUCCESS in this function causes the INVITE to need to be handled by ourselves (on_rx_request will be called with it)
-
-	addon_log(LOG_LEVEL_DEBUG, "on_rx_reinvite\n");
-	if(g_shutting_down) return -1;
-
-	char evt[2048];
-
-	char *type;
-
-	Call *call = (Call*)inv->dlg->mod_data[mod_tester.id];
-
-	pj_status_t status;
-
-	pjmedia_sdp_conn *conn;
-	conn = offer->media[0]->conn;
-	if(!conn) conn = offer->conn;	
-	
-	pjmedia_transport_info tpinfo;
-	pjmedia_transport_info_init(&tpinfo);
-	pjmedia_transport_get_info(call->med_transport,&tpinfo);
-
-	pjmedia_sdp_session *answer;
-	status = pjmedia_endpt_create_sdp(g_med_endpt,
-					inv->pool,
-					1,
-					&tpinfo.sock_info,
-					&answer);
-	if(status != PJ_SUCCESS){
-		make_evt_internal_error(evt, sizeof(evt), "on_rx_reinvite: pjmedia_endpt_create_sdp failed");
-		dispatch_event(evt); 
-		return -1; 
-	}
-
-	//addon_log(LOG_LEVEL_DEBUG, "on_rx_reinvite: conn->addr = %s\n", conn->addr);
-	if(has_attr_sendonly(offer->media[0]->attr, offer->media[0]->attr_count)){
-		if(!call->remote_hold){
-			call->remote_hold = PJ_TRUE;
-			type = "remote_hold";	
-		}
-		else {
-			type = "plain";
-		}
-	}
-	else{
-		if(call->remote_hold){
-			call->remote_hold = PJ_FALSE;
-			type = "remote_unhold";
-		}
-		else {
-			type = "plain";
-		}
-	}
-	
-	if(call->local_hold) {
-		pjmedia_sdp_attr *attr;
-
-		// Remove existing directions attributes
-		pjmedia_sdp_media_remove_all_attr(answer->media[0], "sendrecv");
-		pjmedia_sdp_media_remove_all_attr(answer->media[0], "sendonly");
-		pjmedia_sdp_media_remove_all_attr(answer->media[0], "recvonly");
-		pjmedia_sdp_media_remove_all_attr(answer->media[0], "inactive");
-
-		// Keep call on-hold by setting 'sendonly' attribute.
-		// (See RFC 3264 Section 8.4 and RFC 4317 Section 3.1)
-		attr = pjmedia_sdp_attr_create(inv->pool, "sendonly", NULL);
-		pjmedia_sdp_media_add_attr(answer->media[0], attr);
-	}
-
-	status = pjsip_inv_set_sdp_answer(inv, answer);
-	if(status != PJ_SUCCESS){
-		make_evt_internal_error(evt, sizeof(evt), "on_rx_reinvite: pjsip_inv_set_sdp_answer failed");
-		dispatch_event(evt); 
-		return -1;
-	}
-
 	long call_id;
 	if( !g_call_ids.get_id((long)call, call_id) ){
-		make_evt_internal_error(evt, sizeof(evt), "on_rx_reinvite: Failed to get call_id.\n");
+		make_evt_internal_error(evt, sizeof(evt), "on_rx_offer: Failed to get call_id.\n");
 		dispatch_event(evt); 
-		return -1;
+		return;
 	}
 
-	make_evt_reinvite(evt, sizeof(evt), call_id, type);
-	dispatch_event(evt);
+	/*
+	if(is_reinvite) {
+		make_evt_reinvite(evt, sizeof(evt), call_id, type);
+		dispatch_event(evt);
+	}
+	*/
 
-	return -1;
+	return;
 }
 
 static void on_dtmf(pjmedia_stream *stream, void *user_data, int digit){
