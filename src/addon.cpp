@@ -1266,6 +1266,27 @@ Napi::Value set_log_level(const Napi::CallbackInfo& info) {
 }
 
 
+Napi::Value set_flags(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+
+  if (info.Length() != 1) {
+    Napi::Error::New(env, "Wrong number of arguments. Expected: flags").ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
+  if (!info[0].IsNumber()) {
+    Napi::TypeError::New(env, "flags must be number.").ThrowAsJavaScriptException();
+    return env.Null();
+  }
+  unsigned flags = info[0].As<Napi::Number>().Uint32Value();
+ 
+  pjw_set_flags(flags);
+
+  return Napi::Number::New(env, 0);
+}
+
+
+
 
 static void CallJs(napi_env napiEnv, napi_value napi_js_cb, void* context, void* data) {
 	Napi::Env env = Napi::Env(napiEnv);
@@ -1382,6 +1403,8 @@ Napi::Object init(Napi::Env env, Napi::Object exports) {
 
   exports.Set("subscription_create", Napi::Function::New(env, subscription_create));
   exports.Set("subscription_subscribe", Napi::Function::New(env, subscription_subscribe));
+
+  exports.Set("set_flags", Napi::Function::New(env, set_flags));
 
   return exports;
 }

@@ -33,6 +33,7 @@
       'conditions': [
         [ 'OS!="win"', {
           'cflags_cc': [
+			'-g',
             '-fexceptions',
             '-Wno-maybe-uninitialized',
             '-fPIC',

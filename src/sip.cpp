@@ -106,6 +106,7 @@ int g_dtmf_inter_digit_timer = 0;
 
 pj_str_t g_sip_ipaddress;
 
+unsigned g_flags = 0;
 
 pjsip_route_hdr route_set;
 pjsip_route_hdr *route;
@@ -169,6 +170,8 @@ struct Call {
 	int last_digit_timestamp[2];
 
 	pjsip_evsub *xfer_sub; // Xfer server subscription, if this call was triggered by xfer.
+
+	pjsip_rx_data *initial_invite_rdata;
 };
 
 
@@ -1156,20 +1159,42 @@ int pjw_call_respond(long call_id, int code, const char *reason, const char *add
 	pj_status_t status;
 
 	pjsip_tx_data *tdata;
-	status = pjsip_inv_answer(call->inv,
-				  code,
-				  &r,
-				  NULL,
-				  &tdata); 
 
-	if(status != PJ_SUCCESS){
-		PJW_UNLOCK();
-		set_error("pjsip_inv_answer failed");
-		return -1;
-	}
+	if(call->initial_invite_rdata) {
+		status = pjsip_inv_initial_answer(call->inv, call->initial_invite_rdata,
+						code,
+						&r,
+						NULL,
+						&tdata);
+		if(status != PJ_SUCCESS) {
+			PJW_UNLOCK();
+			set_error("pjsip_inv_initial_answer failed");
+			return -1;
+		}
 
-	if(!add_additional_headers(call->inv->dlg->pool, tdata, additional_headers)) {
-		goto out;
+		status = pjsip_rx_data_free_cloned(call->initial_invite_rdata);
+		if(status != PJ_SUCCESS) {
+			PJW_UNLOCK();
+			set_error("pjsip_rx_data_free_cloned failed");
+			return -1;
+		}
+		call->initial_invite_rdata = 0;
+	} else {
+		status = pjsip_inv_answer(call->inv,
+					  code,
+					  &r,
+					  NULL,
+					  &tdata); 
+
+		if(status != PJ_SUCCESS){
+			PJW_UNLOCK();
+			set_error("pjsip_inv_answer failed");
+			return -1;
+		}
+
+		if(!add_additional_headers(call->inv->dlg->pool, tdata, additional_headers)) {
+			goto out;
+		}
 	}
 
 	status = pjsip_inv_send_msg(call->inv, tdata);
@@ -2660,31 +2685,52 @@ static pj_bool_t on_rx_request( pjsip_rx_data *rdata ){
 		return PJ_TRUE;
 	}
 
-	pjsip_tx_data *tdata;
-	//First response to an INVITE must be created with pjsip_inv_initial_answer(). Subsequent responses to the same transaction MUST use pjsip_inv_answer().
-	//Create 100 response
-	status = pjsip_inv_initial_answer(inv, rdata,
-					100,
-					NULL, NULL, &tdata);
-	if(status != PJ_SUCCESS) {
-		close_media_transport(med_transport);
-		reason = pj_str("Internal Server Error (pjsip_inv_initial_answer failed)");
-		pjsip_endpt_respond_stateless(g_sip_endpt, rdata, 500, &reason, NULL, NULL);
-		return PJ_TRUE;
-	}
+	pjsip_rx_data *cloned_rdata	= 0;
 
-	//Send 100 response
-	status = pjsip_inv_send_msg(inv, tdata);
-	if(status != PJ_SUCCESS) {
-		close_media_transport(med_transport);
-		reason = pj_str("Internal Server Error (pjsip_inv_send_msg failed)");
-		pjsip_endpt_respond_stateless(g_sip_endpt, rdata, 500, &reason, NULL, NULL);
-		return PJ_TRUE;
+	if(!(g_flags & FLAG_NO_AUTO_100_TRYING)) {
+		pjsip_tx_data *tdata;
+		//First response to an INVITE must be created with pjsip_inv_initial_answer(). Subsequent responses to the same transaction MUST use pjsip_inv_answer().
+		//Create 100 response
+		status = pjsip_inv_initial_answer(inv, rdata,
+						100,
+						NULL, NULL, &tdata);
+		if(status != PJ_SUCCESS) {
+			close_media_transport(med_transport);
+			reason = pj_str("Internal Server Error (pjsip_inv_initial_answer failed)");
+			pjsip_endpt_respond_stateless(g_sip_endpt, rdata, 500, &reason, NULL, NULL);
+			return PJ_TRUE;
+		}
+
+		//Send 100 response
+		status = pjsip_inv_send_msg(inv, tdata);
+		if(status != PJ_SUCCESS) {
+			close_media_transport(med_transport);
+			reason = pj_str("Internal Server Error (pjsip_inv_send_msg failed)");
+			pjsip_endpt_respond_stateless(g_sip_endpt, rdata, 500, &reason, NULL, NULL);
+			return PJ_TRUE;
+		}
+	} else {
+		status = pjsip_rx_data_clone(rdata, 0, &cloned_rdata);
+
+		if(status != PJ_SUCCESS) {
+			close_media_transport(med_transport);
+			reason = pj_str("Internal Server Error (pjsip_rx_data_clone failed)");
+			pjsip_endpt_respond_stateless(g_sip_endpt, rdata, 500, &reason, NULL, NULL);
+			return PJ_TRUE;
+		}
 	}
 
 	Call *call = (Call*)pj_pool_alloc(inv->pool, sizeof(Call));
 	pj_bzero(call, sizeof(Call));
 
+	call->initial_invite_rdata = cloned_rdata;
+
+	if(status != PJ_SUCCESS) {
+		close_media_transport(med_transport);
+		reason = pj_str("Internal Server Error (pjsip_rx_data_clone failed)");
+		pjsip_endpt_respond_stateless(g_sip_endpt, rdata, 500, &reason, NULL, NULL);
+		return PJ_TRUE;
+	}
 
 	call->inv = inv;
 	call->med_transport = med_transport;
@@ -4731,6 +4777,16 @@ int pjw_log_level(long log_level)
 
 	pj_log_set_level(log_level);
 	
+	PJW_UNLOCK();
+	return 0;
+}
+
+int pjw_set_flags(unsigned flags)
+{
+	PJW_LOCK();
+
+	g_flags = flags;
+
 	PJW_UNLOCK();
 	return 0;
 }

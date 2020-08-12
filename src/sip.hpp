@@ -9,7 +9,10 @@
 #include <pjlib-util.h>
 #include <pjlib.h>
 
+#define FLAG_NO_AUTO_100_TRYING 1
+
 #define CALL_CREATE_FLAG_LATE_NEGOTIATION 1
+
 
 int __pjw_init();
 int __pjw_poll(char *out_evt);
@@ -51,6 +54,8 @@ int pjw_subscription_create(long transport_id, const char *event, const char *ac
 int pjw_subscription_subscribe(long subscription_id, int expires, const char *additional_headers);
 
 int pjw_log_level(long log_level);
+
+int pjw_set_flags(unsigned flags);
 
 int pjw_dtmf_aggregation_on(int inter_digit_timer);
 int pjw_dtmf_aggregation_off();

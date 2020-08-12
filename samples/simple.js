@@ -19,7 +19,7 @@ t2 = sip.transport.create("127.0.0.1", 5092, 1)
 console.log("t1", t1)
 console.log("t2", t2)
 
-flags = 1
+flags = 0
 
 oc = sip.call.create(t1.id, flags, 'sip:a@t', 'sip:b@127.0.0.1:5092')
 
