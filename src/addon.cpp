@@ -240,8 +240,8 @@ Napi::Value account_unregister(const Napi::CallbackInfo& info) {
 Napi::Value call_create(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
 
-  if (info.Length() < 3) {
-    Napi::Error::New(env, "Wrong number of arguments. Expected: transport_id, from_uri, to_uri [, request_uri, proxy_uri, additional_headers, realm, user, pass]").ThrowAsJavaScriptException();
+  if (info.Length() < 4) {
+    Napi::Error::New(env, "Wrong number of arguments. Expected: transport_id, flags, from_uri, to_uri [, request_uri, proxy_uri, additional_headers, realm, user, pass]").ThrowAsJavaScriptException();
     return env.Null();
   }
 
@@ -250,44 +250,50 @@ Napi::Value call_create(const Napi::CallbackInfo& info) {
     return env.Null();
   }
   int transport_id = info[0].As<Napi::Number>().Int32Value();
+
+  if (!info[0].IsNumber()) {
+    Napi::TypeError::New(env, "flags must be number.").ThrowAsJavaScriptException();
+    return env.Null();
+  }
+  unsigned flags = info[1].As<Napi::Number>().Uint32Value();
  
-  if (!info[1].IsString()) {
+  if (!info[2].IsString()) {
     Napi::TypeError::New(env, "from_uri must be string.").ThrowAsJavaScriptException();
     return env.Null();
   }
-  const string from_uri = info[1].As<Napi::String>().Utf8Value();
+  const string from_uri = info[2].As<Napi::String>().Utf8Value();
 
-  if (!info[2].IsString()) {
+  if (!info[3].IsString()) {
     Napi::TypeError::New(env, "to_uri must be string.").ThrowAsJavaScriptException();
     return env.Null();
   }
-  const string to_uri = info[2].As<Napi::String>().Utf8Value();
+  const string to_uri = info[3].As<Napi::String>().Utf8Value();
 
   string request_uri = string("");
 
-  if (info.Length() > 3) {
+  if (info.Length() > 4) {
     if (!info[3].IsString()) {
       Napi::TypeError::New(env, "request_uri must be string.").ThrowAsJavaScriptException();
       return env.Null();
     }
-    request_uri = info[3].As<Napi::String>().Utf8Value();
+    request_uri = info[4].As<Napi::String>().Utf8Value();
   } else {
     request_uri = to_uri; // TODO: remove angle brackets if present
   }
 
   string proxy_uri = string("");
 
-  if (info.Length() > 4) {
-	  if (!info[4].IsString()) {
+  if (info.Length() > 5) {
+	  if (!info[5].IsString()) {
 	    Napi::TypeError::New(env, "proxy_uri must be string.").ThrowAsJavaScriptException();
 	    return env.Null();
 	  }
-	  proxy_uri = info[4].As<Napi::String>().Utf8Value();
+	  proxy_uri = info[5].As<Napi::String>().Utf8Value();
   }
 
   string additional_headers = string("");
 
-  if (info.Length() > 5) {
+  if (info.Length() > 6) {
     if (!info[5].IsString()) {
       Napi::TypeError::New(env, "additional_headers must be string.").ThrowAsJavaScriptException();
       return env.Null();
@@ -301,35 +307,35 @@ Napi::Value call_create(const Napi::CallbackInfo& info) {
   string user = string("");
   string pass = string("");
 
-  if (info.Length() > 6) {
-    if(info.Length() < 9) {
+  if (info.Length() > 7) {
+    if(info.Length() < 10) {
       Napi::Error::New(env, "incomplete credentials arguments: you must provide realm, user and pass").ThrowAsJavaScriptException();
       return env.Null();
     }
 
-    if (!info[6].IsString()) {
+    if (!info[7].IsString()) {
       Napi::TypeError::New(env, "realm must be string.").ThrowAsJavaScriptException();
       return env.Null();
     }
-    realm = info[6].As<Napi::String>().Utf8Value().c_str();
+    realm = info[7].As<Napi::String>().Utf8Value().c_str();
 
-    if (!info[7].IsString()) {
+    if (!info[8].IsString()) {
       Napi::TypeError::New(env, "user must be string.").ThrowAsJavaScriptException();
       return env.Null();
     }
-    user = info[7].As<Napi::String>().Utf8Value().c_str();
+    user = info[8].As<Napi::String>().Utf8Value().c_str();
 
-    if (!info[8].IsString()) {
+    if (!info[9].IsString()) {
       Napi::TypeError::New(env, "pass must be string.").ThrowAsJavaScriptException();
       return env.Null();
     }
-    pass = info[8].As<Napi::String>().Utf8Value().c_str();
+    pass = info[9].As<Napi::String>().Utf8Value().c_str();
   }
 
   long int out_call_id;
   char out_sip_call_id[256];
 
-  int res = pjw_call_create(transport_id, from_uri.c_str(), to_uri.c_str(), request_uri.c_str(), proxy_uri[0] ? proxy_uri.c_str() : NULL, additional_headers[0] ? additional_headers.c_str() : NULL, realm[0] ? realm.c_str() : NULL, user[0] ? user.c_str() : NULL, pass[0] ? pass.c_str() : NULL, &out_call_id, out_sip_call_id);
+  int res = pjw_call_create(transport_id, flags, from_uri.c_str(), to_uri.c_str(), request_uri.c_str(), proxy_uri[0] ? proxy_uri.c_str() : NULL, additional_headers[0] ? additional_headers.c_str() : NULL, realm[0] ? realm.c_str() : NULL, user[0] ? user.c_str() : NULL, pass[0] ? pass.c_str() : NULL, &out_call_id, out_sip_call_id);
 
   if(res != 0) {
     Napi::Error::New(env, pjw_get_error()).ThrowAsJavaScriptException();

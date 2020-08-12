@@ -3,7 +3,7 @@ var z = require('zester')
 var m = require('data-matching')
 var sip_msg = require('sip-matching')
 
-//sip.set_log_level(6)
+sip.set_log_level(6)
 sip.dtmf_aggregation_on(500)
 
 z.trap_events(sip.event_source, 'event', (evt) => {
@@ -19,7 +19,9 @@ t2 = sip.transport.create("127.0.0.1", 5092, 1)
 console.log("t1", t1)
 console.log("t2", t2)
 
-oc = sip.call.create(t1.id, 'sip:a@t', 'sip:b@127.0.0.1:5092')
+flags = 1
+
+oc = sip.call.create(t1.id, flags, 'sip:a@t', 'sip:b@127.0.0.1:5092')
 
 z.wait([
 	{

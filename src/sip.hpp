@@ -9,6 +9,8 @@
 #include <pjlib-util.h>
 #include <pjlib.h>
 
+#define CALL_CREATE_FLAG_LATE_NEGOTIATION 1
+
 int __pjw_init();
 int __pjw_poll(char *out_evt);
 int pjw_transport_create(const char *sip_ipaddr, int port, pjsip_transport_type_e type, int *out_t_id, int *out_port);
@@ -18,7 +20,7 @@ int pjw_account_create(int t_id, const char *domain, const char *server, const c
 int pjw_account_register(long acc_id, pj_bool_t autoreg);
 int pjw_account_unregister(long acc_id);
 
-int pjw_call_create(long t_id, const char *from_uri, const char *to_uri, const char *request_uri, const char *proxy_uri, const char *additional_headers, const char *realm, const char *username, const char *password, long *out_call_id, char *out_sip_call_id);
+int pjw_call_create(long t_id, unsigned flags, const char *from_uri, const char *to_uri, const char *request_uri, const char *proxy_uri, const char *additional_headers, const char *realm, const char *username, const char *password, long *out_call_id, char *out_sip_call_id);
 int pjw_call_respond(long call_id, int code, const char *reason, const char *additional_headers);
 int pjw_call_terminate(long call_id, int code, const char *reason, const char *additional_headers);
 int pjw_call_send_dtmf(long call_id, const char *digits, int mode);

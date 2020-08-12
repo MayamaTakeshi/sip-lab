@@ -272,8 +272,11 @@ static pj_bool_t on_rx_request( pjsip_rx_data *rdata );
 /* Callback to be called when responses are received */
 static pj_bool_t on_rx_response( pjsip_rx_data *rdata );
 
-/* Callback to be called whe REINVITEs are received */
+/* Callback to be called when media offer is received (in REINVITEs but also in late negotiaion scenario) */
 static void on_rx_offer(pjsip_inv_session *inv, const pjmedia_sdp_session *offer);
+
+/* Callback to be called when REINVITE is received */
+static pj_status_t on_rx_reinvite(pjsip_inv_session *inv, const pjmedia_sdp_session *offer, pjsip_rx_data *rdata);
 
 /* Callback to be called when Redirect is received */
 static pjsip_redirect_op on_redirected(pjsip_inv_session *inv, const pjsip_uri *target, const pjsip_event *e);
@@ -297,7 +300,7 @@ static void server_on_evsub_rx_refresh(pjsip_evsub *sub, pjsip_rx_data *rdata, i
 
 bool dlg_create(pjsip_dialog **dlg, Transport *transport, const char *from_uri, const char *to_uri, const char *request_uri, const char *realm, const char *username, const char *password, const char *local_contact); 
 
-static int call_create(Transport *t, pjsip_dialog *dlg, const char *proxy_uri, const char *additional_headers);
+static int call_create(Transport *t, unsigned flags, pjsip_dialog *dlg, const char *proxy_uri, const char *additional_headers);
 
 static int subscription_create(pjsip_dialog *dlg, const char *event, const char *proxy_uri, const char *additional_headers);
 bool subscription_subscribe(Subscription *s, int expires, const char *additional_headers);
@@ -562,6 +565,7 @@ int __pjw_init()
 	inv_cb.on_new_session = &on_forked;
 	inv_cb.on_media_update = &on_media_update;
 	inv_cb.on_rx_offer = &on_rx_offer;
+	inv_cb.on_rx_reinvite = &on_rx_reinvite;
 	inv_cb.on_tsx_state_changed = &on_tsx_state_changed;
 	inv_cb.on_redirected = &on_redirected;
 
@@ -1238,7 +1242,7 @@ int pjw_call_terminate(long call_id, int code, const char *reason, const char *a
 }
 
 
-int pjw_call_create(long t_id, const char *from_uri, const char *to_uri, const char *request_uri, const char *proxy_uri, const char *additional_headers, const char *realm, const char *username, const char *password, long *out_call_id, char *out_sip_call_id)
+int pjw_call_create(long t_id, unsigned flags, const char *from_uri, const char *to_uri, const char *request_uri, const char *proxy_uri, const char *additional_headers, const char *realm, const char *username, const char *password, long *out_call_id, char *out_sip_call_id)
 {
 	PJW_LOCK();
 	clear_error();
@@ -1313,7 +1317,7 @@ int pjw_call_create(long t_id, const char *from_uri, const char *to_uri, const c
 		goto out;
 	}
 	
-	call_id = call_create(t, dlg, proxy_uri, additional_headers); 
+	call_id = call_create(t, flags, dlg, proxy_uri, additional_headers); 
 	if(call_id < 0) {
 		goto out;
 	}
@@ -1484,7 +1488,7 @@ bool dlg_create(pjsip_dialog **dlg, Transport *transport, const char *from_uri, 
 }
 
 
-int call_create(Transport *t, pjsip_dialog *dlg, const char *proxy_uri, const char *additional_headers)
+int call_create(Transport *t, unsigned flags, pjsip_dialog *dlg, const char *proxy_uri, const char *additional_headers)
 {
 	pjsip_inv_session *inv;
 	//in_addr addr;
@@ -1513,17 +1517,20 @@ int call_create(Transport *t, pjsip_dialog *dlg, const char *proxy_uri, const ch
 	pjmedia_transport_info_init(&med_tpinfo);
 	pjmedia_transport_get_info(med_transport, &med_tpinfo);
 	
-	pjmedia_sdp_session *sdp;
-	status = pjmedia_endpt_create_sdp( g_med_endpt, 
-			dlg->pool, 
-			1,
-			&med_tpinfo.sock_info,
-			&sdp);
-	if(status != PJ_SUCCESS) {
-		close_media_transport(med_transport);
-		status = pjsip_dlg_terminate(dlg); //ToDo:
-		set_error("pjmedia_endpt_create_sdp failed");
-		return -1; 
+	pjmedia_sdp_session *sdp = 0;
+
+	if(!(flags & CALL_CREATE_FLAG_LATE_NEGOTIATION)) {
+		status = pjmedia_endpt_create_sdp( g_med_endpt, 
+				dlg->pool, 
+				1,
+				&med_tpinfo.sock_info,
+				&sdp);
+		if(status != PJ_SUCCESS) {
+			close_media_transport(med_transport);
+			status = pjsip_dlg_terminate(dlg); //ToDo:
+			set_error("pjmedia_endpt_create_sdp failed");
+			return -1; 
+		}
 	}
 
 	status = pjsip_inv_create_uac(dlg, sdp, 0, &inv);
@@ -2845,6 +2852,57 @@ static void on_rx_offer(pjsip_inv_session *inv, const pjmedia_sdp_session *offer
 	addon_log(LOG_LEVEL_DEBUG, "on_rx_offer\n");
 	if(g_shutting_down) return;	
 
+	if(inv->state == PJSIP_INV_STATE_CONFIRMED) {
+		addon_log(LOG_LEVEL_DEBUG, "on_rx_offer: this is REINVITE so we leave its processing to on_rx_reinvite\n");
+		return;
+	}
+
+	// This is offer in '200 OK' (late negotiation)
+
+	char evt[2048];
+
+	Call *call = (Call*)inv->dlg->mod_data[mod_tester.id];
+
+	pj_status_t status;
+
+	pjmedia_sdp_conn *conn;
+	conn = offer->media[0]->conn;
+	if(!conn) conn = offer->conn;	
+	
+	pjmedia_transport_info tpinfo;
+	pjmedia_transport_info_init(&tpinfo);
+	pjmedia_transport_get_info(call->med_transport,&tpinfo);
+
+	pjmedia_sdp_session *answer;
+	status = pjmedia_endpt_create_sdp(g_med_endpt,
+					inv->pool,
+					1,
+					&tpinfo.sock_info,
+					&answer);
+	if(status != PJ_SUCCESS){
+		make_evt_internal_error(evt, sizeof(evt), "on_rx_offer: pjmedia_endpt_create_sdp failed");
+		dispatch_event(evt); 
+		return; 
+	}
+
+	addon_log(LOG_LEVEL_DEBUG, "on_rx_offer: conn->addr = %s\n", conn->addr);
+	
+	status = pjsip_inv_set_sdp_answer(inv, answer);
+	if(status != PJ_SUCCESS){
+		make_evt_internal_error(evt, sizeof(evt), "on_rx_offer: pjsip_inv_set_sdp_answer failed");
+		dispatch_event(evt); 
+		return;
+	}
+
+	addon_log(LOG_LEVEL_DEBUG, "on_rx_offer done\n");
+}
+
+static pj_status_t on_rx_reinvite(pjsip_inv_session *inv, const pjmedia_sdp_session *offer, pjsip_rx_data *rdata){
+	// Returning PJ_SUCCESS in this function causes the INVITE to need to be handled by ourselves (on_rx_request will be called with it)
+
+	addon_log(LOG_LEVEL_DEBUG, "on_rx_reinvite\n");
+	if(g_shutting_down) return -1;
+
 	char evt[2048];
 
 	char *type;
@@ -2868,11 +2926,12 @@ static void on_rx_offer(pjsip_inv_session *inv, const pjmedia_sdp_session *offer
 					&tpinfo.sock_info,
 					&answer);
 	if(status != PJ_SUCCESS){
-		addon_log(LOG_LEVEL_DEBUG, "on_rx_offer: pjmedia_endpt_create_sdp failed");
-		return; 
+		make_evt_internal_error(evt, sizeof(evt), "on_rx_reinvite: pjmedia_endpt_create_sdp failed");
+		dispatch_event(evt); 
+		return -1; 
 	}
 
-	//addon_log(LOG_LEVEL_DEBUG, "on_rx_offer: conn->addr = %s\n", conn->addr);
+	//addon_log(LOG_LEVEL_DEBUG, "on_rx_reinvite: conn->addr = %s\n", conn->addr);
 	if(has_attr_sendonly(offer->media[0]->attr, offer->media[0]->attr_count)){
 		if(!call->remote_hold){
 			call->remote_hold = PJ_TRUE;
@@ -2909,20 +2968,22 @@ static void on_rx_offer(pjsip_inv_session *inv, const pjmedia_sdp_session *offer
 
 	status = pjsip_inv_set_sdp_answer(inv, answer);
 	if(status != PJ_SUCCESS){
-		make_evt_internal_error(evt, sizeof(evt), "on_rx_offer: pjsip_inv_set_sdp_answer failed");
+		make_evt_internal_error(evt, sizeof(evt), "on_rx_reinvite: pjsip_inv_set_sdp_answer failed");
 		dispatch_event(evt); 
-		return;
+		return -1;
 	}
 
 	long call_id;
 	if( !g_call_ids.get_id((long)call, call_id) ){
-		make_evt_internal_error(evt, sizeof(evt), "on_rx_offer: Failed to get call_id.\n");
+		make_evt_internal_error(evt, sizeof(evt), "on_rx_reinvite: Failed to get call_id.\n");
 		dispatch_event(evt); 
-		return;
+		return -1;
 	}
 
 	make_evt_reinvite(evt, sizeof(evt), call_id, type);
 	dispatch_event(evt);
+
+	return -1;
 }
 
 static void on_dtmf(pjmedia_stream *stream, void *user_data, int digit){
