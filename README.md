@@ -32,7 +32,7 @@ To test from within this repo just run:
 
 
 The module is known to work properly in Ubuntu 18.04.4, Debian 8 and Debian 10 (and it is expected to work in Debian 9).
-It works with node v.10.
-It doesn't work with node v.8.
+It was originally developed with node v.10 and tested with v.12 and it is expected to work with latest versions of node.
+(it is known to not work with node v.8)
 
 
