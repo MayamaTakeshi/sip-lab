@@ -206,6 +206,8 @@ z.wait([
 	},
 ], 500)
 
+z.sleep(100)
+
 sip.call.reinvite(oc.id, false, flags)
 
 z.wait([
@@ -223,21 +225,21 @@ z.wait([
 		event: 'media_status',
 		call_id: oc.id,
 		status: 'setup_ok',
-		local_mode: 'sendrecv',
-		remote_mode: 'sendrecv',
+		local_mode: 'sendonly',
+		remote_mode: 'recvonly',
 	},
 	{
 		event: 'media_status',
 		call_id: ic.id,
 		status: 'setup_ok',
-		local_mode: 'sendrecv',
-		remote_mode: 'sendrecv',
+		local_mode: 'recvonly',
+		remote_mode: 'sendonly',
 	},
 ], 500)
 
 
 sip.call.send_dtmf(oc.id, '1234', 0)
-sip.call.send_dtmf(ic.id, '4321', 1)
+sip.call.send_dtmf(ic.id, '4321', 1) // This will not generate event 'dtmf'
 
 z.wait([
 	{
@@ -245,12 +247,6 @@ z.wait([
 		call_id: ic.id,
 		digits: '1234',
 		mode: 0,
-	},
-	{
-		event: 'dtmf',
-		call_id: oc.id,
-		digits: '4321',
-		mode: 1,
 	},
 ], 2000)
 

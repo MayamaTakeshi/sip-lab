@@ -10,6 +10,9 @@ then
 	cd pjproject
 	git checkout de3d744c2e1188b59bb907b6ee32ef83740ebc64
 
+    #echo "Patching sip_transaction.c to avoid problems with CANCEL"
+    sed -i -r 's|event->body.tx_msg.tdata == tsx->last_tx,|\t\t\t1, /* \0 */|' pjsip/src/pjsip/sip_transaction.c 
+
 	cat > user.mak <<EOF
 	export CFLAGS += -fPIC -g
 	export LDFLAGS +=
