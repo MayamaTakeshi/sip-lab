@@ -1,11 +1,22 @@
 ## sip-lab
 
-Node module that helps to write functional tests for SIP systems (including media operations).
+### Overview
+
+A nodejs module that helps to write functional tests for SIP systems (including media operations).
 It uses pjproject for SIP and media processing.
+
+### Installation
 
 This will require for you to have some libraries installed. So do:
 ```
 apt install build-essential automake autoconf libtool libspeex-dev libopus-dev libsdl2-dev libavdevice-dev libswscale-dev libv4l-dev libopencore-amrnb-dev libopencore-amrwb-dev libvo-amrwbenc-dev libopus-dev libsdl2-dev libopencore-amrnb-dev libopencore-amrwb-dev libvo-amrwbenc-dev libboost-dev libspandsp-dev libpcap-dev libssl-dev uuid-dev
+```
+
+We will also support G729 codec by installing bcg729.
+
+There is a helper script that you can use:
+```
+./install_bcg729.sh
 ```
 
 Then install sip-lab by doing:
@@ -25,11 +36,11 @@ But if you do so, you will need to set NODE_PATH for node to find it by doing:
 
 To test from within this repo just run:
 ```
+  npm install -g node-gyp
   npm install --unsafe-perm
 
   node samples/simple.js
 ```
-
 
 The module is known to work properly in Ubuntu 18.04.4, Debian 8 and Debian 10 (and it is expected to work in Debian 9).
 It was originally developed with node v.10 and tested with v.12 and it is expected to work with latest versions of node.

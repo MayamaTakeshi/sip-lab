@@ -527,6 +527,16 @@ int __pjw_init()
 		return 1;
 	}
 
+    g_pool = pj_pool_create(&cp.factory, "tester", 1000, 1000, NULL);
+
+    /* Create event manager */
+    status = pjmedia_event_mgr_create(g_pool, 0, NULL);
+    if(status != PJ_SUCCESS)
+    {
+        addon_log(LOG_LEVEL_DEBUG, "pjmedia_event_mgr_create  failed\n");
+        return 1;
+    }
+
 	const pj_str_t msg_tag = { "MESSAGE", 7 };
 	const pj_str_t STR_MIME_TEXT_PLAIN = { "text/plain", 10 };
 	const pj_str_t STR_MIME_APP_ISCOMPOSING = { "application/im-iscomposing+xml", 30 };
@@ -692,6 +702,22 @@ int __pjw_init()
 		return 1;
 	}
 #endif
+
+#if defined(PJMEDIA_HAS_OPUS_CODEC) && PJMEDIA_HAS_OPUS_CODEC!=0
+    status = pjmedia_codec_opus_init(g_med_endpt);
+    if(status != PJ_SUCCESS)
+    {
+        addon_log(LOG_LEVEL_DEBUG, "pjmedia_codec_opus_init failed\n");
+        return 1;
+    }
+#endif
+
+    status = pjmedia_codec_bcg729_init(g_med_endpt);
+    if(status != PJ_SUCCESS)
+    {
+        printf("pjmedia_codec_bcg729_init failed\n");
+        return 1;
+    }
 
 	status = pj_thread_register("main_thread", g_main_thread_descriptor, &g_main_thread);
 	if(status != PJ_SUCCESS)
@@ -2251,6 +2277,9 @@ static void on_media_update( pjsip_inv_session *inv, pj_status_t status){
 		return;
 	}
 
+    /* Start the UDP media transport */
+    pjmedia_transport_media_start(call->med_transport, 0, 0, 0, 0);
+
 	pjmedia_port *stream_port;
 	status = pjmedia_stream_get_port(call->med_stream, &stream_port);
 	if(status != PJ_SUCCESS){
@@ -3477,6 +3506,11 @@ void close_media_transport(pjmedia_transport *med_transport) {
 		g_PacketDumper->remove_endpoint( tpinfo.sock_info.rtp_addr_name.ipv4.sin_addr.s_addr, tpinfo.sock_info.rtp_addr_name.ipv4.sin_port );
 		g_PacketDumper->remove_endpoint( tpinfo.sock_info.rtcp_addr_name.ipv4.sin_addr.s_addr, tpinfo.sock_info.rtcp_addr_name.ipv4.sin_port );
 	}
+
+    status = pjmedia_transport_media_stop(med_transport);
+    if( status != PJ_SUCCESS ) {
+        addon_log(LOG_LEVEL_DEBUG, "Critical Error: pjmedia_transport_media_stop failed. status=%d\n", status);
+    }
 
 	status = pjmedia_transport_close(med_transport);
 	if( status != PJ_SUCCESS ) {

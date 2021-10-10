@@ -38,6 +38,9 @@
             '-Wno-maybe-uninitialized',
             '-fPIC',
           ],
+          'ldflags_cc': [
+            '-all-static',
+          ]
           }
         ]
       ],
@@ -50,6 +53,7 @@
             '-L ../pjproject/pjmedia/lib',
             '-L ../pjproject/pjsip/lib',
             '-L ../pjproject/third_party/lib',
+            '-L ../bcg729/src',
             '-l pjnath-x86_64-unknown-linux-gnu',
             '-l ilbccodec-x86_64-unknown-linux-gnu',
             '-l srtp-x86_64-unknown-linux-gnu',
@@ -94,6 +98,7 @@
             '-lopencore-amrwb',
             '-lvo-amrwbenc',
             '-lspeex',
+            '-lbcg729',
           ],
       },
     },
