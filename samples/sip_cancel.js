@@ -1,5 +1,6 @@
 var sip = require ('../index.js')
-var z = require('zester')
+var Zester = require('zester')
+var z = new Zester()
 var m = require('data-matching')
 var sip_msg = require('sip-matching')
 
