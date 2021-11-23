@@ -1,6 +1,6 @@
 {
   "name": "sip-lab",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "",
   "main": "index.js",
   "engines": {
@@ -19,7 +19,7 @@
   "homepage": "https://github.com/MayamaTakeshi/sip-lab",
   "dependencies": {
     "node-addon-api": "^1.7.2",
-    "node-gyp": "^7.0.0"
+    "node-gyp": "^8.4.1"
   },
   "devDependencies": {
     "data-matching": "^1.23.7",
