@@ -1,6 +1,6 @@
 {
   "name": "sip-lab",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "description": "",
   "main": "index.js",
   "engines": {
@@ -25,6 +25,6 @@
     "data-matching": "^1.23.7",
     "sip-matching": "^1.3.12",
     "string-matching": "^1.11.8",
-    "zester": "^3.0.1"
+    "zester": "^4.0.0"
   }
 }
