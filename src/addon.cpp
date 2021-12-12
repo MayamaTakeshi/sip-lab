@@ -1209,7 +1209,7 @@ Napi::Value subscription_create(const Napi::CallbackInfo& info) {
 Napi::Value subscription_subscribe(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
 
-  if (info.Length() < 5) {
+  if (info.Length() < 2) {
     Napi::Error::New(env, "Wrong number of arguments. Expected: subscription_id, expires [, additional_headers]").ThrowAsJavaScriptException();
     return env.Null();
   }
