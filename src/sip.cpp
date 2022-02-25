@@ -1417,7 +1417,7 @@ out:
 }
 
 
-bool set_transport(pjsip_transport *sip_transport, pjsip_dialog *dlg) {
+bool dlg_set_transport(pjsip_transport *sip_transport, pjsip_dialog *dlg) {
 	//Maybe we don't need to allocation sel from the pool
 	pjsip_tpselector *sel = (pjsip_tpselector*)pj_pool_zalloc(dlg->pool, sizeof(pjsip_tpselector));
 	//pjsip_tpselector sel;
@@ -1434,7 +1434,7 @@ bool set_transport(pjsip_transport *sip_transport, pjsip_dialog *dlg) {
 	return true;
 }
 
-bool set_transport_by_t(Transport *t, pjsip_dialog *dlg) {
+bool dlg_set_transport_by_t(Transport *t, pjsip_dialog *dlg) {
 	//Maybe we don't need to allocation sel from the pool
 	pjsip_tpselector *sel = (pjsip_tpselector*)pj_pool_zalloc(dlg->pool, sizeof(pjsip_tpselector));
 	//pjsip_tpselector sel;
@@ -1662,7 +1662,7 @@ int call_create(Transport *t, unsigned flags, pjsip_dialog *dlg, const char *pro
 		return -1;
 	}
 
-	if(!set_transport_by_t(t, dlg)){
+	if(!dlg_set_transport_by_t(t, dlg)){
 		return -1;
 	}
 	addon_log(LOG_LEVEL_DEBUG, "inv=%x tdata=%x\n",inv,tdata);
@@ -2752,7 +2752,7 @@ static pj_bool_t on_rx_request( pjsip_rx_data *rdata ){
 		return PJ_TRUE;
 	}
 
-	if(!set_transport(t, dlg)) {
+	if(!dlg_set_transport(t, dlg)) {
 		close_media_transport(med_transport);
 		reason = pj_str("Internal Server Error (set_transport failed)");
 		pjsip_endpt_respond_stateless(g_sip_endpt, rdata, 500, &reason, NULL, NULL);
@@ -4642,7 +4642,7 @@ int pjw_subscription_create(long transport_id, const char *event, const char *ac
 		goto out;
 	}	
 
-	if(!set_transport_by_t(t, dlg)){
+	if(!dlg_set_transport_by_t(t, dlg)){
 		goto out;
 	}
 
