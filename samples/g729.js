@@ -4,6 +4,8 @@ var z = new Zester()
 var m = require('data-matching')
 var sip_msg = require('sip-matching')
 
+var assert = require('assert')
+
 async function test() {
     //sip.set_log_level(6)
     sip.dtmf_aggregation_on(500)
@@ -145,6 +147,18 @@ async function test() {
             remote_mode: 'sendrecv',
         },
     ], 500)
+
+    oc_stat = sip.call.get_stream_stat(oc.id)
+    ic_stat = sip.call.get_stream_stat(ic.id)
+
+    console.log(oc_stat)
+    console.log(ic_stat)
+
+    oc_stat = JSON.parse(oc_stat)
+    ic_stat = JSON.parse(ic_stat)
+
+    assert(oc_stat.CodecInfo == 'G729/8000/1')
+    assert(ic_stat.CodecInfo == 'G729/8000/1')
 
     sip.call.terminate(oc.id)
 

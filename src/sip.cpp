@@ -346,7 +346,7 @@ void process_in_dialog_subscribe(pjsip_dialog *dlg, pjsip_rx_data *rdata);
 
 static pj_bool_t set_ports(Call *call, pjmedia_port *stream_port, pjmedia_port *media_port);
 //static pj_bool_t stop_media_operation(Call *call);
-static void build_stream_stat(ostringstream &oss, pjmedia_rtcp_stat *stat, pjmedia_port *port);
+static void build_stream_stat(ostringstream &oss, pjmedia_rtcp_stat *stat, pjmedia_stream_info *stream_info);
 
 bool init_media_ports(Call *c, unsigned sampling_rate, unsigned channel_count, unsigned samples_per_frame, unsigned bits_per_sample); 
 void connect_media_ports(Call *c);
@@ -2151,7 +2151,7 @@ int pjw_call_get_stream_stat(long call_id, char *out_stats){
 	pj_status_t status;
 
 	pjmedia_rtcp_stat stat;
-	pjmedia_port *port;
+	pjmedia_stream_info stream_info;
 	
 	status = pjmedia_stream_get_stat(call->med_stream, &stat);
 	if(status != PJ_SUCCESS){
@@ -2160,15 +2160,15 @@ int pjw_call_get_stream_stat(long call_id, char *out_stats){
 		return -1;
 	}
 
-	status = pjmedia_stream_get_port(call->med_stream, &port);
+	status = pjmedia_stream_get_info(call->med_stream, &stream_info);
 	if(status != PJ_SUCCESS){
 		PJW_UNLOCK();
-		set_error("Could not get stream stats. Call to pjmedia_stream_get_port failed.");
+		set_error("Could not get stream info. Call to pjmedia_stream_get_info failed.");
 		return -1;
 	}
 
 	ostringstream oss;
-	build_stream_stat(oss, &stat, port);
+	build_stream_stat(oss, &stat, &stream_info);
 
 	PJW_UNLOCK();
 
@@ -3384,7 +3384,7 @@ static const char *good_number(char *buf, pj_int32_t val)
     return buf;
 }
 
-static void build_stream_stat(ostringstream &oss, pjmedia_rtcp_stat *stat, pjmedia_port* port)
+static void build_stream_stat(ostringstream &oss, pjmedia_rtcp_stat *stat, pjmedia_stream_info *stream_info)
 {
     char temp[200];
     char duration[80], last_update[80];
@@ -3396,7 +3396,7 @@ static void build_stream_stat(ostringstream &oss, pjmedia_rtcp_stat *stat, pjmed
 	oss << "{ ";
 
     PJ_TIME_VAL_SUB(now, stat->start);
-    sprintf(duration, "'Duration':'%02ld:%02ld:%02ld.%03ld'",
+    sprintf(duration, "\"Duration\": \"%02ld:%02ld:%02ld.%03ld\"",
 	    now.sec / 3600,
 	    (now.sec % 3600) / 60,
 	    (now.sec % 60),
@@ -3404,59 +3404,54 @@ static void build_stream_stat(ostringstream &oss, pjmedia_rtcp_stat *stat, pjmed
 
 	oss <<  duration;
 
-    sprintf(temp, ", 'CodecInfo':'%.*s@%dHz'",
-	/*
-   	(int)port->info.encoding_name.slen,
-	port->info.encoding_name.ptr,
-	port->info.clock_rate);
-	*/
-	/* lets put fake info for now */
-	4,
-	"FAKE",
-	0);
+    sprintf(temp, ", \"CodecInfo\": \"%.*s/%d/%d\"",
+    stream_info->fmt.encoding_name.slen,
+    stream_info->fmt.encoding_name.ptr,
+	stream_info->fmt.clock_rate,
+    stream_info->fmt.channel_cnt);
 
 	oss << temp << ",";
 
-	oss << " 'RX' : { "; //Opening RX
+	oss << " \"RX\": { "; //Opening RX
 
     if (stat->rx.update_cnt == 0)
-	strcpy(last_update, "'LastUpdate':''");
+	strcpy(last_update, "\"LastUpdate\": \"\"");
     else {
-	sprintf(last_update, "'LastUpdate':'%ld.%ld'",
+	sprintf(last_update, "\"LastUpdate\": \"%ld.%ld\"",
 		stat->rx.update.sec,
 		stat->rx.update.msec);
     }
 
 	oss << last_update;
 
-	oss << ", 'Packets': " << good_number(packets, stat->rx.pkt);
-	oss << ", 'Loss':" << stat->rx.loss;
-	oss << ", 'Dup':" << stat->rx.dup;
-	oss << ", 'Reorder':" << stat->rx.reorder; 
+	oss << ", \"Packets\": " << good_number(packets, stat->rx.pkt);
+	oss << ", \"Loss\": " << stat->rx.loss;
+	oss << ", \"Dup\": " << stat->rx.dup;
+	oss << ", \"Reorder\": " << stat->rx.reorder; 
 
-	oss << ", 'LossPeriod': {";
-	oss << "'Min':" << stat->rx.loss_period.min / 1000.0;
-	oss << ", 'Mean':" << stat->rx.loss_period.mean / 1000.0;
-	oss << ", 'Max':" << stat->rx.loss_period.max / 1000.0;
-	oss << ", 'Last':" << stat->rx.loss_period.last / 1000.0;
-	oss << ", 'StandardDeviation':" << pj_math_stat_get_stddev(&stat->rx.loss_period) / 1000.0 << " }";
+	oss << ", \"LossPeriod\": {";
+	oss << "\"Min\": " << stat->rx.loss_period.min / 1000.0;
+	oss << ", \"Mean\": " << stat->rx.loss_period.mean / 1000.0;
+	oss << ", \"Max\": " << stat->rx.loss_period.max / 1000.0;
+	oss << ", \"Last\": " << stat->rx.loss_period.last / 1000.0;
+	oss << ", \"StandardDeviation\": " << pj_math_stat_get_stddev(&stat->rx.loss_period) / 1000.0 << " }";
 
-	oss << ", 'Jitter': { ";
-	oss << "'Min':" << stat->rx.jitter.min / 1000.0;
-	oss << ", 'Mean':" << stat->rx.jitter.mean / 1000.0;
-	oss << ", 'Max':" << stat->rx.jitter.max / 1000.0;
-	oss << ", 'Last':" << stat->rx.jitter.last / 1000.0;
-	oss << ", 'StandardDeviation':" << pj_math_stat_get_stddev(&stat->rx.jitter) / 1000.0 << " }";
+	oss << ", \"Jitter\": { ";
+	oss << "\"Min\": " << stat->rx.jitter.min / 1000.0;
+	oss << ", \"Mean\": " << stat->rx.jitter.mean / 1000.0;
+	oss << ", \"Max\": " << stat->rx.jitter.max / 1000.0;
+	oss << ", \"Last\": " << stat->rx.jitter.last / 1000.0;
+	oss << ", \"StandardDeviation\": " << pj_math_stat_get_stddev(&stat->rx.jitter) / 1000.0 << " }";
 
 	oss << " }"; //Closing RX
 
 	
-	oss << ", 'TX' : { "; //Opening TX
+	oss << ", \"TX\": { "; //Opening TX
 
     if (stat->tx.update_cnt == 0)
-	strcpy(last_update, "'LastUpdate':''");
+	strcpy(last_update, "\"LastUpdate\": \"\"");
     else {
-	sprintf(last_update, "'LastUpdate':'%ld.%ld'",
+	sprintf(last_update, "\"LastUpdate\": \"%ld.%ld\"",
 		stat->tx.update.sec,
 		stat->tx.update.msec);
     }
@@ -3464,34 +3459,34 @@ static void build_stream_stat(ostringstream &oss, pjmedia_rtcp_stat *stat, pjmed
 
 	oss << last_update;
 
-	oss << ", 'Packets': " << good_number(packets, stat->tx.pkt);
-	oss << ", 'Loss':" << stat->tx.loss;
-	oss << ", 'Dup':" << stat->tx.dup;
-	oss << ", 'Reorder':" << stat->tx.reorder; 
+	oss << ", \"Packets\": " << good_number(packets, stat->tx.pkt);
+	oss << ", \"Loss\": " << stat->tx.loss;
+	oss << ", \"Dup\": " << stat->tx.dup;
+	oss << ", \"Reorder\": " << stat->tx.reorder; 
 
-	oss << ", 'LossPeriod': { ";
-	oss << "'Min':" << stat->tx.loss_period.min / 1000.0;
-	oss << ", 'Mean':" << stat->tx.loss_period.mean / 1000.0;
-	oss << ", 'Max':" << stat->tx.loss_period.max / 1000.0;
-	oss << ", 'Last':" << stat->tx.loss_period.last / 1000.0;
-	oss << ", 'StandardDeviation':" << pj_math_stat_get_stddev(&stat->tx.loss_period) / 1000.0 << " }";
+	oss << ", \"LossPeriod\": { ";
+	oss << "\"Min\": " << stat->tx.loss_period.min / 1000.0;
+	oss << ", \"Mean\": " << stat->tx.loss_period.mean / 1000.0;
+	oss << ", \"Max\": " << stat->tx.loss_period.max / 1000.0;
+	oss << ", \"Last\":" << stat->tx.loss_period.last / 1000.0;
+	oss << ", \"StandardDeviation\": " << pj_math_stat_get_stddev(&stat->tx.loss_period) / 1000.0 << " }";
 
-	oss << ", 'Jitter': { ";
-	oss << "'Min':" << stat->tx.jitter.min / 1000.0;
-	oss << ", 'Mean':" << stat->tx.jitter.mean / 1000.0;
-	oss << ", 'Max':" << stat->tx.jitter.max / 1000.0;
-	oss << ", 'Last':" << stat->tx.jitter.last / 1000.0;
-	oss << ", 'StandardDeviation':" << pj_math_stat_get_stddev(&stat->tx.jitter) / 1000.0 << " }";
+	oss << ", \"Jitter\": { ";
+	oss << "\"Min\": " << stat->tx.jitter.min / 1000.0;
+	oss << ", \"Mean\": " << stat->tx.jitter.mean / 1000.0;
+	oss << ", \"Max\": " << stat->tx.jitter.max / 1000.0;
+	oss << ", \"Last\": " << stat->tx.jitter.last / 1000.0;
+	oss << ", \"StandardDeviation\": " << pj_math_stat_get_stddev(&stat->tx.jitter) / 1000.0 << " }";
 
 	oss << " }"; //Closing TX
 
-	oss << ", 'RTT': { "; // Opening RTT
+	oss << ", \"RTT\": { "; // Opening RTT
 
-	oss << "'Min':" << stat->rtt.min / 1000.0;
-	oss << ", 'Mean':" << stat->rtt.mean / 1000.0;
-	oss << ", 'Max':" << stat->rtt.max / 1000.0;
-	oss << ", 'Last':" << stat->rtt.last / 1000.0;
-	oss << ", 'StandardDeviation':" << pj_math_stat_get_stddev(&stat->rtt) / 1000.0;
+	oss << "\"Min\": " << stat->rtt.min / 1000.0;
+	oss << ", \"Mean\": " << stat->rtt.mean / 1000.0;
+	oss << ", \"Max\": " << stat->rtt.max / 1000.0;
+	oss << ", \"Last\": " << stat->rtt.last / 1000.0;
+	oss << ", \"StandardDeviation\": " << pj_math_stat_get_stddev(&stat->rtt) / 1000.0;
 	oss << " }"; //Closing RTT
 	oss << " }";
 }
