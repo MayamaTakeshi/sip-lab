@@ -431,5 +431,12 @@ The problem is that on_rx_reinvite is getting an offer without media (due RE-INV
 Instead, I think we should go back to use original on_rx_offer because it seems this is called only when we get media offer and so we would avoid this problem.
 
 
+------------------------------------------------------------
+2022/08/12 takeshi:
+
+When rebuilding the addon, this should be enough (it should be fast):
+```
+  npm install --unsafe-perm
+```
 
 

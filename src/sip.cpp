@@ -196,6 +196,7 @@ Pair_Call_CallId_Buf g_LastCalls(1000);
 typedef map<pjsip_transport*, int> SipTransportMap;
 SipTransportMap g_SipTransportMap;
 int g_TlsTransportId = -100;
+int g_TcpTransportId = -100;
 
 typedef set< pair<string,string> > PackageSet;
 PackageSet g_PackageSet;
@@ -322,10 +323,13 @@ pjsip_transport *allocate_udp_transport(pjsip_endpoint* sip_endpt, pj_str_t *ipa
 pjsip_tpfactory *create_tls_tpfactory(pjsip_endpoint* sip_endpt, pj_str_t *ipaddr, int *allocated_port);
 pjsip_tpfactory *allocate_tls_tpfactory(pjsip_endpoint* sip_endpt, pj_str_t *ipaddr, int port); 
 
+pjsip_tpfactory *create_tcp_factory(pjsip_endpoint* sip_endpt, pj_str_t *ipaddr, int *allocated_port);
+pjsip_tpfactory *allocate_tcp_tpfactory(pjsip_endpoint* sip_endpt, pj_str_t *ipaddr, int port); 
+
 bool set_proxy(pjsip_dialog *dlg, const char *proxy_uri);
 
 void build_local_contact(char *dest, pjsip_transport *transport, const char *contact_username);
-void build_local_contact_from_tpfactory(char *dest, pjsip_tpfactory *tpfactory, const char *contact_username);
+void build_local_contact_from_tpfactory(char *dest, pjsip_tpfactory *tpfactory, const char *contact_username, pjsip_transport_type_e type);
 
 pj_bool_t add_additional_headers(pj_pool_t *pool, pjsip_tx_data *tdata, const char *additional_headers); 
 
@@ -812,6 +816,52 @@ pjsip_transport *create_udp_transport(pjsip_endpoint* sip_endpt, pj_str_t *ipadd
 	return NULL;
 }
 
+pjsip_tpfactory *allocate_tcp_tpfactory(pjsip_endpoint* sip_endpt, pj_str_t *ipaddr, int port) {
+	printf("allocate_tcp_tpfactory ipaddr=%.*s port=%i\n", ipaddr->slen, ipaddr->ptr, port);
+	pj_status_t status;
+	pjsip_tpfactory *tpfactory;
+	pj_sockaddr local_addr;
+	pjsip_host_port a_name;
+
+	int af;
+        af = pj_AF_INET();
+        pj_sockaddr_init(af, &local_addr, NULL, 0);
+
+        pj_sockaddr_set_port(&local_addr, (pj_uint16_t)port);
+
+        status = pj_sockaddr_set_str_addr(af, &local_addr, ipaddr);
+        if (status != PJ_SUCCESS) {
+		return NULL;
+	}
+
+    status = pjsip_tcp_transport_start2(sip_endpt, &local_addr.ipv4, NULL, 1, &tpfactory);
+    if (status != PJ_SUCCESS) {
+        printf("status=%i\n", status);
+        return NULL;
+    }
+
+	return tpfactory;
+}
+
+pjsip_tpfactory *create_tcp_tpfactory(pjsip_endpoint* sip_endpt, pj_str_t *ipaddr, int *allocated_port)
+{
+	pj_status_t status;
+	pjsip_tpfactory *tpfactory;
+
+	int port = 6060;
+	for(int i=0 ; i<1000 ; ++i)
+	{
+		port += i;		
+		tpfactory = allocate_tcp_tpfactory(sip_endpt, ipaddr, port);
+		if (tpfactory) {
+			*allocated_port = port;
+			return tpfactory;
+		}
+	}
+
+	return NULL;
+}
+
 pjsip_tpfactory *allocate_tls_tpfactory(pjsip_endpoint* sip_endpt, pj_str_t *ipaddr, int port) {
 	addon_log(LOG_LEVEL_DEBUG, "allocate_tls_tpfactory ipaddr=%.*s port=%i\n", ipaddr->slen, ipaddr->ptr, port);
 	pj_status_t status;
@@ -904,7 +954,37 @@ int pjw_transport_create(const char *sip_ipaddr, int port, pjsip_transport_type_
 		if(type == PJSIP_TRANSPORT_UDP) {
 			g_SipTransportMap.insert(make_pair(sip_transport, t_id));
 		}
+    } else if(type == PJSIP_TRANSPORT_TCP) {
+		pjsip_tpfactory *tpfactory;
+		int af;
 
+
+		if(port != 0) {
+			tpfactory = allocate_tcp_tpfactory(g_sip_endpt, &ipaddr, port);
+		} else {
+			tpfactory = create_tcp_tpfactory(g_sip_endpt, &ipaddr, &port);
+		}
+
+		if(!tpfactory)
+		{
+			PJW_UNLOCK();
+			set_error("Unable to start TCP transport");
+            return -1;
+		}
+
+		t = new Transport;
+		t->type = PJSIP_TRANSPORT_TCP;
+		t->tpfactory = tpfactory;
+
+		if(!g_transport_ids.add((long)t, t_id)){
+			status = (tpfactory->destroy)(tpfactory);
+
+			PJW_UNLOCK();
+			set_error("Failed to allocate id");
+            return -1;
+		}
+
+		g_TcpTransportId = t_id; 
 	} else {
 		pjsip_tpfactory *tpfactory;
 		int af;
@@ -1392,7 +1472,7 @@ int pjw_call_create(long t_id, unsigned flags, const char *from_uri, const char 
 	if(t->type == PJSIP_TRANSPORT_UDP) {
 		build_local_contact(local_contact, t->sip_transport, contact_username);
 	} else {
-		build_local_contact_from_tpfactory(local_contact, t->tpfactory, contact_username);
+		build_local_contact_from_tpfactory(local_contact, t->tpfactory, contact_username, t->type);
 	}
 
 	if(!dlg_create(&dlg, t, from_uri, to_uri, request_uri, realm, username, password, local_contact)) {
@@ -1469,12 +1549,14 @@ void build_local_contact(char *dest, pjsip_transport *t, const char *contact_use
 	}
 	if(t->key.type == PJSIP_TRANSPORT_UDP) {
 		p += sprintf(p,">");
+	} else if(t->key.type == PJSIP_TRANSPORT_TCP) {
+		p += sprintf(p,";transport=tcp>");
 	} else {
 		p += sprintf(p,";transport=tls>");
 	}
 }
 
-void build_local_contact_from_tpfactory(char *dest, pjsip_tpfactory *tpfactory, const char *contact_username) {
+void build_local_contact_from_tpfactory(char *dest, pjsip_tpfactory *tpfactory, const char *contact_username, pjsip_transport_type_e type) {
 	char *p = dest;
 	int len;
 	p += sprintf(p, "<sip:%s@", contact_username);
@@ -1484,7 +1566,11 @@ void build_local_contact_from_tpfactory(char *dest, pjsip_tpfactory *tpfactory, 
 	if(tpfactory->addr_name.port) {
 		p += sprintf(p, ":%d",tpfactory->addr_name.port);
 	}
-	p += sprintf(p,";transport=tls>");
+    if(type == PJSIP_TRANSPORT_TCP) {
+	    p += sprintf(p,";transport=tcp>");
+    } else {
+	    p += sprintf(p,";transport=tls>");
+    }
 }
 
 
@@ -2839,7 +2925,9 @@ static pj_bool_t on_rx_request( pjsip_rx_data *rdata ){
 	if( iter != g_SipTransportMap.end() ){
 		transport_id = iter->second;
 	} else {
-		if(t->key.type == PJSIP_TRANSPORT_TLS) {
+		if(t->key.type == PJSIP_TRANSPORT_TCP) {
+			transport_id = g_TcpTransportId;
+		} else if(t->key.type == PJSIP_TRANSPORT_TLS) {
 			transport_id = g_TlsTransportId;
 		} else {
 			transport_id = -1;
