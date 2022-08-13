@@ -3350,6 +3350,9 @@ int __pjw_shutdown()
 
 	g_shutting_down = true;
 
+    //disable auto cleanup
+
+    /*
 	map<long, long>::iterator iter;
 	iter = g_call_ids.id_map.begin();
 	while(iter != g_call_ids.id_map.end()){
@@ -3427,11 +3430,6 @@ int __pjw_shutdown()
 	//uint32_t wait = 100000 * (g_call_ids.id_map.size() + g_account_ids.id_map.size()));
 	//wait += 1000000; //Wait one whole second to permit packet capture to get any final packets
 
-	/*
-	time_t end,start;
-	time(&start);
-	end = start;
-	*/
 	timeval tv_start;
 	timeval tv_end;
 	gettimeofday(&tv_start, NULL);
@@ -3450,6 +3448,8 @@ int __pjw_shutdown()
 		end = tv_end.tv_sec * 1000 + (tv_end.tv_usec / 1000);
 		//time(&end);
 	}
+
+    */
 
 	return 0;
 }
