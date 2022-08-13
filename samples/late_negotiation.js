@@ -208,8 +208,6 @@ async function test() {
         },
     ], 500)
 
-    await z.sleep(100)
-
     sip.call.reinvite(oc.id, false, flags)
 
     await z.wait([
@@ -274,8 +272,6 @@ async function test() {
             }),
         },
     ], 1000)
-
-    await z.sleep(1000)
 
     console.log("Success")
 
