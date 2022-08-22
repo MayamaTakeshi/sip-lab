@@ -26,6 +26,7 @@
 #include "chainlink_dtmfdet.h"
 #include "chainlink_tonegen.h"
 #include "chainlink_wav_port.h"
+#include "chainlink_fax.h"
 
 #include <ctime>
 
@@ -166,6 +167,7 @@ struct Call {
 	chainlink *wav_player;
 	chainlink *tonegen;
 	chainlink *dtmfdet;
+	chainlink *fax;
 
 	Transport *transport;
 
@@ -361,6 +363,8 @@ bool prepare_tonegen(Call *c);
 bool prepare_wav_player(Call *c, const char *file);
 bool prepare_wav_writer(Call *c, const char *file); 
 
+bool prepare_fax(Call *c, bool is_sender, const char *file); 
+
 void prepare_error_event(ostringstream *oss, char *scope, char *details);
 //void prepare_pjsipcall_error_event(ostringstream *oss, char *scope, char *function, pj_status_t s);
 void append_status(ostringstream *oss, pj_status_t s);
@@ -460,6 +464,21 @@ static void on_inband_dtmf(pjmedia_port *port, void *user_data, char digit){
 		dispatch_event(evt);
 	}
 }
+
+static void on_fax_result(pjmedia_port *port, void *user_data, int result){
+   if(g_shutting_down) return;
+
+   long call_id;
+   if( !g_call_ids.get_id((long)user_data, call_id) ){
+       printf("on_fax_result: Failed to get call_id. Event will not be notified.\n");
+       return;
+   }
+
+   char evt[256];
+   make_evt_fax_result(evt, sizeof(evt), call_id, result);
+   dispatch_event(evt);
+}
+
 
 void dispatch_event(const char * evt)
 {
@@ -2215,6 +2234,87 @@ int pjw_call_stop_record_wav(long call_id)
 	return 0;
 }
 
+int pjw_call_start_fax(long call_id, bool is_sender, const char *file)
+{
+	PJW_LOCK();
+
+	long val;
+
+	if(!g_call_ids.get(call_id, val)){
+		PJW_UNLOCK();
+		set_error("Invalid call_id");
+		return -1;
+	}
+
+	Call *call = (Call*)val;
+
+	if(!call->med_stream)
+	{
+		PJW_UNLOCK();
+		set_error("Media not ready");
+		return -1;
+	}
+
+	pj_status_t status;
+
+	pjmedia_port *stream_port;
+	status = pjmedia_stream_get_port(call->med_stream,
+					&stream_port);
+	if(status != PJ_SUCCESS)
+	{
+		PJW_UNLOCK();
+		set_error("pjmedia_stream_get_port failed");
+		return -1;
+	}
+
+	if(!prepare_fax(call, is_sender, file)){
+		PJW_UNLOCK();
+		set_error("pjmedia_wav_player_port_create failed");
+		return -1;
+	}	
+
+	PJW_UNLOCK();
+	return 0;
+}
+
+
+int pjw_call_stop_fax(long call_id)
+{
+	PJW_LOCK();
+
+	long val;
+
+	if(!g_call_ids.get(call_id, val)){
+		PJW_UNLOCK();
+		set_error("Invalid call_id");
+		return -1;
+	}
+
+	Call *call = (Call*)val;
+
+	pjmedia_port *stream_port;
+	pj_status_t status;
+	status = pjmedia_stream_get_port(call->med_stream,
+					&stream_port);
+	if(status != PJ_SUCCESS) {
+		PJW_UNLOCK();
+		set_error("pjmedia_stream_get_port failed.");
+		return -1;
+	}	
+
+	if(!prepare_wire(call->inv->pool, &call->fax, PJMEDIA_PIA_SRATE(&stream_port->info), PJMEDIA_PIA_CCNT(&stream_port->info), PJMEDIA_PIA_SPF(&stream_port->info), PJMEDIA_PIA_BITS(&stream_port->info))) {
+		PJW_UNLOCK();
+		set_error("prepare_wire failed.");
+		return -1;
+	}
+
+	connect_media_ports(call);
+
+	PJW_UNLOCK();
+	return 0;
+}
+
+
 int pjw_call_get_stream_stat(long call_id, char *out_stats){
 	PJW_LOCK();
 
@@ -3645,6 +3745,12 @@ bool init_media_ports(Call *c, unsigned sampling_rate, unsigned channel_count, u
 		if(status != PJ_SUCCESS) return false;
 	}
 
+   if(!c->fax) {
+       if(!prepare_wire(c->inv->pool, &c->fax, sampling_rate, channel_count, samples_per_frame, bits_per_sample)) {
+           return false;
+       }
+   }
+
 	connect_media_ports(c);
 	return true;
 }
@@ -3653,7 +3759,8 @@ void connect_media_ports(Call *c) {
 	((chainlink*)c->dtmfdet)->next = (pjmedia_port*)c->tonegen;
 	((chainlink*)c->tonegen)->next = (pjmedia_port*)c->wav_player;
 	((chainlink*)c->wav_player)->next = (pjmedia_port*)c->wav_writer;
-	((chainlink*)c->wav_writer)->next = c->null_port;
+    ((chainlink*)c->wav_writer)->next = (pjmedia_port*)c->fax;
+    ((chainlink*)c->fax)->next = c->null_port;
 }
 
 bool prepare_tonegen(Call *c) {
@@ -3738,6 +3845,37 @@ bool prepare_wav_writer(Call *c, const char *file) {
 	
 	connect_media_ports(c);
 	return true;
+}
+
+
+bool prepare_fax(Call *c, bool is_sender, const char *file) {
+   pj_status_t status;
+
+   chainlink *link = (chainlink*)c->fax;
+
+   pjmedia_port *stream_port;
+   status = pjmedia_stream_get_port(c->med_stream,
+                   &stream_port);
+   if(status != PJ_SUCCESS) return false;
+
+   status = pjmedia_port_destroy((pjmedia_port*)link);
+   if(status != PJ_SUCCESS) return false;
+
+   status = chainlink_fax_port_create(c->inv->pool,
+                       PJMEDIA_PIA_SRATE(&stream_port->info),
+                       PJMEDIA_PIA_CCNT(&stream_port->info),
+                       PJMEDIA_PIA_SPF(&stream_port->info),
+                       PJMEDIA_PIA_BITS(&stream_port->info),
+                       on_fax_result,
+                       c,
+                       c->outgoing,
+                       is_sender,
+                       file,
+                       (pjmedia_port**)&c->fax);
+   if(status != PJ_SUCCESS) return false;
+
+   connect_media_ports(c);
+   return true;
 }
 
 bool prepare_wire(pj_pool_t *pool, chainlink **link, unsigned sampling_rate, unsigned channel_count, unsigned samples_per_frame, unsigned bits_per_sample) {

@@ -669,6 +669,47 @@ Napi::Value call_start_play_wav(const Napi::CallbackInfo& info) {
   return env.Null();
 }
 
+Napi::Value call_start_fax(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+
+  if (info.Length() != 3) {
+    Napi::Error::New(env, "Wrong number of arguments. Expected: call_id, is_sender, file]").ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
+  if (!info[0].IsNumber()) {
+    Napi::TypeError::New(env, "call_id must be number.").ThrowAsJavaScriptException();
+    return env.Null();
+  }
+  int call_id = info[0].As<Napi::Number>().Int32Value();
+
+  if (!info[1].IsBoolean()) {
+    Napi::TypeError::New(env, "is_sender must be boolean.").ThrowAsJavaScriptException();
+    return env.Null();
+  }
+  bool is_sender = info[1].As<Napi::Boolean>().Value();
+
+  if (!info[2].IsString()) {
+    Napi::TypeError::New(env, "file must be string.").ThrowAsJavaScriptException();
+    return env.Null();
+  }
+  string file = info[2].As<Napi::String>().Utf8Value();
+
+  if (file.length() == 0) {
+    Napi::Error::New(env, "input_file is invalid (blank string)").ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
+  int res = pjw_call_start_fax(call_id, is_sender, file.c_str());
+
+  if(res != 0) {
+    Napi::Error::New(env, pjw_get_error()).ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
+  return env.Null();
+}
+
 Napi::Value call_stop_record_wav(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
 
@@ -708,6 +749,30 @@ Napi::Value call_stop_play_wav(const Napi::CallbackInfo& info) {
   int call_id = info[0].As<Napi::Number>().Int32Value();
 
   int res = pjw_call_stop_play_wav(call_id);
+
+  if(res != 0) {
+    Napi::Error::New(env, pjw_get_error()).ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
+  return env.Null();
+}
+
+Napi::Value call_stop_fax(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+
+  if (info.Length() != 1) {
+    Napi::Error::New(env, "Wrong number of arguments. Expected: call_id").ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
+  if (!info[0].IsNumber()) {
+    Napi::TypeError::New(env, "call_id must be number.").ThrowAsJavaScriptException();
+    return env.Null();
+  }
+  int call_id = info[0].As<Napi::Number>().Int32Value();
+
+  int res = pjw_call_stop_fax(call_id);
 
   if(res != 0) {
     Napi::Error::New(env, pjw_get_error()).ThrowAsJavaScriptException();
@@ -1381,8 +1446,10 @@ Napi::Object init(Napi::Env env, Napi::Object exports) {
   exports.Set("call_send_request", Napi::Function::New(env, call_send_request));
   exports.Set("call_start_record_wav", Napi::Function::New(env, call_start_record_wav));
   exports.Set("call_start_play_wav", Napi::Function::New(env, call_start_play_wav));
+  exports.Set("call_start_fax", Napi::Function::New(env, call_start_fax));
   exports.Set("call_stop_record_wav", Napi::Function::New(env, call_stop_record_wav));
   exports.Set("call_stop_play_wav", Napi::Function::New(env, call_stop_play_wav));
+  exports.Set("call_stop_fax", Napi::Function::New(env, call_stop_fax));
   exports.Set("call_get_stream_stat", Napi::Function::New(env, call_get_stream_stat));
   exports.Set("call_refer", Napi::Function::New(env, call_refer));
   exports.Set("call_get_info", Napi::Function::New(env, call_get_info));

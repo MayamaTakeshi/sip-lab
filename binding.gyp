@@ -14,6 +14,7 @@
         'src/pjmedia/src/chainlink/chainlink_wav_player.c',
         'src/pjmedia/src/chainlink/chainlink_wav_writer.c',
         'src/pjmedia/src/chainlink/chainlink_wire_port.c',
+        'src/pjmedia/src/chainlink/chainlink_fax.c',
       ],
       'include_dirs': [
         "pjproject/pjsip/include",

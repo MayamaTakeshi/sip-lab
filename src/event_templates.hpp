@@ -22,6 +22,8 @@ int make_evt_internal_error(char *dest, int size, char *msg);
 
 int make_evt_registration_status(char *dest, int size, long account_id, int code, char *reason, int expires);
 
+int make_evt_fax_result(char *dest, int size, long call_id, int result);
+
 #endif
 
 

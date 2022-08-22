@@ -53,3 +53,7 @@ int make_evt_registration_status(char *dest, int size, long account_id, int code
 	return snprintf(dest, size, "{\"event\": \"registration_status\", \"account_id\": %i, \"code\": %i, \"reason\": \"%s\", \"expires\": %i}", account_id, code, reason, expires);
 }
 
+int make_evt_fax_result(char *dest, int size, long call_id, int result) {
+   return snprintf(dest, size, "{\"event\": \"fax_result\", \"call_id\": %i, \"result\": %i}", call_id, result);
+}
+

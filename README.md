@@ -5,6 +5,12 @@
 A nodejs module that helps to write functional tests for SIP systems (including media operations).
 It uses pjproject for SIP and media processing.
 
+It permits to:
+  - send and receive DTMF inband/RFC2833/INFO.
+  - play/record wav file on a call
+  - send/receive fax (T.30 only)
+
+
 ### Installation
 
 This will require for you to have some libraries installed. So do:
@@ -24,7 +30,27 @@ Then install sip-lab by doing:
   npm install sip-lab
 ```
 
-However, since it takes a long time to fetch and build pjproject and the node addon for it, you could install sip-lab globally:
+To test from within this repo just build and install by doing:
+```
+  npm install -g node-gyp
+  npm install --unsafe-perm
+```
+And run some sample script from subfolder samples:
+```
+  node samples/simple.js
+```
+
+The module is known to work properly in Ubuntu 18.04.4, Ubuntu 20.04.4, Debian 8 and Debian 10 (and it is expected to work in Debian 9).
+It was originally developed with node v.10 and tested with v.12 and it is expected to work with latest versions of node.
+(it is known to not work with node v.8)
+
+
+Since running
+```
+npm install sip-lab
+```
+takes some time to fetch and build pjproject and the node addon for it, you could install sip-lab globally:
+
 ```
   npm install -g sip-lab
 ```
@@ -33,17 +59,5 @@ But if you do so, you will need to set NODE_PATH for node to find it by doing:
 ```
   export NODE_PATH=$(npm root --quiet -g)
 ```
-
-To test from within this repo just run:
-```
-  npm install -g node-gyp
-  npm install --unsafe-perm
-
-  node samples/simple.js
-```
-
-The module is known to work properly in Ubuntu 18.04.4, Debian 8 and Debian 10 (and it is expected to work in Debian 9).
-It was originally developed with node v.10 and tested with v.12 and it is expected to work with latest versions of node.
-(it is known to not work with node v.8)
 
 

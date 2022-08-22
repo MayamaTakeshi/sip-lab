@@ -59,6 +59,8 @@ addon.call = {
   start_playing: addon.call_start_play_wav,
   stop_recording: addon.call_stop_record_wav,
   stop_playing: addon.call_stop_play_wav,
+  start_fax: addon.call_start_fax,
+  stop_fax: addon.call_stop_fax,
   get_stream_stat: addon.call_get_stream_stat,
   refer: addon.call_refer,
   get_info: addon.call_get_info,
