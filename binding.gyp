@@ -26,6 +26,7 @@
         "src/pjmedia/include",
         "src/pjmedia/include/pjmedia",
         "src/pjmedia/include/chainlink",	
+        "rapidjson/include",
         "<!@(node -p \"require('node-addon-api').include\")",
       ],
       "dependencies": [

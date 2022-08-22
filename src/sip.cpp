@@ -34,6 +34,8 @@
 
 #include "log.hpp"
 
+#include "rapidjson/document.h"
+
 using namespace std;
 
 #define EVT_DATA_SEP "|"

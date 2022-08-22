@@ -4,6 +4,8 @@ set -o errexit
 set -o nounset
 set -o pipefail
 
+START_DIR=`pwd`
+
 if [[ ! -d pjproject ]]
 then
 	git clone https://github.com/pjsip/pjproject
@@ -24,9 +26,18 @@ EOF
 #define PJMEDIA_HAS_SRTP  0
 EOF
 	make dep && make clean && make
-
-	cd ..
 fi
+
+cd $START_DIR
+
+if [[ ! -d rapidjson ]]
+then
+	git clone https://github.com/Tencent/rapidjson
+	cd rapidjson
+	git checkout 27c3a8dc0e2c9218fe94986d249a12b5ed838f1d
+fi
+
+cd $START_DIR
 
 node-gyp configure
 
