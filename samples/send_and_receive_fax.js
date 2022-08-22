@@ -90,9 +90,11 @@ async function test() {
 
     var is_sender = true
 
-    sip.call.start_fax(oc.id, is_sender, 'samples/fax_doc.tiff')
-    await z.sleep(100)
-    sip.call.start_fax(ic.id, !is_sender, 'received.tiff')
+    var in_file = 'samples/artifacts/this-is-never-ok.tiff'
+    var out_file = "received.tiff"
+
+    sip.call.start_fax(oc.id, is_sender, in_file)
+    sip.call.start_fax(ic.id, !is_sender, out_file)
 
     await z.wait([
         {
@@ -105,7 +107,7 @@ async function test() {
             call_id: ic.id,
             result: 0,
         },
-    ], 60 * 1000)
+    ], 180 * 1000)
 
     sip.call.terminate(oc.id)
 
@@ -129,7 +131,7 @@ async function test() {
         },
     ], 1000)
 
-    console.log("Success")
+    console.log(`Success. Fax was transmitted as ${in_file} and received as ${out_file}`)
 
     sip.stop()
 }
