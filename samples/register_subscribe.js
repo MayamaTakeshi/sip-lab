@@ -28,7 +28,11 @@ async function test() {
         domain, 
         server,
         username: 'user1',
-        password: 'pass1'
+        password: 'pass1',
+        headers: {
+            'X-MyHeader1': 'aaa',
+            'X-MyHeader2': 'bbb',
+        },
     })
 
     sip.account.register(a1, {auto_register: true})
@@ -42,6 +46,8 @@ async function test() {
                 $fd: domain,
                 $tU: 'user1',
                 $td: domain,
+                '$hdr(X-MyHeader1)': 'aaa',
+                '$hdr(X-MyHeader2)': 'bbb',
             }),
         },
     ], 1000)

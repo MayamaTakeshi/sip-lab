@@ -426,9 +426,10 @@ static void server_on_evsub_rx_refresh(pjsip_evsub *sub, pjsip_rx_data *rdata, i
 
 bool dlg_create(pjsip_dialog **dlg, Transport *transport, const char *from_uri, const char *to_uri, const char *request_uri, const char *realm, const char *username, const char *password, const char *local_contact); 
 
-static int call_create(Transport *t, unsigned flags, pjsip_dialog *dlg, const char *proxy_uri, const char *additional_headers);
+static int call_create(Transport *t, unsigned flags, pjsip_dialog *dlg, const char *proxy_uri, Document &document);
 
-bool subscription_subscribe(Subscription *s, int expires, const char *additional_headers);
+bool subscription_subscribe_no_headers(Subscription *s, int expires);
+bool subscription_subscribe(Subscription *s, int expires, Document &document);
 
 static pjmedia_transport *create_media_transport(const pj_str_t *addr);
 void close_media_transport(pjmedia_transport *med_transport);
@@ -446,11 +447,12 @@ bool set_proxy(pjsip_dialog *dlg, const char *proxy_uri);
 void build_local_contact(char *dest, pjsip_transport *transport, const char *contact_username);
 void build_local_contact_from_tpfactory(char *dest, pjsip_tpfactory *tpfactory, const char *contact_username, pjsip_transport_type_e type);
 
-pj_bool_t add_additional_headers(pj_pool_t *pool, pjsip_tx_data *tdata, const char *additional_headers); 
+//pj_bool_t add_additional_headers(pj_pool_t *pool, pjsip_tx_data *tdata, const char *additional_headers); 
+pj_bool_t add_headers(pj_pool_t *pool, pjsip_tx_data *tdata, Document &document); 
 
-pj_bool_t add_additional_headers_for_account(pjsip_regc* regc, const char *additional_headers); 
+pj_bool_t add_headers_for_account(pjsip_regc* regc, Document &document); 
 
-pj_bool_t get_content_type_and_subtype_from_additional_headers(const char *additional_headers, char *type, char *subtype);
+pj_bool_t get_content_type_and_subtype_from_headers(Document &document, char *type, char *subtype);
 
 bool build_subscribe_info(ostringstream *oss, pjsip_rx_data *rdata, Subscriber *s);
 //bool build_notify_info(pjsip_rx_data *rdata, Subscription *s);
@@ -1256,7 +1258,6 @@ int pjw_account_create(int t_id, const char *json, int *out_acc_id)
     char *password;
     char *c_to_uri = NULL;
     int expires = 60;
-    char *additional_headers = NULL;
 
     pj_str_t server_uri;
     pj_str_t from_uri;
@@ -1322,11 +1323,8 @@ int pjw_account_create(int t_id, const char *json, int *out_acc_id)
 		goto out;
 	}
 
-	if(additional_headers) {
-		if(!add_additional_headers_for_account(regc, additional_headers)) {
-			set_error("add_additional_headers_for_account failed");
-			goto out;
-		}
+    if(!add_headers_for_account(regc, document)) {
+        goto out;
 	}
 
 	if(!g_account_ids.add((long)regc, acc_id)){
@@ -1542,8 +1540,6 @@ int pjw_call_respond(long call_id, const char *json)
 
 	Call *call;
 
-    char *additional_headers = NULL;
-
     char buffer[MAX_JSON_INPUT];
 
     Document document;
@@ -1602,7 +1598,7 @@ int pjw_call_respond(long call_id, const char *json)
             goto out;
 		}
 
-		if(!add_additional_headers(call->inv->dlg->pool, tdata, additional_headers)) {
+		if(!add_headers(call->inv->dlg->pool, tdata, document)) {
 			goto out;
 		}
 	}
@@ -1633,8 +1629,6 @@ int pjw_call_terminate(long call_id, const char *json)
     int code = 0;
     char *reason = (char*)"";
 	pj_str_t r;// = pj_str((char*)reason);
-
-    const char *additional_headers;
 
     Call *call;
 
@@ -1677,8 +1671,7 @@ int pjw_call_terminate(long call_id, const char *json)
         goto out;
 	}
 
-	if(!add_additional_headers(call->inv->dlg->pool, tdata, additional_headers)) {
-		set_error("add_additional_headers failed");
+	if(!add_headers(call->inv->dlg->pool, tdata, document)) {
         goto out;
 	}
 
@@ -1720,8 +1713,6 @@ int pjw_call_create(long t_id, const char *json, long *out_call_id, char *out_si
     char *request_uri = NULL;
     char *proxy_uri = NULL;
 
-    char *headers = NULL;
-
     char *realm = NULL;
     char *username = NULL;
     char *password = NULL;
@@ -1760,16 +1751,6 @@ int pjw_call_create(long t_id, const char *json, long *out_call_id, char *out_si
     if(!json_get_and_check_uri(document, "proxy_uri", true, &proxy_uri)) {
         goto out;
     }
-
-    /*
-    const Value& headers = document["headers"];
-    if(document.HasMember("headers") {
-        if(!headers.IsArray()) {
-            set_error("headers must be an array");
-            goto out;
-        }
-    }
-    */
 
     if(document.HasMember("auth")) {
         if(!document["auth"].IsObject()) {
@@ -1828,7 +1809,7 @@ int pjw_call_create(long t_id, const char *json, long *out_call_id, char *out_si
 		goto out;
 	}
 	
-	call_id = call_create(t, flags, dlg, proxy_uri, headers); 
+	call_id = call_create(t, flags, dlg, proxy_uri, document); 
 	if(call_id < 0) {
 		goto out;
 	}
@@ -2007,7 +1988,7 @@ bool dlg_create(pjsip_dialog **dlg, Transport *transport, const char *from_uri, 
 }
 
 
-int call_create(Transport *t, unsigned flags, pjsip_dialog *dlg, const char *proxy_uri, const char *additional_headers)
+int call_create(Transport *t, unsigned flags, pjsip_dialog *dlg, const char *proxy_uri, Document &document)
 {
 	pjsip_inv_session *inv;
 	//in_addr addr;
@@ -2092,7 +2073,7 @@ int call_create(Transport *t, unsigned flags, pjsip_dialog *dlg, const char *pro
 
 	
 
-	if(!add_additional_headers(dlg->pool, tdata, additional_headers)) {
+	if(!add_headers(dlg->pool, tdata, document)) {
 		g_call_ids.remove(call_id, (long &)call);
 		close_media_transport(med_transport); //Todo:
 		status = pjsip_dlg_terminate(dlg); //ToDo:	
@@ -2382,7 +2363,6 @@ int pjw_call_send_request(long call_id, const char *json)
 	clear_error();
 
     char *method = NULL;
-    char *additional_headers = NULL;
     char *body = NULL;
     char *ct_type = NULL;
     char *ct_subtype = NULL;
@@ -2454,7 +2434,7 @@ int pjw_call_send_request(long call_id, const char *json)
 		goto out;
 	}
 
-	if(!add_additional_headers(call->inv->dlg->pool, tdata, additional_headers)) {
+	if(!add_headers(call->inv->dlg->pool, tdata, document)) {
 		goto out;
 	}
 
@@ -3704,17 +3684,13 @@ static void on_rx_offer(pjsip_inv_session *inv, const pjmedia_sdp_session *offer
 		// Keep call on-hold by setting 'sendonly' attribute.
 		// (See RFC 3264 Section 8.4 and RFC 4317 Section 3.1)
 		if(call->remote_hold) {
-			printf("p1\n");
 			attr = pjmedia_sdp_attr_create(inv->pool, "inactive", NULL);
 		} else {
-			printf("p2\n");
 			attr = pjmedia_sdp_attr_create(inv->pool, "sendonly", NULL);
 		}
 	} else if(call->remote_hold) {
-		printf("p3\n");
 		attr = pjmedia_sdp_attr_create(inv->pool, "recvonly", NULL);
 	} else {
-		printf("p4\n");
 		attr = pjmedia_sdp_attr_create(inv->pool, "sendrecv", NULL);
 	}
 	pjmedia_sdp_media_add_attr(answer->media[0], attr);
@@ -4433,7 +4409,7 @@ static void on_client_refresh( pjsip_evsub *sub ) {
 		goto out;
 	}
 
-	if(!subscription_subscribe(subscription, -1, "")) {
+	if(!subscription_subscribe_no_headers(subscription, -1)) {
 		goto out;
 	}
 
@@ -4852,7 +4828,6 @@ int pjw_call_refer(long call_id, const char *json, long *out_subscription_id)
 	clear_error();
 
     char *dest_uri;
-    char *additional_headers;
 
 	long val;
 	Call *call;
@@ -4895,7 +4870,7 @@ int pjw_call_refer(long call_id, const char *json, long *out_subscription_id)
 	s_dest_uri = pj_str((char*)dest_uri);
 	status = pjsip_xfer_initiate(sub, &s_dest_uri, &tdata);
 
-	if(!add_additional_headers(call->inv->dlg->pool, tdata, additional_headers)) {
+	if(!add_headers(call->inv->dlg->pool, tdata, document)) {
 		goto out;
 	}
 
@@ -4960,7 +4935,7 @@ int pjw_call_get_info(long call_id, const char *required_info, char *out_info)
 	return 0;
 }
 
-bool notify(pjsip_evsub *evsub, const char *content_type, const char *body, int subscription_state, const char *reason, const char *additional_headers) {
+bool notify(pjsip_evsub *evsub, const char *content_type, const char *body, int subscription_state, const char *reason, Document &document) {
 	//pj_str_t s_content_type;
 	//pj_str_t s_body;
 	pj_str_t s_reason;
@@ -5014,7 +4989,9 @@ bool notify(pjsip_evsub *evsub, const char *content_type, const char *body, int 
 	}
 	s_content_type_subtype = pj_str(tok);
 
-	add_additional_headers(tdata->pool, tdata, additional_headers);	
+	if(!add_headers(tdata->pool, tdata, document)) {
+        return false;
+    }
 	
 	msg_body->content_type.type = s_content_type_type;
 	msg_body->content_type.subtype = s_content_type_subtype;
@@ -5045,7 +5022,6 @@ int pjw_notify(long subscriber_id, const char *json)
     char *body = NULL;
     int subscription_state;
     char *reason = NULL;
-    char *additional_headers = NULL;
 
 	long val;
 
@@ -5086,7 +5062,7 @@ int pjw_notify(long subscriber_id, const char *json)
         goto out;
     }
 
-	if(!notify(subscriber->evsub, content_type, body, subscription_state, reason, additional_headers)){
+	if(!notify(subscriber->evsub, content_type, body, subscription_state, reason, document)){
 		goto out;
 	}
 
@@ -5174,6 +5150,7 @@ out:
 	return 0;
 }
 
+/*
 pj_bool_t add_additional_headers(pj_pool_t *pool, pjsip_tx_data *tdata, const char *additional_headers) {
 
 	if(additional_headers && additional_headers[0]){
@@ -5210,94 +5187,133 @@ pj_bool_t add_additional_headers(pj_pool_t *pool, pjsip_tx_data *tdata, const ch
 	}
 	return PJ_TRUE;
 }
+*/
 
-pj_bool_t add_additional_headers_for_account(pjsip_regc *regc, const char *additional_headers) {
 
-	if(additional_headers && additional_headers[0]){
-		pjsip_hdr hdr_list;
-		pj_list_init(&hdr_list);
+pj_bool_t add_headers(pj_pool_t *pool, pjsip_tx_data *tdata, Document &document) {
+    if(!document.HasMember("headers")) {
+        return PJ_TRUE;
+    }
 
-		char pool_buf[4096];
-		pj_pool_t *pool;
-		pool = pj_pool_create_on_buf(NULL, pool_buf, sizeof(pool_buf));
+    if(!document["headers"].IsObject()) {
+        set_error("Parameter headers must be an object");
+        return PJ_FALSE;
+    }
 
-		char buf[2048];
-		strcpy(buf,additional_headers);
-		char *saved;
-		char *token = strtok_r(buf, "\n", &saved);
-		while(token){
-			char *name = strtok(token, ":");
-			char *value = strtok(NULL, "\n"); 
-			//addon_log(LOG_LEVEL_DEBUG, "Adding %s:%s\n", name, value);
+    Value headers = document["headers"].GetObject();
 
-			if(!name || !value) {
-				set_error("Invalid additional_header");
-				return PJ_FALSE;
-			}
+    for (Value::ConstMemberIterator itr = headers.MemberBegin(); itr != headers.MemberEnd(); ++itr) {
+        printf("%s => '%s'\n", itr->name.GetString(), itr->value.GetString());
 
-			pj_str_t hname = pj_str(name);
-			pjsip_hdr *hdr = (pjsip_hdr*)pjsip_parse_hdr(pool,
-						&hname,
-						value,
-						strlen(value),
-						NULL);
+        const char *name = itr->name.GetString();
+        if(!itr->value.IsString()) {
+            set_error("Parameter headers key '%s' found with non-string value", name);
+            return PJ_FALSE;
+        }
 
-			if(!hdr) {
-				set_error("Failed to parse additional header to INVITE");
-				return PJ_FALSE; 
-			}					
-			
-			pj_list_push_back(&hdr_list, hdr);
-			token = strtok_r(NULL, "\n", &saved);
-		}
-		pjsip_regc_add_headers(regc, &hdr_list);
-	}
+        const char *value = itr->value.GetString();
+
+        pj_str_t hname = pj_str((char*)name);
+        pjsip_hdr *hdr = (pjsip_hdr*)pjsip_parse_hdr(pool,
+                    &hname,
+                    (char*)value,
+                    strlen(value),
+                    NULL);
+
+        if(!hdr) {
+            set_error("Failed to parse header '%s' => '%s'", name, value);
+            return PJ_FALSE; 
+        }					
+        pjsip_hdr *clone_hdr = (pjsip_hdr*) pjsip_hdr_clone(pool, hdr);
+        pjsip_msg_add_hdr(tdata->msg, clone_hdr); 
+    }
 	return PJ_TRUE;
 }
 
-pj_bool_t get_content_type_and_subtype_from_additional_headers(const char *additional_headers, char *type, char *subtype) {
+pj_bool_t add_headers_for_account(pjsip_regc *regc, Document &document) {
+    pjsip_hdr hdr_list;
+    pj_list_init(&hdr_list);
 
-	if(!additional_headers || !additional_headers[0]){
-		set_error("Header Content-Type not supplied");
-		return PJ_FALSE;
-	}	
+    char pool_buf[4096];
+    pj_pool_t *pool;
+    pool = pj_pool_create_on_buf(NULL, pool_buf, sizeof(pool_buf));
 
-	char buf[1000];
-	strcpy(buf,additional_headers);
-	char *saved;
-	char *token = strtok_r(buf, "\n", &saved);
-	while(token){
-		char *name = strtok(token, ":");
-		char *value = strtok(NULL, " "); 
-		addon_log(LOG_LEVEL_DEBUG, "Checking %s: %s\n", name, value);
+    if(!document.HasMember("headers")) {
+        return PJ_TRUE;
+    }
 
-		if(!name || !value) {
-			set_error("Invalid additional_header");
-			return PJ_FALSE;
-		}
+    if(!document["headers"].IsObject()) {
+        set_error("Parameter headers must be an object");
+        return PJ_FALSE;
+    }
 
-		if(strcmp(name, "Content-Type")==0) {
-			char *token_type = strtok(value, "/");
-			if(!token_type) {
-				set_error("No type specified in header Content-Type");
-				return PJ_FALSE;
-			}
-		
-			char *token_subtype = strtok(NULL, "\n");
-			if(!token_subtype) {
-				set_error("No subtype specified in header Content-Type");
-				return PJ_FALSE;
-			}
+    Value headers = document["headers"].GetObject();
 
-			strcpy(type, token_type);
-			strcpy(subtype, token_subtype);
-			addon_log(LOG_LEVEL_DEBUG, "Checking parsing of Content-Type. type=%s: subtype=%s\n", type, subtype);
-			return PJ_TRUE;
-		}
-		token = strtok_r(NULL, "\n", &saved);
+    for (Value::ConstMemberIterator itr = headers.MemberBegin(); itr != headers.MemberEnd(); ++itr) {
+        printf("%s => '%s'\n", itr->name.GetString(), itr->value.GetString());
+
+        const char *name = itr->name.GetString();
+        if(!itr->value.IsString()) {
+            set_error("Parameter headers key '%s' found with non-string value", name);
+            return PJ_FALSE;
+        }
+
+        const char *value = itr->value.GetString();
+
+        pj_str_t hname = pj_str((char*)name);
+        pjsip_hdr *hdr = (pjsip_hdr*)pjsip_parse_hdr(pool,
+                    &hname,
+                    (char*)value,
+                    strlen(value),
+                    NULL);
+
+        if(!hdr) {
+            set_error("Failed to parse header %s", name);
+            return PJ_FALSE; 
+        }					
+        
+        pj_list_push_back(&hdr_list, hdr);
 	}
-	set_error("Header Content-Type not supplied");
-	return PJ_FALSE;
+
+	pjsip_regc_add_headers(regc, &hdr_list);
+	return PJ_TRUE;
+}
+
+pj_bool_t get_content_type_and_subtype_from_headers(Document &document, char *type, char *subtype) {
+    if(!document.HasMember("headers")) {
+		set_error("Parameter headers absent");
+        return PJ_FALSE;
+    }
+
+    if(!document["headers"].IsObject()) {
+        set_error("Parameter headers must be an object");
+        return PJ_FALSE;
+    }
+
+    Value headers = document["headers"].GetObject();
+
+    if(!headers.HasMember("Content-Type")) {
+        set_error("Parameter headers doesn't contain key Content-Type");
+        return PJ_FALSE;
+    }
+
+    const char *content_type = headers["Content-Type"].GetString();
+
+    const char *slash;
+    int index;
+
+    slash = strchr(content_type, '/');
+    if(!slash) {
+	    set_error("Invalid header Content-Type");
+        return PJ_FALSE;
+    }
+
+    index = (int)(slash - content_type);
+
+    strncpy(type, content_type, index-1);
+    strcpy(subtype, content_type+index);
+    addon_log(LOG_LEVEL_DEBUG, "Checking parsing of Content-Type. type=%s: subtype=%s\n", type, subtype);
+    return PJ_TRUE;
 }
 
 
@@ -5505,7 +5521,7 @@ out:
 	return 0;
 }
 
-bool subscription_subscribe(Subscription *s, int expires, const char *additional_headers) {
+bool subscription_subscribe_no_headers(Subscription *s, int expires) {
 	pj_status_t status;
 	pjsip_tx_data *tdata;
 
@@ -5518,7 +5534,37 @@ bool subscription_subscribe(Subscription *s, int expires, const char *additional
 		return false;	
 	}
 
-	if(!add_additional_headers(s->dlg->pool, tdata, additional_headers)) {
+	status = pjsip_evsub_send_request(s->evsub, tdata);
+	if(status != PJ_SUCCESS) {
+		set_error("pjsip_inv_send_msg failed");
+		return false;	
+	}
+
+	//Without this, on_rx_response will not be called
+	status = pjsip_dlg_add_usage(s->dlg, &mod_tester, s);
+	if(status != PJ_SUCCESS) {
+		set_error("pjsip_dlg_add_usage failed");
+		return false;	
+	}
+
+	return true;
+}
+
+
+bool subscription_subscribe(Subscription *s, int expires, Document &document) {
+	pj_status_t status;
+	pjsip_tx_data *tdata;
+
+	status = pjsip_evsub_initiate(s->evsub, 
+					NULL,
+					expires,	
+					&tdata);
+	if(status != PJ_SUCCESS) {
+		set_error("pjsip_evsub_initiate failed");
+		return false;	
+	}
+
+	if(!add_headers(s->dlg->pool, tdata, document)) {
 		return false;
 	}
 
@@ -5544,7 +5590,6 @@ int pjw_subscription_subscribe(long subscription_id, const char *json) {
 	clear_error();
 
     int expires;
-    char *additional_headers = NULL;
 
 	Subscription *subscription;
 
@@ -5568,7 +5613,7 @@ int pjw_subscription_subscribe(long subscription_id, const char *json) {
         goto out;
     }
 
-	if(!subscription_subscribe(subscription, expires, additional_headers)) {
+	if(!subscription_subscribe(subscription, expires, document)) {
 		goto out;
 	}
 
