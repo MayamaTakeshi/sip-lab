@@ -15,15 +15,13 @@ async function test() {
 
     console.log(sip.start((data) => { console.log(data)} ))
 
-    t1 = sip.transport.create("127.0.0.1", 5090, 1)
-    t2 = sip.transport.create("127.0.0.1", 5092, 1)
+    t1 = sip.transport.create({address: "127.0.0.1", port: 5090, type: 'udp'})
+    t2 = sip.transport.create({address: "127.0.0.1", port: 5092, type: 'udp'})
 
     console.log("t1", t1)
     console.log("t2", t2)
 
-    flags = 1 // late negotiation
-
-    oc = sip.call.create(t1.id, flags, 'sip:a@t', 'sip:b@127.0.0.1:5092')
+    oc = sip.call.create(t1.id, {from_uri: 'sip:alice@test.com', to_uri: `sip:bob@${t2.address}:${t2.port}`, delayed_media: true})
 
     await z.wait([
         {
@@ -39,9 +37,9 @@ async function test() {
                 $rr: 'Trying',
                 '$(hdrcnt(via))': 1,
                 '$hdr(call-id)': m.collect('sip_call_id'),
-                $fU: 'a',
-                $fd: 't',
-                $tU: 'b',
+                $fU: 'alice',
+                $fd: 'test.com',
+                $tU: 'bob',
                 '$hdr(l)': '0',
             }),
         },
@@ -52,7 +50,7 @@ async function test() {
         sip_call_id: z.store.sip_call_id,
     }
 
-    sip.call.respond(ic.id, 200, 'OK')
+    sip.call.respond(ic.id, {code: 200, reason: 'OK'})
 
     await z.wait([
         {
@@ -77,17 +75,17 @@ async function test() {
                 $rs: '200',
                 $rr: 'OK',
                 '$(hdrcnt(VIA))': 1,
-                $fU: 'a',
-                $fd: 't',
-                $tU: 'b',
+                $fU: 'alice',
+                $fd: 'test.com',
+                $tU: 'bob',
                 '$hdr(content-type)': 'application/sdp',
                 $rb: '!{_}a=sendrecv',
             }),
         },
     ], 1000)
 
-    sip.call.send_dtmf(oc.id, '1234', 0)
-    sip.call.send_dtmf(ic.id, '4321', 1)
+    sip.call.send_dtmf(oc.id, {digits: '1234', mode: 0})
+    sip.call.send_dtmf(ic.id, {digits: '4321', mode: 1})
 
     await z.wait([
         {
@@ -105,7 +103,7 @@ async function test() {
     ], 2000)
 
 
-    sip.call.reinvite(oc.id, true, flags)
+    sip.call.reinvite(oc.id, {hold: true, delayed_media: true})
 
     await z.wait([
         {
@@ -134,8 +132,8 @@ async function test() {
         },
     ], 500)
 
-    sip.call.send_dtmf(oc.id, '1234', 0)
-    sip.call.send_dtmf(ic.id, '4321', 1) // This will not generate event 'dtmf'
+    sip.call.send_dtmf(oc.id, {digits: '1234', mode: 0})
+    sip.call.send_dtmf(ic.id, {digits: '4321', mode: 1}) // This will not generate event 'dtmf'
 
     await z.wait([
         {
@@ -146,7 +144,7 @@ async function test() {
         },
     ], 2000)
 
-    sip.call.reinvite(ic.id, false, flags)
+    sip.call.reinvite(ic.id, {hold: false, delayed_media: true})
 
     await z.wait([
         {
@@ -175,8 +173,8 @@ async function test() {
         },
     ], 500)
 
-    sip.call.send_dtmf(oc.id, '1234', 0)
-    sip.call.send_dtmf(ic.id, '4321', 1) // This will not generate event 'dtmf'
+    sip.call.send_dtmf(oc.id, {digits: '1234', mode: 0})
+    sip.call.send_dtmf(ic.id, {digits: '4321', mode: 1}) // This will not generate event 'dtmf'
 
     await z.wait([
         {
@@ -187,7 +185,7 @@ async function test() {
         },
     ], 2000)
 
-    sip.call.send_request(oc.id, 'INFO')
+    sip.call.send_request(oc.id, {method: 'INFO'})
 
     await z.wait([
         {
@@ -208,7 +206,7 @@ async function test() {
         },
     ], 500)
 
-    sip.call.reinvite(oc.id, false, flags)
+    sip.call.reinvite(oc.id, {hold: false, delayed_media: true})
 
     await z.wait([
         {
@@ -238,8 +236,8 @@ async function test() {
     ], 500)
 
 
-    sip.call.send_dtmf(oc.id, '1234', 0)
-    sip.call.send_dtmf(ic.id, '4321', 1) // This will not generate event 'dtmf'
+    sip.call.send_dtmf(oc.id, {digits: '1234', mode: 0})
+    sip.call.send_dtmf(ic.id, {digits: '4321', mode: 1}) // This will not generate event 'dtmf'
 
     await z.wait([
         {
@@ -249,7 +247,6 @@ async function test() {
             mode: 0,
         },
     ], 2000)
-
 
     sip.call.terminate(oc.id)
 

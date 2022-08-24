@@ -15,15 +15,13 @@ async function test() {
 
     console.log(sip.start((data) => { console.log(data)} ))
 
-    t1 = sip.transport.create("127.0.0.1", 5090, 1)
-    t2 = sip.transport.create("127.0.0.1", 5092, 1)
+    t1 = sip.transport.create({address: "127.0.0.1", port: 5090, type: 'udp'})
+    t2 = sip.transport.create({address: "127.0.0.1", port: 5092, type: 'udp'})
 
     console.log("t1", t1)
     console.log("t2", t2)
 
-    flags = 0
-
-    oc = sip.call.create(t1.id, flags, 'sip:a@t', 'sip:b@127.0.0.1:5092')
+    oc = sip.call.create(t1.id, {from_uri: 'sip:a@t', to_uri: 'sip:b@127.0.0.1:5092'})
 
     await z.wait([
         {
@@ -52,7 +50,7 @@ async function test() {
         sip_call_id: z.store.sip_call_id,
     }
 
-    sip.call.respond(ic.id, 200, 'OK')
+    sip.call.respond(ic.id, {code: 200, reason: 'OK'})
 
     await z.wait([
         {
@@ -88,13 +86,11 @@ async function test() {
 
     await z.sleep(1000)
 
-    var is_sender = true
-
     var in_file = 'samples/artifacts/this-is-never-ok.tiff'
     var out_file = "received.tiff"
 
-    sip.call.start_fax(oc.id, is_sender, in_file)
-    sip.call.start_fax(ic.id, !is_sender, out_file)
+    sip.call.start_fax(oc.id, {is_sender: true, file: in_file})
+    sip.call.start_fax(ic.id, {is_sender: false, file: out_file})
 
     await z.wait([
         {
@@ -131,7 +127,7 @@ async function test() {
         },
     ], 1000)
 
-    console.log(`Success. Fax was transmitted as ${in_file} and received as ${out_file}`)
+    console.log(`Success. Fax file ${in_file} was transmitted and received as ${out_file}`)
 
     sip.stop()
 }

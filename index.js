@@ -39,32 +39,42 @@ addon.stop = () => {
 }
 
 addon.transport = {
-  create: addon.transport_create,
+  create: (params) => { return addon.transport_create(JSON.stringify(params)) },
 }
 
 addon.account = {
-  create: addon.account_create,
-  register: addon.account_register,
+  create: (t_id, params) => { return addon.account_create(t_id, JSON.stringify(params)) },
+  register: (a_id, params) => { return addon.account_register(a_id, JSON.stringify(params ? params : {})) },
   unregister: addon.account_unregister,
 }
 
 addon.call = {
-  create: addon.call_create,
-  respond: addon.call_respond,
-  terminate: addon.call_terminate,
-  send_dtmf: addon.call_send_dtmf,
-  reinvite: addon.call_reinvite,
-  send_request: addon.call_send_request,
-  start_recording: addon.call_start_record_wav,
-  start_playing: addon.call_start_play_wav,
+  create: (t_id, params) => { return addon.call_create(t_id, JSON.stringify(params)) },
+  respond: (c_id, params) => { return addon.call_respond(c_id, JSON.stringify(params)) },
+  terminate: (c_id, params) => { return addon.call_terminate(c_id, JSON.stringify(params ? params : {})) },
+  send_dtmf: (c_id, params) => { return addon.call_send_dtmf(c_id, JSON.stringify(params)) },
+  reinvite: (c_id, params) => { return addon.call_reinvite(c_id, JSON.stringify(params ? params : {})) },
+  send_request: (c_id, params) => { return addon.call_send_request(c_id, JSON.stringify(params)) },
+  start_recording: (c_id, params) => { return addon.call_start_record_wav(c_id, JSON.stringify(params)) },
+  start_playing: (c_id, params) => { return addon.call_start_play_wav(c_id, JSON.stringify(params)) },
   stop_recording: addon.call_stop_record_wav,
   stop_playing: addon.call_stop_play_wav,
-  start_fax: addon.call_start_fax,
+  start_fax: (c_id, params) => { return addon.call_start_fax(c_id, JSON.stringify(params)) },
   stop_fax: addon.call_stop_fax,
   get_stream_stat: addon.call_get_stream_stat,
-  refer: addon.call_refer,
+  refer: (c_id, params) => { return addon.call_refer(c_id, JSON.stringify(params)) },
   get_info: addon.call_get_info,
   gen_string_replaces: addon.call_gen_string_replaces,
+}
+
+addon.subscriber = {
+    notify: (s_id, params) => { return addon.notify(s_id, JSON.stringify(params)) },
+    notify_xfer: (s_id, params) => { return addon.notify_xfer(s_id, JSON.stringify(params)) },
+}
+
+addon.subscription = {
+    create: (t_id, params) => { return addon.subscription_create(t_id, JSON.stringify(params)) },
+    subscribe: (s_id, params) => { return addon.subscription_subscribe(s_id, JSON.stringify(params)) },
 }
 
 module.exports = addon;
