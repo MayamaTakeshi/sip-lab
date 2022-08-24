@@ -15,18 +15,23 @@ async function test() {
 
     console.log(sip.start((data) => { console.log(data)} ))
 
-    t1 = sip.transport.create("127.0.0.1", 5090, 1)
-    t2 = sip.transport.create("127.0.0.1", 5092, 1)
+    t1 = sip.transport.create({address: "127.0.0.1", port: 5090, type: 'udp'})
+    t2 = sip.transport.create({address: "127.0.0.1", port: 5092, type: 'udp'})
 
     console.log("t1", t1)
     console.log("t2", t2)
 
-    var server = `${t2.ip}:${t2.port}`
+    var server = `${t2.address}:${t2.port}`
     var domain = 'test1.com'
 
-    var a1 = sip.account.create(t1.id, domain, server, 'user1', 'pass1')
+    var a1 = sip.account.create(t1.id, {
+        domain, 
+        server,
+        username: 'user1',
+        password: 'pass1'
+    })
 
-    sip.account.register(a1, true)
+    sip.account.register(a1, {auto_register: true})
 
     await z.wait([
         {
@@ -53,9 +58,21 @@ async function test() {
         },
     ], 1000)
 
-    const s1 = sip.subscription_create(t1.id, 'dialog', 'application/dialog-info+xml', '<sip:user1@test1.com>', '<sip:user1@test1.com>', 'sip:park1@test1.com', `sip:${server}`, 'test1.com', 'user1', 'user1')
+    const s1 = sip.subscription.create(t1.id, {
+            event: 'dialog',
+            accept: 'application/dialog-info+xml',
+            from_uri: '<sip:user1@test1.com>',
+            to_uri: '<sip:user1@test1.com>',
+            request_uri: 'sip:park1@test1.com',
+            proxy_uri: `sip:${server}`,
+            auth: {
+                realm: 'test1.com',
+                username: 'user1',
+                password: 'user1',
+            },
+    })
 
-    sip.subscription_subscribe(s1, 120)
+    sip.subscription.subscribe(s1, {expires: 120})
 
     await z.wait([
         {
