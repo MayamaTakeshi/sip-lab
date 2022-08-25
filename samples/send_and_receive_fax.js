@@ -21,7 +21,7 @@ async function test() {
     console.log("t1", t1)
     console.log("t2", t2)
 
-    oc = sip.call.create(t1.id, {from_uri: 'sip:a@t', to_uri: 'sip:b@127.0.0.1:5092'})
+    oc = sip.call.create(t1.id, {from_uri: 'sip:alice@test.com', to_uri: `sip:bob@${t2.address}:${t2.port}`})
 
     await z.wait([
         {
@@ -37,9 +37,9 @@ async function test() {
                 $rr: 'Trying',
                 '$(hdrcnt(via))': 1,
                 '$hdr(call-id)': m.collect('sip_call_id'),
-                $fU: 'a',
-                $fd: 't',
-                $tU: 'b',
+                $fU: 'alice',
+                $fd: 'test.com',
+                $tU: 'bob',
                 '$hdr(l)': '0',
             }),
         },
@@ -75,9 +75,9 @@ async function test() {
                 $rs: '200',
                 $rr: 'OK',
                 '$(hdrcnt(VIA))': 1,
-                $fU: 'a',
-                $fd: 't',
-                $tU: 'b',
+                $fU: 'alice',
+                $fd: 'test.com',
+                $tU: 'bob',
                 '$hdr(content-type)': 'application/sdp',
                 $rb: '!{_}a=sendrecv',
             }),

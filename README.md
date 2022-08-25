@@ -35,6 +35,10 @@ Then install sip-lab by doing:
   npm install sip-lab
 ```
 
+Be patient because we will need to download pjproject and build it.
+
+We will also download rapidjson.
+
 To test from within this repo just build and install by doing:
 ```
   npm install -g node-gyp
@@ -44,6 +48,8 @@ And run some sample script from subfolder samples:
 ```
   node samples/simple.js
 ```
+The above script has detailed comments. 
+Please read it to undestand how to write your own test scripts.
 
 The module is known to work properly in Ubuntu 18.04.4, Ubuntu 20.04.4, Debian 8 and Debian 10 (and it is expected to work in Debian 9).
 It was originally developed with node v.10 and tested with v.12 and v16.13.1 and it is expected to work with latest versions of node.
@@ -65,4 +71,9 @@ But if you do so, you will need to set NODE_PATH for node to find it by doing:
   export NODE_PATH=$(npm root --quiet -g)
 ```
 
+### About the code
+
+Although the code in written in *.cpp/*.hpp named files, this is not actually a C++ project.
+
+It is mostly written in C using some C++ facilities.
 
