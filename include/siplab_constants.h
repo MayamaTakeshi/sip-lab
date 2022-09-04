@@ -1,0 +1,6 @@
+#ifndef __SIPLAB_CONSTANTS_H__
+#define __SIPLAB_CONSTANTS_H__
+
+#define FAX_FLAG_TRANSMIT_ON_IDLE 1
+
+#endif /* __SIPLAB_CONSTANTS_H__ */

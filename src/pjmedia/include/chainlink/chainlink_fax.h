@@ -16,6 +16,7 @@ PJ_DECL(pj_status_t) chainlink_fax_port_create( pj_pool_t *pool,
                 void *user_data,
                 int is_sender,
                 const char *file,
+                unsigned flags,
                 pjmedia_port **p_port);
 
 

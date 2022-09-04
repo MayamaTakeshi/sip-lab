@@ -8,6 +8,8 @@
 #include <pj/pool.h>
 #include <pj/string.h>
 
+#include "siplab_constants.h"
+
 #define SPANDSP_EXPOSE_INTERNAL_STRUCTURES
 #include <spandsp.h>
 
@@ -23,6 +25,8 @@
 #define FAX_DATA_CHUNK 320
 #define T38_DATA_CHUNK 160
 
+
+#define FAX_FLAG_TRANSMIT_ON_IDLE 1
 
 enum
 {
@@ -122,6 +126,7 @@ PJ_DEF(pj_status_t) chainlink_fax_port_create( pj_pool_t *pool,
 				void *user_data,
 				int is_sender,
 				const char *file,
+                unsigned flags,
 				pjmedia_port **p_port)
 {
     struct fax_device *fd;
@@ -144,7 +149,6 @@ PJ_DEF(pj_status_t) chainlink_fax_port_create( pj_pool_t *pool,
     fd->link.port.on_destroy = &fax_on_destroy;
 
 	fax_init(&fd->fax, is_sender);
-	//fax_set_transmit_on_idle(&fd->fax,1);
 
 	t30_state_t *t30 = fax_get_t30_state(&fd->fax);
 
@@ -178,7 +182,9 @@ PJ_DEF(pj_status_t) chainlink_fax_port_create( pj_pool_t *pool,
     t30_set_supported_compressions(t30,T30_SUPPORT_T4_1D_COMPRESSION |
         T30_SUPPORT_T4_2D_COMPRESSION | T30_SUPPORT_T6_COMPRESSION);
 
-	fax_set_transmit_on_idle(&fd->fax, 1);
+    if(flags & FAX_FLAG_TRANSMIT_ON_IDLE) {
+	    fax_set_transmit_on_idle(&fd->fax, 1);
+    }
 
     fd->fax_cb = cb;
     fd->fax_cb_user_data = user_data;

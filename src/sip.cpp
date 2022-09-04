@@ -36,6 +36,8 @@
 
 #include "rapidjson/document.h"
 
+#include "siplab_constants.h"
+
 using namespace rapidjson;
 using namespace std;
 
@@ -156,6 +158,23 @@ bool json_get_int_param(Document &document, const char *param, bool optional, in
         return false;
     }
     *dest = document[param].GetInt();
+    return true;
+}
+
+bool json_get_uint_param(Document &document, const char *param, bool optional, unsigned *dest) {
+    if(!document.HasMember(param)) {
+        if(optional) {
+            return true;
+        } 
+        set_error("Parameter %s is required", param);
+        return false;
+    }
+
+    if(!document[param].IsUint()) {
+        set_error("Parameter %s must be an unsigned integer", param);
+        return false;
+    }
+    *dest = document[param].GetUint();
     return true;
 }
 
@@ -478,7 +497,7 @@ bool prepare_tonegen(Call *c);
 bool prepare_wav_player(Call *c, const char *file);
 bool prepare_wav_writer(Call *c, const char *file); 
 
-bool prepare_fax(Call *c, bool is_sender, const char *file); 
+bool prepare_fax(Call *c, bool is_sender, const char *file, unsigned flags); 
 
 void prepare_error_event(ostringstream *oss, char *scope, char *details);
 //void prepare_pjsipcall_error_event(ostringstream *oss, char *scope, char *function, pj_status_t s);
@@ -2689,6 +2708,8 @@ int pjw_call_start_fax(long call_id, const char *json)
 
     bool is_sender;
     char *file;
+    unsigned flags = 0;
+    bool flag;
 
     char buffer[MAX_JSON_INPUT];
 
@@ -2723,6 +2744,15 @@ int pjw_call_start_fax(long call_id, const char *json)
         goto out;
     }
 
+
+    flag = false;
+    if(!json_get_bool_param(document, "transmit_on_idle", true, &flag)) {
+        goto out;
+    } else {
+        if(flag) flags |= FAX_FLAG_TRANSMIT_ON_IDLE;
+    }
+    
+
 	status = pjmedia_stream_get_port(call->med_stream,
 					&stream_port);
 	if(status != PJ_SUCCESS)
@@ -2731,7 +2761,7 @@ int pjw_call_start_fax(long call_id, const char *json)
         goto out;
 	}
 
-	if(!prepare_fax(call, is_sender, file)){
+	if(!prepare_fax(call, is_sender, file, flags)){
 		set_error("prepare_fax failed");
         goto out;
 	}
@@ -4326,7 +4356,7 @@ bool prepare_wav_writer(Call *c, const char *file) {
 }
 
 
-bool prepare_fax(Call *c, bool is_sender, const char *file) {
+bool prepare_fax(Call *c, bool is_sender, const char *file, unsigned flags) {
    pj_status_t status;
 
    chainlink *link = (chainlink*)c->fax;
@@ -4348,6 +4378,7 @@ bool prepare_fax(Call *c, bool is_sender, const char *file) {
                        c,
                        is_sender,
                        file,
+                       flags, 
                        (pjmedia_port**)&c->fax);
    if(status != PJ_SUCCESS) return false;
 

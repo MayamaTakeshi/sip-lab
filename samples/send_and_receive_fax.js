@@ -89,8 +89,9 @@ async function test() {
     var in_file = 'samples/artifacts/this-is-never-ok.tiff'
     var out_file = "received.tiff"
 
-    sip.call.start_fax(oc.id, {is_sender: true, file: in_file})
-    sip.call.start_fax(ic.id, {is_sender: false, file: out_file})
+    // transmit_on_idle: true/true: OK, true/false: OK, false/true: OK, false/false: NG
+    sip.call.start_fax(oc.id, {is_sender: true, file: in_file, transmit_on_idle: false})
+    sip.call.start_fax(ic.id, {is_sender: false, file: out_file, transmit_on_idle: true})
 
     await z.wait([
         {

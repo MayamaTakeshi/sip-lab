@@ -22,6 +22,7 @@
         "pjproject/pjlib-util/include",
         "pjproject/pjnath/include",
         "pjproject/pjmedia/include",
+        "include",
         "src",
         "src/pjmedia/include",
         "src/pjmedia/include/pjmedia",
