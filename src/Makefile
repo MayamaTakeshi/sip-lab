@@ -34,7 +34,7 @@ sip.o: sip.cpp sip.hpp
 	$(CC) -fPIC -c -o sip.o sip.cpp $(CPPFLAGS)
 
 sip.so: sip.o idmanager.o packetdumper.o event_templates.o chainlink
-	$(CC) -fPIC -shared -o sip.so sip.o idmanager.o packetdumper.o event_templates.o pjmedia/libchainlink.a -Wl,-E -lm -ldl -lspandsp -lpcap $(CPPFLAGS) $(LDFLAGS) $(LDLIBS)
+	$(CC) -fPIC -shared -o sip.so sip.o idmanager.o packetdumper.o event_templates.o pjmedia/libchainlink.a 3rdParty/spandsp/src/.libs/libspandsp.a -Wl,-E -lm -ldl -ltiff -lpcap $(CPPFLAGS) $(LDFLAGS) $(LDLIBS)
 
 clean:
 	rm -f *.o *.so

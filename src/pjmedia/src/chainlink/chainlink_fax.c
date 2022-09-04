@@ -25,9 +25,6 @@
 #define FAX_DATA_CHUNK 320
 #define T38_DATA_CHUNK 160
 
-
-#define FAX_FLAG_TRANSMIT_ON_IDLE 1
-
 enum
 {
     /*! No compression */
@@ -52,7 +49,6 @@ enum
     T30_SUPPORT_T88_COMPRESSION = 0x200
 };
 
-
 static pj_status_t fax_get_frame(pjmedia_port *this_port, 
 					pjmedia_frame *frame);
 static pj_status_t fax_put_frame(pjmedia_port *this_port, 
@@ -66,23 +62,24 @@ struct fax_device
 	void (*fax_cb)(pjmedia_port*, void*, int);
 	void *fax_cb_user_data;
 	int is_sender;
+    bool result_sent;
 
     pj_lock_t	       *lock;
 };
 
-static int phase_b_handler(t30_state_t* s, void* user_data, int result)
+static int phase_b_handler(void* user_data, int result)
 {
 	printf("fax phase_b_handler user_data=%p result=%i\n", user_data, result);
     return T30_ERR_OK;
 }
 
-static int phase_d_handler(t30_state_t* s, void* user_data, int result)
+static int phase_d_handler(void* user_data, int result)
 {
 	printf("fax phase_b_handler user_data=%p result=%i\n", user_data, result);
     return T30_ERR_OK;
 }
 
-static void phase_e_handler(t30_state_t* s, void* user_data, int result)
+static void phase_e_handler(void* user_data, int result)
 {
 	printf("fax phase_e_handler user_data=%p result=%i\n", user_data, result);
 
@@ -97,11 +94,13 @@ static void phase_e_handler(t30_state_t* s, void* user_data, int result)
         return;
     }
 
-    printf("sending result event\n");
-	fd->fax_cb((pjmedia_port*)fd, fd->fax_cb_user_data, result);
+    if(!fd->result_sent) {
+	    fd->fax_cb((pjmedia_port*)fd, fd->fax_cb_user_data, result);
+        fd->result_sent = true;
+    } 
 }
 
-static int document_handler(t30_state_t* s, void* user_data, int result)
+static int document_handler(void* user_data, int result)
 {
 	printf("fax document_handler user_data=%p result=%i\n", user_data, result);
 
@@ -110,7 +109,10 @@ static int document_handler(t30_state_t* s, void* user_data, int result)
     struct fax_device *fd = (struct fax_device*)user_data;
 	if(!fd->fax_cb) return 0;
 
-	//fd->fax_cb((pjmedia_port*)fd, fd->fax_cb_user_data, result);
+    if(!fd->result_sent) {
+	    fd->fax_cb((pjmedia_port*)fd, fd->fax_cb_user_data, result);
+        fd->result_sent = true;
+    } 
 
     return 0;
 }
@@ -165,6 +167,7 @@ PJ_DEF(pj_status_t) chainlink_fax_port_create( pj_pool_t *pool,
 	t30_set_document_handler(t30, &document_handler, (void*)fd);
 
 	fd->is_sender = is_sender;
+    fd->result_sent = false;
 
 	pj_status_t status = pj_lock_create_simple_mutex(pool, "fax", &fd->lock);
 

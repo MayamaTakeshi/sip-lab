@@ -4,8 +4,27 @@ set -o errexit
 set -o nounset
 set -o pipefail
 
+
 START_DIR=`pwd`
 
+
+mkdir -p 3rdParty
+
+
+cd $START_DIR/3rdParty
+if [[ ! -d spandsp ]]
+then
+	commit=e59ca8fb8b1591e626e6a12fdc60a2ebe83435ed
+	git clone https://github.com/freeswitch/spandsp
+	cd spandsp
+	git checkout $commit
+	./bootstrap.sh
+	CFLAGS='-O -fPIC' ./configure --enable-shared
+    make
+fi
+
+
+cd $START_DIR/3rdParty
 if [[ ! -d pjproject ]]
 then
 	git clone https://github.com/pjsip/pjproject
@@ -28,14 +47,15 @@ EOF
 	make dep && make clean && make
 fi
 
-cd $START_DIR
 
+cd $START_DIR/3rdParty
 if [[ ! -d rapidjson ]]
 then
 	git clone https://github.com/Tencent/rapidjson
 	cd rapidjson
 	git checkout 27c3a8dc0e2c9218fe94986d249a12b5ed838f1d
 fi
+
 
 cd $START_DIR
 
