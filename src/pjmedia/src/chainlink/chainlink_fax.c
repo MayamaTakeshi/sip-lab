@@ -61,7 +61,6 @@ struct fax_device
 	fax_state_t fax;
 	void (*fax_cb)(pjmedia_port*, void*, int);
 	void *fax_cb_user_data;
-	int is_caller;
 	int is_sender;
 
     pj_lock_t	       *lock;
@@ -121,7 +120,6 @@ PJ_DEF(pj_status_t) chainlink_fax_port_create( pj_pool_t *pool,
 					void *user_data, 
 					int result), 
 				void *user_data,
-				int is_caller,
 				int is_sender,
 				const char *file,
 				pjmedia_port **p_port)
@@ -145,7 +143,7 @@ PJ_DEF(pj_status_t) chainlink_fax_port_create( pj_pool_t *pool,
     fd->link.port.put_frame = &fax_put_frame;
     fd->link.port.on_destroy = &fax_on_destroy;
 
-	fax_init(&fd->fax, is_caller);
+	fax_init(&fd->fax, is_sender);
 	//fax_set_transmit_on_idle(&fd->fax,1);
 
 	t30_state_t *t30 = fax_get_t30_state(&fd->fax);
@@ -162,7 +160,6 @@ PJ_DEF(pj_status_t) chainlink_fax_port_create( pj_pool_t *pool,
     //printf("setting document_handler with user_data=%p\n", (void*)fd);
 	t30_set_document_handler(t30, &document_handler, (void*)fd);
 
-	fd->is_caller = is_caller;
 	fd->is_sender = is_sender;
 
 	pj_status_t status = pj_lock_create_simple_mutex(pool, "fax", &fd->lock);

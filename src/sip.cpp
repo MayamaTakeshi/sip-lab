@@ -4346,7 +4346,6 @@ bool prepare_fax(Call *c, bool is_sender, const char *file) {
                        PJMEDIA_PIA_BITS(&stream_port->info),
                        on_fax_result,
                        c,
-                       c->outgoing,
                        is_sender,
                        file,
                        (pjmedia_port**)&c->fax);
