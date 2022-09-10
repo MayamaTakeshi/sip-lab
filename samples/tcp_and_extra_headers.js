@@ -1,6 +1,6 @@
 var sip = require ('../index.js')
-var Zester = require('zester')
-var z = new Zester()
+var Zeq = require('@mayama/zeq')
+var z = new Zeq()
 var m = require('data-matching')
 var sip_msg = require('sip-matching')
 
@@ -280,8 +280,8 @@ async function test() {
         },
     ], 2000)
 
-    sip.call.start_playing(oc.id, {file: '/home/takeshi/work/src/svn/brastel/SIP-Tools/trunk/sip-tester/yosemitesam.wav'})
-    sip.call.start_playing(ic.id, {file: '/home/takeshi/work/src/svn/brastel/SIP-Tools/trunk/sip-tester/yosemitesam.wav'})
+    sip.call.start_playing(oc.id, {file: 'samples/artifacts/yosemitesam.wav'})
+    sip.call.start_playing(ic.id, {file: 'samples/artifacts/yosemitesam.wav'})
 
     await z.sleep(2000)
 

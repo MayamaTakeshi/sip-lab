@@ -1,6 +1,6 @@
 var sip = require ('../index.js')
-var Zester = require('zester')
-var z = new Zester()
+var Zeq = require('@mayama/zeq')
+var z = new Zeq()
 var m = require('data-matching')
 var sip_msg = require('sip-matching')
 
