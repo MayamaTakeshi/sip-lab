@@ -126,6 +126,33 @@ bool parse_json(Document &document, const char *json, char *buffer, long unsigne
     return true;
 }
 
+
+bool param_is_valid(const char *param, const char **valid_params) {
+    char **valid_param = (char**)valid_params;
+    while(*valid_param[0]) {
+        //printf("checking param=%s valid_param=%s\n", param, *valid_param);
+        if(strcmp(param, *valid_param) == 0) {
+            return true;
+        }
+        valid_param++;
+    }
+    return false;
+}
+
+bool validate_params(Document &document, const char **valid_params) {
+    for (Value::ConstMemberIterator itr = document.MemberBegin();
+        itr != document.MemberEnd(); ++itr)
+    {
+        const char *param = itr->name.GetString();
+        if(!param_is_valid(param, valid_params)) {
+            set_error("Invalid param %s", param);
+            return false;
+        }
+    }
+
+    return true;
+}
+
 bool json_get_string_param(Document &document, const char *param, bool optional, char **dest) {
     printf("json_get_string_param %s\n", param);
     if(!document.HasMember(param)) {
@@ -1078,9 +1105,15 @@ int pjw_transport_create(const char *json, int *out_t_id, char *out_t_address, i
 
     char buffer[MAX_JSON_INPUT];
 
+    const char *valid_params[] = {"address", "port", "type", ""};
+
     Document document;
 
     if(!parse_json(document, json, buffer, MAX_JSON_INPUT)) {
+        goto out;
+    }
+        
+    if(!validate_params(document, valid_params)) {
         goto out;
     }
 
@@ -1301,6 +1334,8 @@ int pjw_account_create(int t_id, const char *json, int *out_acc_id)
 
     Document document;
 
+    const char *valid_params[] = {"domain", "server", "username", "password", "to_url", "expires", "headers", ""};
+
 	if(!g_transport_ids.get(t_id, val)){
 		set_error("Invalid transport id");
         goto out;
@@ -1308,6 +1343,10 @@ int pjw_account_create(int t_id, const char *json, int *out_acc_id)
 	t = (Transport*)val;
 
     if(!parse_json(document, json, buffer, MAX_JSON_INPUT)) {
+        goto out;
+    }
+    
+    if(!validate_params(document, valid_params)) {
         goto out;
     }
 
@@ -1461,6 +1500,8 @@ int pjw_account_register(long acc_id, const char *json)
 
     Document document;
 
+    const char *valid_params[] = {"auto_refresh", ""};
+
 	if(!g_account_ids.get(acc_id, val)){
 		set_error("Invalid account_id");
         goto out;
@@ -1468,6 +1509,10 @@ int pjw_account_register(long acc_id, const char *json)
     regc = (pjsip_regc*)val;
 
     if(!parse_json(document, json, buffer, MAX_JSON_INPUT)) {
+        goto out;
+    }
+
+    if(!validate_params(document, valid_params)) {
         goto out;
     }
 
@@ -1563,6 +1608,8 @@ int pjw_call_respond(long call_id, const char *json)
 
     Document document;
 
+    const char *valid_params[] = {"code", "reason", "headers", ""};
+
 	if(!g_call_ids.get(call_id, val)){
 		set_error("Invalid call_id");
         goto out;
@@ -1575,6 +1622,10 @@ int pjw_call_respond(long call_id, const char *json)
 	}
 
     if(!parse_json(document, json, buffer, MAX_JSON_INPUT)) {
+        goto out;
+    }
+    
+    if(!validate_params(document, valid_params)) {
         goto out;
     }
 
@@ -1655,6 +1706,8 @@ int pjw_call_terminate(long call_id, const char *json)
 
     Document document;
 
+    const char *valid_params[] = {"code", "reason", "headers", ""};
+
 	if(!g_call_ids.get(call_id, val)){
 		set_error("Invalid call_id");
 		goto out;
@@ -1662,6 +1715,10 @@ int pjw_call_terminate(long call_id, const char *json)
 	call = (Call*)val;
 
     if(!parse_json(document, json, buffer, MAX_JSON_INPUT)) {
+        goto out;
+    }
+    
+    if(!validate_params(document, valid_params)) {
         goto out;
     }
 
@@ -1744,6 +1801,8 @@ int pjw_call_create(long t_id, const char *json, long *out_call_id, char *out_si
 
     Document document;
 
+    const char *valid_params[] = {"from_uri", "to_uri", "request_uri", "proxy_uri", "auth", "delayed_media", "headers", ""};
+
 	if(!g_transport_ids.get(t_id, val)){
 		set_error("Invalid transport_id");
 		goto out;
@@ -1751,6 +1810,10 @@ int pjw_call_create(long t_id, const char *json, long *out_call_id, char *out_si
 	t = (Transport*)val;
 
     if(!parse_json(document, json, buffer, MAX_JSON_INPUT)) {
+        goto out;
+    }
+        
+    if(!validate_params(document, valid_params)) {
         goto out;
     }
 
@@ -2160,7 +2223,14 @@ int pjw_call_send_dtmf(long call_id, const char *json)
 
     Document document;
 
+    const char *valid_params[] = {"digits", "mode", ""};
+
+
     if(!parse_json(document, json, buffer, MAX_JSON_INPUT)) {
+        goto out;
+    }
+
+    if(!validate_params(document, valid_params)) {
         goto out;
     }
 
@@ -2278,6 +2348,8 @@ int pjw_call_reinvite(long call_id, const char *json)
     char buffer[MAX_JSON_INPUT];
 
     Document document;
+    
+    const char *valid_params[] = {"hold", "delayed_media", ""};
 
 	if(!g_call_ids.get(call_id, val)){
 	    set_error("Invalid call_id");
@@ -2286,6 +2358,10 @@ int pjw_call_reinvite(long call_id, const char *json)
 	call = (Call*)val;
 
     if(!parse_json(document, json, buffer, MAX_JSON_INPUT)) {
+        goto out;
+    }
+
+    if(!validate_params(document, valid_params)) {
         goto out;
     }
 
@@ -2404,8 +2480,14 @@ int pjw_call_send_request(long call_id, const char *json)
     char buffer[MAX_JSON_INPUT];
 
     Document document;
+    
+    const char *valid_params[] = {"method", "body", "ct_type", "ct_subtype", "headers", ""};
 
     if(!parse_json(document, json, buffer, MAX_JSON_INPUT)) {
+        goto out;
+    }
+
+    if(!validate_params(document, valid_params)) {
         goto out;
     }
 
@@ -2503,6 +2585,8 @@ int pjw_call_start_record_wav(long call_id, const char *json)
 
     Document document;
 
+    const char *valid_params[] = {"file", ""};
+
 	if(!g_call_ids.get(call_id, val)){
 		set_error("Invalid call_id");
         goto out;
@@ -2516,6 +2600,10 @@ int pjw_call_start_record_wav(long call_id, const char *json)
 	}
 
     if(!parse_json(document, json, buffer, MAX_JSON_INPUT)) {
+        goto out;
+    }
+
+    if(!validate_params(document, valid_params)) {
         goto out;
     }
 
@@ -2567,6 +2655,8 @@ int pjw_call_start_play_wav(long call_id, const char *json)
     char buffer[MAX_JSON_INPUT];
 
     Document document;
+    
+    const char *valid_params[] = {"file", ""};
 
 	if(!g_call_ids.get(call_id, val)){
 		set_error("Invalid call_id");
@@ -2581,6 +2671,10 @@ int pjw_call_start_play_wav(long call_id, const char *json)
 	}
 
     if(!parse_json(document, json, buffer, MAX_JSON_INPUT)) {
+        goto out;
+    }
+
+    if(!validate_params(document, valid_params)) {
         goto out;
     }
 
@@ -2715,6 +2809,8 @@ int pjw_call_start_fax(long call_id, const char *json)
 
     Document document;
 
+    const char *valid_params[] = {"is_sender", "file", "transmit_on_idle", ""};
+
 	if(!g_call_ids.get(call_id, val)){
 		set_error("Invalid call_id");
         goto out;
@@ -2728,6 +2824,10 @@ int pjw_call_start_fax(long call_id, const char *json)
 	}
 
     if(!parse_json(document, json, buffer, MAX_JSON_INPUT)) {
+        goto out;
+    }
+
+    if(!validate_params(document, valid_params)) {
         goto out;
     }
 
@@ -4873,6 +4973,8 @@ int pjw_call_refer(long call_id, const char *json, long *out_subscription_id)
 
     Document document;
 
+    const char *valid_params[] = {"dest_uri", "headers", ""};
+
 	if(!g_call_ids.get(call_id, val)){
 		set_error("Invalid call_id");
 		goto out;
@@ -4880,6 +4982,10 @@ int pjw_call_refer(long call_id, const char *json, long *out_subscription_id)
 	call = (Call*)val;
 
     if(!parse_json(document, json, buffer, MAX_JSON_INPUT)) {
+        goto out;
+    }
+
+    if(!validate_params(document, valid_params)) {
         goto out;
     }
 
@@ -5061,6 +5167,8 @@ int pjw_notify(long subscriber_id, const char *json)
 
     Document document;
 
+    const char *valid_params[] = {"content_type", "body", "subscription_state", "reason", ""};
+
 	if(!g_subscriber_ids.get(subscriber_id, val)){
 		set_error("Invalid subscriber_id");
 		goto out;
@@ -5073,6 +5181,10 @@ int pjw_notify(long subscriber_id, const char *json)
 	}
 
     if(!parse_json(document, json, buffer, MAX_JSON_INPUT)) {
+        goto out;
+    }
+
+    if(!validate_params(document, valid_params)) {
         goto out;
     }
 
@@ -5125,6 +5237,9 @@ int pjw_notify_xfer(long subscriber_id, const char *json) {
     char buffer[MAX_JSON_INPUT];
 
     Document document;
+
+    const char *valid_params[] = {"subscription_state", "code", "reason", ""};
+
 	if(!g_subscriber_ids.get(subscriber_id, val)){
 		set_error("Invalid subscriber_id");
 		goto out;
@@ -5137,6 +5252,10 @@ int pjw_notify_xfer(long subscriber_id, const char *json) {
 	}
 
     if(!parse_json(document, json, buffer, MAX_JSON_INPUT)) {
+        goto out;
+    }
+
+    if(!validate_params(document, valid_params)) {
         goto out;
     }
 
@@ -5422,6 +5541,8 @@ int pjw_subscription_create(long transport_id, const char *json, long *out_subsc
 
     Document document;
 
+    const char *valid_params[] = {"event", "accept", "from_uri", "to_uri", "request_uri", "proxy_uri", "auth", ""};
+
 	if(!g_transport_ids.get(transport_id, val)){
 		set_error("Invalid transport_id");
 		goto out;
@@ -5429,6 +5550,10 @@ int pjw_subscription_create(long transport_id, const char *json, long *out_subsc
 	t = (Transport*)val;
 
     if(!parse_json(document, json, buffer, MAX_JSON_INPUT)) {
+        goto out;
+    }
+
+    if(!validate_params(document, valid_params)) {
         goto out;
     }
 
@@ -5628,6 +5753,8 @@ int pjw_subscription_subscribe(long subscription_id, const char *json) {
     char buffer[MAX_JSON_INPUT];
 
     Document document;
+    
+    const char *valid_params[] = {"expires", "headers", ""};
 
 	if(!g_subscription_ids.get(subscription_id, val)){
 		set_error("Invalid subscription_id");
@@ -5636,6 +5763,10 @@ int pjw_subscription_subscribe(long subscription_id, const char *json) {
 	subscription = (Subscription*)val;
 
     if(!parse_json(document, json, buffer, MAX_JSON_INPUT)) {
+        goto out;
+    }
+
+    if(!validate_params(document, valid_params)) {
         goto out;
     }
 
