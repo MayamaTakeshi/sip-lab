@@ -8,7 +8,7 @@ set -o pipefail
 START_DIR=`pwd`
 
 
-mkdir -p 3rdParty
+mkdir -p $START_DIR/3rdParty
 
 
 cd $START_DIR/3rdParty
