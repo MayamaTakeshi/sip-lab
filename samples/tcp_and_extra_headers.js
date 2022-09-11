@@ -40,7 +40,7 @@ async function test() {
                 $fd: 'test.com',
                 $tU: 'bob',
                 '$hdr(X-MyHeader1)': 'abc',
-                '$hdr(X-MyHeader2)': 'def',
+                'hdr_x_myheader2': 'def',
             }),
         },
         {
@@ -51,7 +51,7 @@ async function test() {
                 $rs: '100',
                 $rr: 'Trying',
                 '$(hdrcnt(via))': 1,
-                '$hdr(call-id)': m.collect('sip_call_id'),
+                'hdr_call_id': m.collect('sip_call_id'),
                 $fU: 'alice',
                 $fd: 'test.com',
                 $tU: 'bob',
@@ -96,7 +96,7 @@ async function test() {
             msg: sip_msg({
                 $rs: '200',
                 $rr: 'OK',
-                '$(hdrcnt(VIA))': 1,
+                '$(hdrcnt(v))': 1,
                 $fU: 'alice',
                 $fd: 'test.com',
                 $tU: 'bob',

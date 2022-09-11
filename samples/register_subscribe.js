@@ -48,7 +48,7 @@ async function test() {
                 $tU: 'user1',
                 $td: domain,
                 '$hdr(X-MyHeader1)': 'aaa',
-                '$hdr(X-MyHeader2)': 'bbb',
+                'hdr_x_myheader2': 'bbb',
             }),
         },
     ], 1000)
@@ -79,7 +79,9 @@ async function test() {
             },
     })
 
-    sip.subscription.subscribe(s1, {expires: 120})
+    const sub_expires = 120 
+
+    sip.subscription.subscribe(s1, {expires: sub_expires})
 
     await z.wait([
         {
@@ -91,8 +93,8 @@ async function test() {
                 $fU: 'user1',
                 $fd: domain,
                 '$hdr(Event)': 'dialog',
-                '$hdr(Accept)': 'application/dialog-info+xml',
-                '$hdr(Allow-Events)': 'refer, dialog',
+                'hdr_accept': 'application/dialog-info+xml',
+                'hdr_allow_events': 'refer, dialog',
             })
         },
     ], 1000)
@@ -116,14 +118,15 @@ async function test() {
             subscription_id: s1,
             msg: sip_msg({
                 $rm: 'NOTIFY',
-                '$hdr(Event)': 'dialog',
-                '$hdr(Subscription-State)': 'active;expires=!{sub_expires}',
+                'hdr_event': 'dialog',
+                '$hdr(Subscription-State)': 'active;expires=!{sub_expires:num}',
                 '$hdr(Allow-Events)': 'refer, dialog',
             }),
         },
     ], 1000)
 
-    assert(parseInt(z.store.sub_expires) > 0)
+    // Subscription-State expires will be computed by pjsip. It might not be the exact value of sub_expires due to latence so we give 2 seconds of tolerance
+    assert(z.store.sub_expires > (sub_expires - 2))
 
     sip.account.unregister(a1)
 

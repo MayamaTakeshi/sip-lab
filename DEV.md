@@ -28,3 +28,8 @@ npm install
 Then perform code changes and tests. When you are satisfied with them, update install.sh with the new commit id.
 
 
+#### Running tests
+```
+npm test
+```
+
