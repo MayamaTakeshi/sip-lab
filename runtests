@@ -1,0 +1,15 @@
+#!/bin/bash
+
+for i in $(ls samples/*.js)
+do
+    node $i
+    if [[ $? -ne 0 ]]
+    then
+        echo "$i failed"
+        exit 1
+    fi
+done
+
+echo
+echo "Success. All tests passed"
+
