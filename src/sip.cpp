@@ -1457,7 +1457,7 @@ int pjw_account_register(long acc_id, const char *json)
 
     char buffer[MAX_JSON_INPUT];
 
-    bool auto_register = false;
+    bool auto_refresh = false;
 
     Document document;
 
@@ -1471,11 +1471,11 @@ int pjw_account_register(long acc_id, const char *json)
         goto out;
     }
 
-    if(!json_get_bool_param(document, "auto_register", true, &auto_register)) {
+    if(!json_get_bool_param(document, "auto_refresh", true, &auto_refresh)) {
         goto out;
     }
 
-	status = pjsip_regc_register(regc, auto_register, &tdata);
+	status = pjsip_regc_register(regc, auto_refresh, &tdata);
 	if(status != PJ_SUCCESS)
 	{
 		set_error("pjsip_regc_register failed");

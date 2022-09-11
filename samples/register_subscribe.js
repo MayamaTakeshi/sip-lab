@@ -35,7 +35,7 @@ async function test() {
         },
     })
 
-    sip.account.register(a1, {auto_register: true})
+    sip.account.register(a1, {auto_refresh: true})
 
     await z.wait([
         {
