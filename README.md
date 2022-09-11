@@ -60,9 +60,6 @@ It was originally developed with node v.10 and tested with v.12 and v16.13.1 and
 
 (it is known to not work with node v.8)
 
-It currently doesn't work with Debian 11 (see #29).
-
-
 
 ### About the code
 
