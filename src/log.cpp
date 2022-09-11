@@ -10,7 +10,7 @@ void _addon_log(int level, const char *fmt, ...) {
 
     va_start(args, fmt);
     flockfile(stdout);
-    printf(fmt, args);
+    vprintf(fmt, args);
     funlockfile(stdout);
     va_end(args);
 }
