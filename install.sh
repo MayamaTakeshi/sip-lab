@@ -52,10 +52,8 @@ then
 	git clone https://github.com/pjsip/pjproject
 	cd pjproject
 	#git checkout de3d744c2e1188b59bb907b6ee32ef83740ebc64
-    git checkout 33a3c9e0a5eb84426edef05a9aa98af17d8011c3 # required for bcg729
-
-    #echo "Patching sip_transaction.c to avoid problems with CANCEL"
-    sed -i -r 's|event->body.tx_msg.tdata == tsx->last_tx,|\t\t\t1, /* \0 */|' pjsip/src/pjsip/sip_transaction.c 
+    #git checkout 33a3c9e0a5eb84426edef05a9aa98af17d8011c3 # required for bcg729
+    git checkout 797088ed133c98492519b7d042b75735f6f9388c # updated as part of #21
 
 	cat > user.mak <<EOF
 	export CFLAGS += -fPIC -g

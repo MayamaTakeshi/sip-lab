@@ -438,5 +438,12 @@ When rebuilding the addon, this should be enough (it should be fast):
 ```
   npm install --unsafe-perm
 ```
+------------------------------------------------------------
+2022/09/11 takeshi:
+
+To try to solve #21, we upraded pjproject to commit 797088ed133c98492519b7d042b75735f6f9388c.
+However, after doing it we verified sending CANCEL doesn't cause the other side to send '497 Request Terminated' by itself anymore (see samples/sip_cancel.js)
+ 
+
 
 

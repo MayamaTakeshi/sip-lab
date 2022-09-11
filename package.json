@@ -7,7 +7,8 @@
     "node": ">=10.22"
   },
   "scripts": {
-    "install": "./install.sh"
+    "install": "./install.sh",
+    "test": "./runtests"
   },
   "repository": {
     "type": "git",

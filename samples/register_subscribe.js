@@ -3,6 +3,7 @@ var Zeq = require('@mayama/zeq')
 var z = new Zeq()
 var m = require('data-matching')
 var sip_msg = require('sip-matching')
+var assert = require('assert')
 
 async function test() {
     //sip.set_log_level(6)
@@ -116,11 +117,13 @@ async function test() {
             msg: sip_msg({
                 $rm: 'NOTIFY',
                 '$hdr(Event)': 'dialog',
-                '$hdr(Subscription-State)': 'active;expires=120',
+                '$hdr(Subscription-State)': 'active;expires=!{sub_expires}',
                 '$hdr(Allow-Events)': 'refer, dialog',
             }),
         },
     ], 1000)
+
+    assert(parseInt(z.store.sub_expires) > 0)
 
     sip.account.unregister(a1)
 
