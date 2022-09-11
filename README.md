@@ -37,6 +37,11 @@ However since it takes several minutes to build this module, you can install it 
 npm install -g sip-lab
 ```
 
+But if you do so, you will need to set NODE_PATH for node to find it by doing:
+```
+  export NODE_PATH=$(npm root --quiet -g)
+```
+
 To test from within this repo just build and install by doing:
 ```
   npm install -g node-gyp
