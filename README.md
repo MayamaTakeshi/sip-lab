@@ -18,6 +18,9 @@ TODO:
 
 ### Installation
 
+This is an node.js addon and it is known to work on Ubuntu 18.04, Ubuntu 20.04, Debian 10 and Debian 11 (it is known to not work on Debian 8 unless you build the addon yourself).
+It is discributed with prebuild binaries for node.js 15.0.0 and above (it is possible to use older versions of node but you will need to build the addon yourself).
+
 This will require you to have some libraries installed. So do:
 ```
 apt install build-essential automake autoconf libtool libspeex-dev libopus-dev libsdl2-dev libavdevice-dev libswscale-dev libv4l-dev libopencore-amrnb-dev libopencore-amrwb-dev libvo-amrwbenc-dev libopus-dev libsdl2-dev libopencore-amrnb-dev libopencore-amrwb-dev libvo-amrwbenc-dev libboost-dev libtiff-dev libpcap-dev libssl-dev uuid-dev
@@ -28,23 +31,12 @@ Then install sip-lab by doing:
 npm install sip-lab
 ```
 
-Be patient because we will need to download pjproject and build it.
-
-We will also download and build spandsp, bcg729 and rapidjson.
-
-However since it takes several minutes to build this module, you can install it globally:
+To test from within this repo you will need to download and build dependencies. Do:
 ```
-npm install -g sip-lab
+./build_deps.sh
 ```
-
-But if you do so, you will need to set NODE_PATH for node to find it by doing:
+Then build the node addon by doing:
 ```
-  export NODE_PATH=$(npm root --quiet -g)
-```
-
-To test from within this repo just build and install by doing:
-```
-  npm install -g node-gyp
   npm install
 ```
 And run some sample script from subfolder samples:
@@ -53,13 +45,6 @@ And run some sample script from subfolder samples:
 ```
 The above script has detailed comments. 
 Please read it to undestand how to write your own test scripts.
-
-The module is known to work properly in Ubuntu 18.04.4, Ubuntu 20.04.4, Debian 8 and Debian 10 (and it is expected to work in Debian 9).
-
-It was originally developed with node v.10 and tested with v.12 and v16.13.1 and it is expected to work with latest versions of node.
-
-(it is known to not work with node v.8)
-
 
 ### About the code
 
