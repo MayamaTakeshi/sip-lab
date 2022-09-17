@@ -24,17 +24,14 @@ chainlink:
 idmanager.o: idmanager.cpp idmanager.hpp
 	$(CC) -fPIC -c -o idmanager.o idmanager.cpp $(CPPFLAGS)
 
-packetdumper.o: packetdumper.cpp packetdumper.hpp
-	$(CC) -fPIC -c -o packetdumper.o packetdumper.cpp $(CPPFLAGS)
-
 event_templates.o: event_templates.cpp event_templates.hpp
 	$(CC) -fPIC -c -o event_templates.o event_templates.cpp $(CPPFLAGS)
 
 sip.o: sip.cpp sip.hpp
 	$(CC) -fPIC -c -o sip.o sip.cpp $(CPPFLAGS)
 
-sip.so: sip.o idmanager.o packetdumper.o event_templates.o chainlink
-	$(CC) -fPIC -shared -o sip.so sip.o idmanager.o packetdumper.o event_templates.o pjmedia/libchainlink.a 3rdParty/spandsp/src/.libs/libspandsp.a -Wl,-E -lm -ldl -ltiff -lpcap $(CPPFLAGS) $(LDFLAGS) $(LDLIBS)
+sip.so: sip.o idmanager.o event_templates.o chainlink
+	$(CC) -fPIC -shared -o sip.so sip.o idmanager.o event_templates.o pjmedia/libchainlink.a 3rdParty/spandsp/src/.libs/libspandsp.a -Wl,-E -lm -ldl -ltiff $(CPPFLAGS) $(LDFLAGS) $(LDLIBS)
 
 clean:
 	rm -f *.o *.so

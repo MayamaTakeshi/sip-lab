@@ -17,7 +17,7 @@
 #include <ctime>
 
 #include "idmanager.hpp"
-#include "packetdumper.hpp"
+//#include "packetdumper.hpp"
 #include "event_templates.hpp"
 
 //Customized media ports that can be chained
@@ -29,6 +29,9 @@
 #include "chainlink_fax.h"
 
 #include <ctime>
+
+#define _BSD_SOURCE
+#include <sys/time.h>
 
 #include <sys/syscall.h>
 
@@ -54,7 +57,7 @@ IdManager g_subscription_ids(IDS_MAX);
 IdManager g_subscriber_ids(IDS_MAX);
 IdManager g_dialog_ids(IDS_MAX);
 
-PacketDumper *g_PacketDumper = 0;
+//PacketDumper *g_PacketDumper = 0;
 
 #define AF	pj_AF_INET()
 #define DEFAULT_ILBC_MODE	(30)
@@ -1247,9 +1250,11 @@ int pjw_transport_create(const char *json, int *out_t_id, char *out_t_address, i
 
 	t->id = t_id;
 
+    /*
 	if(g_PacketDumper) {
 		g_PacketDumper->add_endpoint( inet_addr(addr), htons(port) );
 	}
+    */
 
 	*out_t_id = t_id;
     strcpy(out_t_address, addr);
@@ -3282,12 +3287,14 @@ static pjmedia_transport *create_media_transport(const pj_str_t *addr)
 			pjmedia_transport_info tpinfo;
 			pjmedia_transport_info_init(&tpinfo);
 			status = pjmedia_transport_get_info(med_transport, &tpinfo);
+            /*
 			if( status == PJ_SUCCESS ) {
 				if(g_PacketDumper){
 					g_PacketDumper->add_endpoint( tpinfo.sock_info.rtp_addr_name.ipv4.sin_addr.s_addr, tpinfo.sock_info.rtp_addr_name.ipv4.sin_port );
 					g_PacketDumper->add_endpoint( tpinfo.sock_info.rtcp_addr_name.ipv4.sin_addr.s_addr, tpinfo.sock_info.rtcp_addr_name.ipv4.sin_port );
 				}
 			}
+            */
 			return med_transport;
 		}
 	}
@@ -3911,6 +3918,7 @@ static void on_registration_status(pjsip_regc_cbparam *param){
 }
 
 int pjw_packetdump_start(const char *dev, const char *file){
+    /*
 	PJW_LOCK();
 
 	if(g_PacketDumper) delete g_PacketDumper;
@@ -3923,16 +3931,19 @@ int pjw_packetdump_start(const char *dev, const char *file){
 	}
 
 	PJW_UNLOCK();
+    */
 	return 0;
 }
 
 int pjw_packetdump_stop(){
+    /*
 	PJW_LOCK();
 
 	if(g_PacketDumper) delete g_PacketDumper;
 	g_PacketDumper = NULL;
 
 	PJW_UNLOCK();
+    */
 	return 0;
 }
 
@@ -4293,10 +4304,12 @@ void close_media_transport(pjmedia_transport *med_transport) {
 	pj_status_t status = pjmedia_transport_get_info(med_transport, &tpinfo);
 	if( status != PJ_SUCCESS ) return;
 
+    /*
 	if(g_PacketDumper){
 		g_PacketDumper->remove_endpoint( tpinfo.sock_info.rtp_addr_name.ipv4.sin_addr.s_addr, tpinfo.sock_info.rtp_addr_name.ipv4.sin_port );
 		g_PacketDumper->remove_endpoint( tpinfo.sock_info.rtcp_addr_name.ipv4.sin_addr.s_addr, tpinfo.sock_info.rtcp_addr_name.ipv4.sin_port );
 	}
+    */
 
     status = pjmedia_transport_media_stop(med_transport);
     if( status != PJ_SUCCESS ) {

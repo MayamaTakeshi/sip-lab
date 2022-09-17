@@ -27,6 +27,12 @@ npm install
 
 Then perform code changes and tests. When you are satisfied with them, update install.sh with the new commit id.
 
+#### prebuild binaries
+```
+nvm use v16.13.1 # if we try with v17 it will fail to build for -t 1.5.0.0
+prebuildify --strip -t 15.0.0 -t 16.0.0 -t 17.0.0 -t 18.0.0
+```
+
 
 #### Running tests
 ```

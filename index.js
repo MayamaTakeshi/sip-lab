@@ -1,4 +1,4 @@
-const addon = require('./build/Release/addon.node');
+const addon = require('node-gyp-build')(__dirname);
 
 var events = require('events');
 var eventEmitter = new events.EventEmitter();

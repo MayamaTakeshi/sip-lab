@@ -445,5 +445,12 @@ To try to solve #21, we upraded pjproject to commit 797088ed133c98492519b7d042b7
 However, after doing it we verified sending CANCEL doesn't cause the other side to send '497 Request Terminated' by itself anymore (see samples/sip_cancel.js)
  
 
+------------------------------------------------------------
+2022/09/17 takeshi:
+We will start shipping prebuilt binaries of the addon.
+We create them by doing:
+```
+prebuildify --strip -t 15.0.0 -t 16.0.0 -t 17.0.0 -t 18.0.0
+```
 
 

@@ -69,9 +69,4 @@ EOF
 fi
 
 
-
-cd $START_DIR
-
-node-gyp configure
-
-node-gyp build
+echo "Build of dependencies successful"
