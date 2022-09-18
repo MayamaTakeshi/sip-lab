@@ -69,4 +69,16 @@ EOF
 fi
 
 
+#cd $START_DIR/3rdParty
+#if [[ ! -d openssl ]]
+#then
+#    wget https://github.com/openssl/openssl/archive/refs/tags/openssl-3.0.5.tar.gz
+#    tar xf openssl-3.0.5.tar.gz
+#    mv openssl-openssl-3.0.5 openssl
+#    cd openssl
+#    ./Configure
+#    make
+#fi
+
+
 echo "Build of dependencies successful"

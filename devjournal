@@ -453,4 +453,53 @@ We create them by doing:
 prebuildify --strip -t 15.0.0 -t 16.0.0 -t 17.0.0 -t 18.0.0
 ```
 
+2022/09/18 takeshi:
+
+Tried to statically link to openssl but then prebuilt file increased from:
+```
+$ ls -l prebuilds/linux-x64/        
+total 7240
+-rwxr-xr-x 1 root root 1858744 Sep 17 14:04 node.abi102.node
+-rwxr-xr-x 1 root root 1858744 Sep 17 14:04 node.abi108.node
+-rwxr-xr-x 1 root root 1846424 Sep 17 14:04 node.abi88.node
+-rwxr-xr-x 1 root root 1846424 Sep 17 14:04 node.abi93.node
+```
+to
+```
+$ ls -l prebuilds/linux-x64/
+total 27328
+-rwxr-xr-x 1 root root 6994712 Sep 18 08:58 node.abi102.node
+-rwxr-xr-x 1 root root 6994712 Sep 18 08:58 node.abi108.node
+-rwxr-xr-x 1 root root 6994680 Sep 18 08:58 node.abi88.node
+-rwxr-xr-x 1 root root 6994680 Sep 18 08:58 node.abi93.node
+```
+
+For now, I will keep linking openssl so libs.
+
+------------------------------------------------------------
+2022/09/17 takeshi:
+
+For reference, the addon doesn't work on Debian 8:
+
+```
+$ node samples/delayed_media.js 
+node:internal/modules/cjs/loader:1210
+  return process.dlopen(module, path.toNamespacedPath(filename));
+                 ^
+
+Error: /lib/x86_64-linux-gnu/libm.so.6: version `GLIBC_2.27' not found (required by /root/tmp/sip-lab/prebuilds/linux-x64/node.abi93.node)
+    at Object.Module._extensions..node (node:internal/modules/cjs/loader:1210:18)
+    at Module.load (node:internal/modules/cjs/loader:1004:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:839:12)
+    at Module.require (node:internal/modules/cjs/loader:1028:19)
+    at require (node:internal/modules/cjs/helpers:102:18)
+    at load (/root/tmp/sip-lab/node_modules/node-gyp-build/index.js:22:10)
+    at Object.<anonymous> (/root/tmp/sip-lab/index.js:1:40)
+    at Module._compile (node:internal/modules/cjs/loader:1126:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1180:10)
+    at Module.load (node:internal/modules/cjs/loader:1004:32) {
+  code: 'ERR_DLOPEN_FAILED'
+}
+```
+
 
