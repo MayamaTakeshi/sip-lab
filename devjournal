@@ -502,4 +502,10 @@ Error: /lib/x86_64-linux-gnu/libm.so.6: version `GLIBC_2.27' not found (required
 }
 ```
 
+------------------------------------------------------------
+2022/09/17 takeshi:
+
+To force a build of the addon when a prebuilt is not available, we need to add an 'actions' list for the targe in the binding.gyp file.
+We followed a tip from here:
+  https://stackoverflow.com/questions/27275340/run-configure-in-gyp-file
 

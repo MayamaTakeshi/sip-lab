@@ -2,6 +2,15 @@
   'targets': [
     {
       'target_name': 'addon',
+      'actions': [
+        {
+          'action_name': 'build_deps',
+          'message': 'executing build_deps.sh',
+          'inputs': [],
+          'outputs': ['./3rdParty'],
+          'action': ['./build_deps.sh'],
+        },
+      ],
       'sources': [
         'src/log.cpp',
         'src/event_templates.cpp',

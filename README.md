@@ -18,17 +18,23 @@ TODO:
 
 ### Installation
 
-This is an node.js addon and it is known to work on Ubuntu 18.04, Ubuntu 20.04, Debian 10 and Debian 11 (it is known to not work on Debian 8 unless you build the addon yourself).
-It is discributed with prebuild binaries for node.js 15.0.0 and above (it is possible to use older versions of node but you will need to build the addon yourself).
+This is an node.js addon and it is known to work on Ubuntu 18.04, Ubuntu 20.04, Ubuntu 22.04, Debian 10 and Debian 11 (it is known to not work on Debian 8 unless the app is built locally).
+It is distributed with prebuild binaries for node.js 15.0.0 and above.
 
-This will require you to have some libraries installed. So do:
-```
-apt install build-essential automake autoconf libtool libspeex-dev libopus-dev libsdl2-dev libavdevice-dev libswscale-dev libv4l-dev libopencore-amrnb-dev libopencore-amrwb-dev libvo-amrwbenc-dev libopus-dev libsdl2-dev libopencore-amrnb-dev libopencore-amrwb-dev libvo-amrwbenc-dev libboost-dev libtiff-dev libpcap-dev libssl-dev uuid-dev
-```
-
-Then install sip-lab by doing:
+To install it, just do:
 ```
 npm install sip-lab
+```
+
+If a prebuilt binary is not available, npm will try to build the addon.
+
+This might fail if you don't have the required tools and libraries.
+
+If this happens try installing them by doing:
+```
+apt install build-essential automake autoconf libtool libspeex-dev libopus-dev libsdl2-dev libavdevice-dev libswscale-dev libv4l-dev libopencore-amrnb-dev libopencore-amrwb-dev libvo-amrwbenc-dev libopus-dev libsdl2-dev libopencore-amrnb-dev libopencore-amrwb-dev libvo-amrwbenc-dev libboost-dev libtiff-dev libpcap-dev libssl-dev uuid-dev cmake
+```
+
 ```
 
 To test from within this repo you will need to download and build dependencies. Do:
