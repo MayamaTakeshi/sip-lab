@@ -1,6 +1,6 @@
 {
   "name": "sip-lab",
-  "version": "1.12.31",
+  "version": "1.12.32",
   "description": "",
   "main": "index.js",
   "engines": {
@@ -30,6 +30,7 @@
   },
   "files": [
     "index.js",
+    "install.sh",
     "binding.gyp",
     "build_deps.sh",
     "samples",
