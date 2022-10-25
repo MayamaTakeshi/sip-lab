@@ -1,13 +1,13 @@
 {
   "name": "sip-lab",
-  "version": "1.12.32",
+  "version": "1.12.33",
   "description": "",
   "main": "index.js",
   "engines": {
     "node": ">=15.0.0"
   },
   "scripts": {
-    "install": "./install.sh",
+    "install": "node-gyp-build",
     "test": "./runtests"
   },
   "repository": {
