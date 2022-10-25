@@ -32,7 +32,7 @@ This might fail if you don't have the required tools and libraries.
 
 If this happens try installing them by doing:
 ```
-apt install build-essential automake autoconf libtool libspeex-dev libopus-dev libsdl2-dev libavdevice-dev libswscale-dev libv4l-dev libopencore-amrnb-dev libopencore-amrwb-dev libvo-amrwbenc-dev libopus-dev libsdl2-dev libopencore-amrnb-dev libopencore-amrwb-dev libvo-amrwbenc-dev libboost-dev libtiff-dev libpcap-dev libssl-dev uuid-dev cmake
+apt install build-essential automake autoconf libtool libspeex-dev libopus-dev libsdl2-dev libavdevice-dev libswscale-dev libv4l-dev libopencore-amrnb-dev libopencore-amrwb-dev libvo-amrwbenc-dev libvo-amrwbenc-dev libboost-dev libtiff-dev libpcap-dev libssl-dev uuid-dev cmake
 ```
 
 To test from within this repo you will need to download and build dependencies. Do:
@@ -42,12 +42,13 @@ To test from within this repo you will need to download and build dependencies. 
 
 Then build the node addon by doing:
 ```
-  npm install
+npx node-gyp configure
+npx node-gyp build
 ```
 
 And run some sample script from subfolder samples:
 ```
-  node samples/simple.js
+node samples/simple.js
 ```
 
 The above script has detailed comments. 

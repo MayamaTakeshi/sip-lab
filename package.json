@@ -1,10 +1,10 @@
 {
   "name": "sip-lab",
-  "version": "1.12.29",
+  "version": "1.12.30",
   "description": "",
   "main": "index.js",
   "engines": {
-    "node": ">=10.22"
+    "node": ">=15.0.0"
   },
   "scripts": {
     "install": "node-gyp-build",
