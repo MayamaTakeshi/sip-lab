@@ -19,31 +19,16 @@ TODO:
 ### Installation
 
 This is an node.js addon and it is known to work on Ubuntu 18.04, Ubuntu 20.04, Ubuntu 22.04, Debian 10 and Debian 11 (it is known to not work on Debian 8 unless the app is built locally).
-It is distributed with prebuild binaries for node.js 15.0.0 and above.
+It is distributed with prebuild binaries for node.js 15.0.0 and above (but built for Debian 11).
 
-To install it, just do:
-```
-npm install sip-lab
-```
-
-If a prebuilt binary is not available, npm will try to build the addon.
-
-This might fail if you don't have the required tools and libraries.
-
-If this happens try installing them by doing:
+To install it, first install some dependencies:
 ```
 apt install build-essential automake autoconf libtool libspeex-dev libopus-dev libsdl2-dev libavdevice-dev libswscale-dev libv4l-dev libopencore-amrnb-dev libopencore-amrwb-dev libvo-amrwbenc-dev libvo-amrwbenc-dev libboost-dev libtiff-dev libpcap-dev libssl-dev uuid-dev cmake
 ```
 
-Then build the dependencies:
+Then install sip-lab:
 ```
-./build_deps.sh
-```
-
-and build the node addon by doing:
-```
-npx node-gyp configure
-npx node-gyp build
+npm install sip-lab
 ```
 
 Then run some sample script from subfolder samples:
