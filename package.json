@@ -27,7 +27,7 @@
   },
   "devDependencies": {
     "prebuildify": "^5.0.1",
-    "prebuildify-cross": "^5.0.0"
+    "prebuildify-cross": "github:MayamaTakeshi/prebuildify-cross#use_existing_images"
   },
   "files": [
     "index.js",
