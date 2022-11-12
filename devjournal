@@ -590,4 +590,35 @@ takeshi@takeshi-desktop:~/src/git/MayamaTakeshi/sip-lab$
 
 I think this will minimize problems but it will not completely eliminate them.
 
+------------------------------------------------------------
+2022/11/12 takeshi:
+
+Here is what ldd on Debian11 outputs to an addon built on ubuntu 22.04:
+
+[root@lab225201-basix tmp]$ ldd addon.node 
+./addon.node: /lib/x86_64-linux-gnu/libstdc++.so.6: version `GLIBCXX_3.4.29' not found (required by ./addon.node)
+./addon.node: /lib/x86_64-linux-gnu/libc.so.6: version `GLIBC_2.34' not found (required by ./addon.node)
+./addon.node: /lib/x86_64-linux-gnu/libc.so.6: version `GLIBC_2.33' not found (required by ./addon.node)
+	linux-vdso.so.1 (0x00007ffe98ecf000)
+	libstdc++.so.6 => /lib/x86_64-linux-gnu/libstdc++.so.6 (0x00007fb8e8e57000)
+	libssl.so.3 => not found
+	libcrypto.so.3 => not found
+	libuuid.so.1 => /lib/x86_64-linux-gnu/libuuid.so.1 (0x00007fb8e8e4e000)
+	libtiff.so.5 => /lib/x86_64-linux-gnu/libtiff.so.5 (0x00007fb8e8dc8000)
+	libspeex.so.1 => /lib/x86_64-linux-gnu/libspeex.so.1 (0x00007fb8e8dad000)
+	libm.so.6 => /lib/x86_64-linux-gnu/libm.so.6 (0x00007fb8e8c67000)
+	libgcc_s.so.1 => /lib/x86_64-linux-gnu/libgcc_s.so.1 (0x00007fb8e8c4d000)
+	libc.so.6 => /lib/x86_64-linux-gnu/libc.so.6 (0x00007fb8e8a88000)
+	/lib64/ld-linux-x86-64.so.2 (0x00007fb8e9208000)
+	libwebp.so.6 => /lib/x86_64-linux-gnu/libwebp.so.6 (0x00007fb8e8a1f000)
+	libzstd.so.1 => /lib/x86_64-linux-gnu/libzstd.so.1 (0x00007fb8e8944000)
+	liblzma.so.5 => /lib/x86_64-linux-gnu/liblzma.so.5 (0x00007fb8e891c000)
+	libjbig.so.0 => /lib/x86_64-linux-gnu/libjbig.so.0 (0x00007fb8e870c000)
+	libjpeg.so.62 => /lib/x86_64-linux-gnu/libjpeg.so.62 (0x00007fb8e8688000)
+	libdeflate.so.0 => /lib/x86_64-linux-gnu/libdeflate.so.0 (0x00007fb8e866c000)
+	libz.so.1 => /lib/x86_64-linux-gnu/libz.so.1 (0x00007fb8e864f000)
+	libpthread.so.0 => /lib/x86_64-linux-gnu/libpthread.so.0 (0x00007fb8e862d000)
+[root@lab225201-basix tmp]$ 
+
+So, if we build and statically link to libssl and libcrypto, we should avoid problems.
 
