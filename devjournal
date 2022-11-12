@@ -509,3 +509,85 @@ To force a build of the addon when a prebuilt is not available, we need to add a
 We followed a tip from here:
   https://stackoverflow.com/questions/27275340/run-configure-in-gyp-file
 
+------------------------------------------------------------
+2022/11/12 takeshi:
+
+Building docker images to use prebuildify-cross:
+
+Smoke test:
+
+cd docker-images/debian10
+cp ../../build_deps.sh .
+docker build -t mayamatakeshi/sip-lab-debian10:latest .
+cd ../..
+npx prebuildify-cross -i mayamatakeshi/sip-lab-debian10:latest -t 16.0.0 --strip
+
+The above worked and the resulting addon:
+
+takeshi@takeshi-desktop:~/src/git/MayamaTakeshi/sip-lab$ file prebuilds/linux-x64/node.abi93.node 
+prebuilds/linux-x64/node.abi93.node: ELF 64-bit LSB shared object, x86-64, version 1 (GNU/Linux), dynamically linked, BuildID[sha1]=16ca20da2663c49f1f232e7d99b46709d4f57285, stripped
+
+could be used in both debian10 and debian11.
+
+Then I tried with Ubuntu 22.04:
+
+cd docker-images/jammy
+cp ../../build_deps.sh .
+docker build -t mayamatakeshi/sip-lab-jammy:latest .
+cd ../..
+npx prebuildify-cross -i mayamatakeshi/sip-lab-jammy:latest -t 16.0.0 --strip
+
+and it generated an addon with the same path/name:
+
+takeshi@takeshi-desktop:~/src/git/MayamaTakeshi/sip-lab$ file prebuilds/linux-x64/node.abi93.node 
+prebuilds/linux-x64/node.abi93.node: ELF 64-bit LSB shared object, x86-64, version 1 (GNU/Linux), dynamically linked, BuildID[sha1]=6587c79403de026748fccf7ec224d75426d20892, stripped
+
+But when I tried to use it on debian11 I got:
+
+[root@lab225201-basix sip-lab]$ node samples/simple.js 
+node:internal/modules/cjs/loader:1183
+  return process.dlopen(module, path.toNamespacedPath(filename));
+                 ^
+
+Error: libssl.so.3: cannot open shared object file: No such file or directory
+    at Object.Module._extensions..node (node:internal/modules/cjs/loader:1183:18)
+    at Module.load (node:internal/modules/cjs/loader:981:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:822:12)
+    at Module.require (node:internal/modules/cjs/loader:1005:19)
+    at require (node:internal/modules/cjs/helpers:102:18)
+    at load (/root/tmp/sip-lab/node_modules/node-gyp-build/index.js:22:10)
+    at Object.<anonymous> (/root/tmp/sip-lab/index.js:1:40)
+    at Module._compile (node:internal/modules/cjs/loader:1101:14)
+    at Object.Module._extensions..js (node:internal/modules/cjs/loader:1153:10)
+    at Module.load (node:internal/modules/cjs/loader:981:32) {
+  code: 'ERR_DLOPEN_FAILED'
+}
+
+So, the problem is that there is no way to differentiate between distros and distro versions. We can only identify the platform like linux-x64.
+
+What we can try to do is to build all dependencies and link to them statically so to not depend on what is installed in the OS:
+
+takeshi@takeshi-desktop:~/src/git/MayamaTakeshi/sip-lab$ ldd prebuilds/linux-x64/node.abi93.node 
+	linux-vdso.so.1 (0x00007fff6f751000)
+	libstdc++.so.6 => /lib/x86_64-linux-gnu/libstdc++.so.6 (0x00007f0749f35000)
+	libssl.so.3 => /lib/x86_64-linux-gnu/libssl.so.3 (0x00007f0749e91000)
+	libcrypto.so.3 => /lib/x86_64-linux-gnu/libcrypto.so.3 (0x00007f0749a4f000)
+	libuuid.so.1 => /lib/x86_64-linux-gnu/libuuid.so.1 (0x00007f0749a46000)
+	libtiff.so.5 => /lib/x86_64-linux-gnu/libtiff.so.5 (0x00007f07499c0000)
+	libspeex.so.1 => /lib/x86_64-linux-gnu/libspeex.so.1 (0x00007f07499a0000)
+	libm.so.6 => /lib/x86_64-linux-gnu/libm.so.6 (0x00007f07498b9000)
+	libgcc_s.so.1 => /lib/x86_64-linux-gnu/libgcc_s.so.1 (0x00007f0749899000)
+	libc.so.6 => /lib/x86_64-linux-gnu/libc.so.6 (0x00007f0749671000)
+	/lib64/ld-linux-x86-64.so.2 (0x00007f074a34c000)
+	libwebp.so.7 => /lib/x86_64-linux-gnu/libwebp.so.7 (0x00007f0749605000)
+	libzstd.so.1 => /lib/x86_64-linux-gnu/libzstd.so.1 (0x00007f0749536000)
+	liblzma.so.5 => /lib/x86_64-linux-gnu/liblzma.so.5 (0x00007f0749509000)
+	libjbig.so.0 => /lib/x86_64-linux-gnu/libjbig.so.0 (0x00007f07494f8000)
+	libjpeg.so.8 => /lib/x86_64-linux-gnu/libjpeg.so.8 (0x00007f0749477000)
+	libdeflate.so.0 => /lib/x86_64-linux-gnu/libdeflate.so.0 (0x00007f0749453000)
+	libz.so.1 => /lib/x86_64-linux-gnu/libz.so.1 (0x00007f0749437000)
+takeshi@takeshi-desktop:~/src/git/MayamaTakeshi/sip-lab$ 
+
+I think this will minimize problems but it will not completely eliminate them.
+
+

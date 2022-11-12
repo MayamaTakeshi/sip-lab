@@ -8,7 +8,7 @@
           'message': 'executing build_deps.sh',
           'inputs': [],
           'outputs': ['./3rdParty'],
-          'action': ['./build_deps.sh'],
+          'action': ['echo', './build_deps.sh'],
         },
       ],
       'sources': [
@@ -38,9 +38,6 @@
         "3rdParty/rapidjson/include",
         "3rdParty/spandsp/src",
         "<!@(node -p \"require('node-addon-api').include\")",
-      ],
-      "dependencies": [
-        "<!@(node -p \"require('node-addon-api').gyp\")"
       ],
       'conditions': [
         [ 'OS!="win"', {
