@@ -8,7 +8,7 @@
           'message': 'executing build_deps.sh',
           'inputs': [],
           'outputs': ['./3rdParty'],
-          'action': ['echo', './build_deps.sh'],
+          'action': ['bash', './build_deps.sh'],
         },
       ],
       'sources': [
