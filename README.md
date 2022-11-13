@@ -15,7 +15,6 @@ TODO:
   - add suport for T.38 fax
   - add support for WebRTC
   - add support for video playing/recording from/to file
-  - use prebuildify-cross to support multiple OSs and OS versions.
 
 ### Installation
 
