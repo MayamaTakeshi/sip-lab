@@ -1,6 +1,6 @@
 {
   "name": "sip-lab",
-  "version": "1.12.37",
+  "version": "1.12.38",
   "description": "",
   "main": "index.js",
   "engines": {
@@ -23,7 +23,7 @@
     "node-addon-api": "^5.0.0",
     "node-gyp": "^9.3.0",
     "node-gyp-build": "^4.5.0",
-    "sip-matching": "^1.3.32"
+    "sip-matching": "^1.3.34"
   },
   "devDependencies": {
     "prebuildify": "^5.0.1",
