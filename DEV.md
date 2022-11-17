@@ -28,9 +28,18 @@ npm install
 Then perform code changes and tests. When you are satisfied with them, update install.sh with the new commit id.
 
 #### prebuild binaries
+Previously we would do:
+
 ```
 nvm use v16.13.1 # if we try with v17 it will fail to build for -t 15.0.0
 npx prebuildify --strip -t 15.0.0 -t 16.0.0 -t 17.0.0 -t 18.0.0
+```
+However the above will build the addon to run on the current OS.
+
+Instead we will force the build on debian11 (using docker). So to this instead:
+```
+nvm use v16.13.1
+npx prebuildify-cross -i mayamatakeshi/sip-lab-debian11:latest -t 15.0.0 -t 16.0.0 -t 17.0.0 -t 18.0.0 --strip
 ```
 
 #### Running tests
