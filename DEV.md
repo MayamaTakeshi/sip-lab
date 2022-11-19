@@ -18,14 +18,14 @@ npx node-gyp clean
 Just delete the corresponding library subfolder in subfolder 3drParty.
 
 
-Then temporarily change install.sh to not checkout a specific version (or checkout a desired commit)
+Then temporarily change build_deps.sh to not checkout a specific version (or checkout a desired commit)
 
 Then run
 ```
 npm install
 ```
 
-Then perform code changes and tests. When you are satisfied with them, update install.sh with the new commit id.
+Then perform code changes and tests. When you are satisfied with them, update build_deps.sh with the new commit IDs.
 
 #### prebuild binaries
 Previously we would do:
@@ -36,7 +36,7 @@ npx prebuildify --strip -t 15.0.0 -t 16.0.0 -t 17.0.0 -t 18.0.0
 ```
 However the above will build the addon to run on the current OS.
 
-Instead we will force the build on debian11 (using docker). So to this instead:
+Instead we will force the build on debian11 (using docker). So do this instead:
 ```
 nvm use v16.13.1
 npx prebuildify-cross -i mayamatakeshi/sip-lab-debian11:latest -t 15.0.0 -t 16.0.0 -t 17.0.0 -t 18.0.0 --strip
