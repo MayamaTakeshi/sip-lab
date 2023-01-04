@@ -448,7 +448,9 @@ static pj_bool_t on_rx_request( pjsip_rx_data *rdata );
 static pj_bool_t on_rx_response( pjsip_rx_data *rdata );
 
 /* Callback to be called when media offer is received (in REINVITEs but also in late negotiaion scenario) */
-static void on_rx_offer(pjsip_inv_session *inv, const pjmedia_sdp_session *offer);
+//static void on_rx_offer(pjsip_inv_session *inv, const pjmedia_sdp_session *offer);
+static void on_rx_offer2(pjsip_inv_session *inv, struct pjsip_inv_on_rx_offer_cb_param *param);
+
 
 /* Callback to be called when REINVITE is received */
 //static pj_status_t on_rx_reinvite(pjsip_inv_session *inv, const pjmedia_sdp_session *offer, pjsip_rx_data *rdata);
@@ -792,7 +794,8 @@ int __pjw_init()
 	inv_cb.on_state_changed = &on_state_changed;
 	inv_cb.on_new_session = &on_forked;
 	inv_cb.on_media_update = &on_media_update;
-	inv_cb.on_rx_offer = &on_rx_offer;
+	inv_cb.on_rx_offer = NULL;
+    inv_cb.on_rx_offer2 = &on_rx_offer2;
 	//inv_cb.on_rx_reinvite = &on_rx_reinvite;
 	inv_cb.on_tsx_state_changed = &on_tsx_state_changed;
 	inv_cb.on_redirected = &on_redirected;
@@ -3754,8 +3757,8 @@ static pjsip_redirect_op on_redirected(pjsip_inv_session *inv, const pjsip_uri *
 	return PJSIP_REDIRECT_ACCEPT;
 }
 
-static void on_rx_offer(pjsip_inv_session *inv, const pjmedia_sdp_session *offer){
-	addon_log(LOG_LEVEL_DEBUG, "on_rx_offer offer=%x\n", offer);
+static void on_rx_offer2(pjsip_inv_session *inv, struct pjsip_inv_on_rx_offer_cb_param *param) {
+	addon_log(LOG_LEVEL_DEBUG, "on_rx_offer2\n");
 	if(g_shutting_down) return;
 
     /*
@@ -3768,11 +3771,12 @@ static void on_rx_offer(pjsip_inv_session *inv, const pjmedia_sdp_session *offer
 
 	char evt[2048];
 
-	//char *type;
-
 	Call *call = (Call*)inv->dlg->mod_data[mod_tester.id];
 
 	pj_status_t status;
+
+    const pjmedia_sdp_session *offer = param->offer;
+    const pjsip_rx_data *rdata = param->rdata;
 
 	pjmedia_sdp_conn *conn;
 	conn = offer->media[0]->conn;
@@ -3846,12 +3850,12 @@ static void on_rx_offer(pjsip_inv_session *inv, const pjmedia_sdp_session *offer
 		return;
 	}
 
-	/*
-	if(is_reinvite) {
-		make_evt_reinvite(evt, sizeof(evt), call_id, type);
-		dispatch_event(evt);
-	}
-	*/
+    // The below cannot be used: in case of delayed media scenarios, on_rx_offer and on_rx_offer2 will be called when the '200 OK'
+    // is received for an INVITE without SDP.
+    /*
+    make_evt_reinvite(evt, sizeof(evt), call_id, rdata->msg_info.len, rdata->msg_info.msg_buf);
+    dispatch_event(evt);
+    */
 
 	return;
 }

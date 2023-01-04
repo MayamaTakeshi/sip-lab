@@ -18,7 +18,7 @@ int make_evt_non_dialog_request(char *dest, int size, int sip_msg_len, const cha
 
 int make_evt_internal_error(char *dest, int size, const char *msg);
 
-//int make_evt_reinvite(char *dest, int size, long call_id, const char *type);
+int make_evt_reinvite(char *dest, int size, long call_id, int sip_msg_len, char *sip_msg);
 
 int make_evt_registration_status(char *dest, int size, long account_id, int code, const char *reason, int expires);
 

@@ -6,7 +6,14 @@ Basic tasks for development:
 
 #### To build
 ```
+sudo apt install build-essential automake autoconf libtool libspeex-dev libopus-dev libsdl2-dev libavdevice-dev libswscale-dev libv4l-dev libopencore-amrnb-dev libopencore-amrwb-dev libvo-amrwbenc-dev libvo-amrwbenc-dev libboost-dev libtiff-dev libpcap-dev libssl-dev uuid-dev cmake
+
 npm install
+```
+
+Thne confirm it is working:
+```
+node samples/simple.js
 ```
 
 #### To clean up (for a clean rebuild)

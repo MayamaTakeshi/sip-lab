@@ -46,11 +46,9 @@ int make_evt_internal_error(char *dest, int size, const char *msg) {
 	return snprintf(dest, size, "{\"event\": \"internal_error\", \"error\": \"%s\"}", msg);
 }
 
-/*
-int make_evt_reinvite(char *dest, int size, long call_id, const char *type) {
-	return snprintf(dest, size, "{\"event\": \"reinvite\", \"call_id\": %ld, \"type\": \"%s\"}", call_id, type); 
+int make_evt_reinvite(char *dest, int size, long call_id, int sip_msg_len, char *sip_msg) {
+    return snprintf(dest, size, "{\"event\": \"reinvite\", \"call_id\": %i}\n%.*s", call_id, sip_msg_len, sip_msg); 
 }
-*/
 
 int make_evt_registration_status(char *dest, int size, long account_id, int code, const char *reason, int expires) {
 	return snprintf(dest, size, "{\"event\": \"registration_status\", \"account_id\": %ld, \"code\": %i, \"reason\": \"%s\", \"expires\": %i}", account_id, code, reason, expires);
