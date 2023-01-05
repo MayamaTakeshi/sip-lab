@@ -654,3 +654,153 @@ CentOS Linux release 7.9.2009 (Core)
 [root@IPX029 tmp]# 
 
 Update: it will not be done. See #37.
+
+------------------------------------------------------------
+2023/01/05 takeshi:
+
+I will need to add support for MRCP, MSRP etc.
+For this, I should use pjlib networking functions so that they can be integrated with existing code using the same ioqueue in place for sip/rtp.
+Sockets should be allocated in sip session pool so that they can be reclained when the session ends.
+
+I asked ChatGPT:
+
+"write a sample echo server using pjlib and ioqueue."
+
+and it replied with:
+
+"Here is a simple example of how you might implement an echo server using PJLIB and the ioqueue library:"
+
+```
+#include <pjlib.h>
+#include <pjlib-util.h>
+#include <pjnath.h>
+
+#define PORT 4000
+
+/* Callback called by the library when incoming data is received */
+static pj_bool_t on_data_received(pj_activesock_t *asock,
+                                   void *data,
+                                   pj_size_t size,
+                                   pj_status_t status,
+                                   pj_size_t *remainder)
+{
+  /* Send the data back to the client */
+  pj_ssize_t sent = pj_activesock_send(asock, data, size, 0);
+  if (sent < 0) {
+    /* Error sending data */
+    return PJ_FALSE;
+  } else {
+    /* Successfully sent data, update the remainder */
+    *remainder = size - sent;
+    return PJ_TRUE;
+  }
+}
+
+/* Callback called by the library when a new client connects */
+static pj_bool_t on_accept_complete(pj_activesock_t *asock,
+                                     pj_sock_t sock,
+                                     const pj_sockaddr_t *src_addr,
+                                     int src_addr_len)
+{
+  /* Start reading data from the client */
+  pj_activesock_start_read(asock, NULL, 0, 0);
+  return PJ_TRUE;
+}
+
+int main()
+{
+  pj_status_t status;
+  pj_caching_pool cp;
+  pj_pool_t *pool;
+  pj_sock_t sock;
+  pj_activesock_t *asock;
+
+  /* Initialize PJLIB */
+  status = pj_init();
+  if (status != PJ_SUCCESS) {
+    /* Error initializing PJLIB */
+    return 1;
+  }
+
+  /* Create a pool factory */
+  pj_caching_pool_init(&cp, NULL, 0);
+  pool = pj_pool_create(&cp.factory, "echo-server", 1000, 1000, NULL);
+
+  /* Create a socket */
+  status = pj_sock_socket(PJ_AF_INET, PJ_SOCK_STREAM, 0, &sock);
+  if (status != PJ_SUCCESS) {
+    /* Error creating socket */
+    return 1;
+  }
+
+  /* Bind the socket to a port */
+  pj_sockaddr_in addr;
+  pj_bzero(&addr, sizeof(addr));
+  addr.sin_family = PJ_AF_INET;
+  addr.sin_addr.s_addr = pj_htonl(PJ_INADDR_ANY);
+  addr.sin_port = pj_htons(PORT);
+  status = pj_sock_bind(sock, &addr, sizeof(addr));
+  if (status != PJ_SUCCESS) {
+    /* Error binding socket */
+    return 1;
+  }
+
+  /* Start listening for incoming connections
+  status = pj_sock_listen(sock, 5);
+  if (status != PJ_SUCCESS) {
+    /* Error listening for connections */
+    return 1;
+  }
+
+  /* Create an active socket */
+  pj_activesock_cfg asock_cfg;
+  pj_activesock_cfg_default(&asock_cfg);
+  asock_cfg.grp_lock = NULL;
+  status = pj_activesock_create(pool, sock, pj_SOCK_STREAM(), &asock_cfg, &asock);
+  if (status != PJ_SUCCESS) {
+    /* Error creating active socket */
+    return 1;
+  }
+
+  /* Set the callbacks for the active socket */
+  pj_activesock_set_recv_cb(asock, pool, &on_data_received);
+  pj_activesock_set_accept_cb(asock, pool, &on_accept_complete);
+
+  /* Start accepting connections */
+  pj_sockaddr_in local_addr;
+  int addr_len = sizeof(local_addr);
+  pj_sock_getsockname(sock, &local_addr, &addr_len);
+  printf("Echo server listening on %s:%d\n",
+         pj_inet_ntoa(local_addr.sin_addr),
+         pj_ntohs(local_addr.sin_port));
+  status = pj_activesock_start_accept(asock, pool);
+  if (status != PJ_SUCCESS) {
+    /* Error starting accept */
+    return 1;
+  }
+
+  /* Run the event loop */
+  pj_bool_t running= PJ_TRUE;
+while (running) {
+pj_time_val timeout = { 0, 10 };
+pj_ioqueue_poll(pj_get_ioqueue_default(), &timeout);
+}
+
+/* Clean up */
+pj_activesock_close(asock);
+pj_sock_close(sock);
+pj_pool_release(pool);
+pj_caching_pool_destroy(&cp);
+pj_shutdown();
+
+return 0;
+}
+
+```
+
+"This code creates a socket, binds it to a port, and starts listening for incoming connections. When a new connection is accepted, it creates an active socket and sets the callbacks for receiving data and accepting new connections. The event loop runs continuously, calling the ioqueue's poll function to process incoming data and events. When the server is no longer needed, it closes the active socket and the underlying socket, releases the memory pool, and shuts down PJLIB."
+
+
+I eventually implemented working smoke test code by reading docs and samples and it seems the above indeed would work as it is very similar to what I came up with.
+So although ChatGPT frequently generates bogus code with an authoritative tone, for some cases it seems to be usable.
+
