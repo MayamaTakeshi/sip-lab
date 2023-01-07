@@ -21,6 +21,15 @@ node samples/simple.js
 npx node-gyp clean
 ```
 
+### To build the addon after changes in source files
+```
+npm run build
+```
+or force a full rebuild
+```
+npm run rebuild
+```
+
 #### To update pjproject, spandsp, bcg729 or rapidjson
 Just delete the corresponding library subfolder in subfolder 3drParty.
 

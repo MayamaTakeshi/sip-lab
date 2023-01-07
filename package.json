@@ -8,6 +8,8 @@
   },
   "scripts": {
     "install": "node-gyp-build",
+    "build": "node-gyp build",
+    "rebuild": "node-gyp rebuild",
     "test": "./runtests"
   },
   "repository": {
