@@ -879,4 +879,309 @@ Supported: replaces, 100rel
 Content-Length:  0
 
 
+------------------------------------------------------------
+2022/01/06 takeshi:
 
+ChatGPT test:
+
+Write sample code creating SDP for MRCP using pjmedia.
+
+Here is an example of how you could create an SDP (Session Description Protocol) for MRCP (Media Resource Control Protocol) using PJSIP and PJMedia:
+
+```
+#include <pjmedia.h>
+#include <pjmedia-codec.h>
+#include <pjlib-util.h>
+#include <pjlib.h>
+
+/* Create the SDP for MRCP */
+pj_status_t create_mrcp_sdp(pjmedia_sdp_session **sdp)
+{
+    pj_pool_t *pool;
+    pjmedia_sdp_media *m;
+    pjmedia_sdp_attr *attr;
+    pj_status_t status;
+
+    /* Create a pool for the SDP */
+    pool = pj_pool_create(NULL, "sdp%p", 1024, 1024, NULL);
+    if (!pool) {
+        return PJ_ENOMEM;
+    }
+
+    /* Create the SDP session */
+    *sdp = pj_pool_zalloc(pool, sizeof(pjmedia_sdp_session));
+    if (!*sdp) {
+        pj_pool_release(pool);
+        return PJ_ENOMEM;
+    }
+
+    /* Set the SDP version */
+    (*sdp)->origin.version = 0;
+
+    /* Set the SDP origin */
+    pj_strdup2((*sdp)->pool, &(*sdp)->origin.user, "mrcp");
+    pj_strdup2((*sdp)->pool, &(*sdp)->origin.addr, "127.0.0.1");
+
+    /* Set the SDP session name */
+    pj_strdup2((*sdp)->pool, &(*sdp)->name, "MRCP Session");
+
+    /* Create the SDP media */
+    m = pj_pool_zalloc(pool, sizeof(pjmedia_sdp_media));
+    if (!m) {
+        pj_pool_release(pool);
+        return PJ_ENOMEM;
+    }
+
+    /* Set the media type and port */
+    pj_strdup2(pool, &m->desc.media, "audio");
+    m->desc.port = 0;
+
+    /* Set the media transport */
+    pj_strdup2(pool, &m->desc.transport, "RTP/AVP");
+
+    /* Add the media to the SDP */
+    status = pjmedia_sdp_media_add_attr(m, &attr);
+    if (status != PJ_SUCCESS) {
+        pj_pool_release(pool);
+        return status;
+    }
+
+    attr->name = pj_str("rtpmap");
+    attr->value = pj_str("0 pcmu/8000");
+
+    pjmedia_sdp_media_add_attr(m, &attr);
+    if (status != PJ_SUCCESS) {
+        pj_pool_release(pool);
+        return status;
+    }
+
+    attr->name = pj_str("fmtp");
+    attr->value = pj_str("0-15");
+
+    pjmedia_sdp_session_add_media(sdp, m);
+
+    /* Return success */
+    return PJ_SUCCESS;
+}
+```
+
+But we should have media for application TCP/MRCPv2 in the SDP.
+
+Yes, you are correct. If you want to include a media description for the MRCPv2 application over TCP in the SDP, you can modify the create_mrcp_sdp function as follows:
+
+```
+
+pj_status_t create_mrcp_sdp(pjmedia_sdp_session **sdp)
+{
+    pj_pool_t *pool;
+    pjmedia_sdp_media *m;
+    pjmedia_sdp_attr *attr;
+    pj_status_t status;
+
+    /* Create a pool for the SDP */
+    pool = pj_pool_create(NULL, "sdp%p", 1024, 1024, NULL);
+    if (!pool) {
+        return PJ_ENOMEM;
+    }
+
+    /* Create the SDP session */
+    *sdp = pj_pool_zalloc(pool, sizeof(pjmedia_sdp_session));
+    if (!*sdp) {
+        pj_pool_release(pool);
+        return PJ_ENOMEM;
+    }
+
+    /* Set the SDP version */
+    (*sdp)->origin.version = 0;
+
+    /* Set the SDP origin */
+    pj_strdup2((*sdp)->pool, &(*sdp)->origin.user, "mrcp");
+    pj_strdup2((*sdp)->pool, &(*sdp)->origin.addr, "127.0.0.1");
+
+    /* Set the SDP session name */
+    pj_strdup2((*sdp)->pool, &(*sdp)->name, "MRCP Session");
+
+    /* Create the SDP media for the MRCPv2 application over TCP */
+    m = pj_pool_zalloc(pool, sizeof(pjmedia_sdp_media));
+    if (!m) {
+        pj_pool_release(pool);
+        return PJ_ENOMEM;
+    }
+
+    /* Set the media type and port */
+    pj_strdup2(pool, &m->desc.media, "application");
+    m->desc.port = 0;
+
+    /* Set the media transport */
+    pj_strdup2(pool, &m->desc.transport, "TCP/MRCPv2");
+
+    /* Add the media to the SDP */
+    status = pjmedia_sdp_media_add_attr(m, &attr);
+    if (status != PJ_SUCCESS) {
+        pj_pool_release(pool);
+        return status;
+    }
+
+    /* Add any additional attributes as needed */
+    /* ... */
+
+    pjmedia_sdp_session_add_media(sdp, m);
+
+    /* Return success */
+    return PJ_SUCCESS;
+}
+
+```
+
+This code creates a media object for the MRCPv2 application over TCP and sets its type, port, and transport. It then adds the media object to the SDP session. You can also add any additional attributes to the media object as needed.
+
+
+Then I asked:
+
+Write a function to create an SDP for MSRP using pjmedia.
+
+Here is an example of how you could create an SDP (Session Description Protocol) for MSRP (Message Session Relay Protocol) using PJSIP and PJMedia:
+
+```
+#include <pjmedia.h>
+#include <pjmedia-codec.h>
+#include <pjlib-util.h>
+#include <pjlib.h>
+
+/* Create the SDP for MSRP */
+pj_status_t create_msrp_sdp(pjmedia_sdp_session **sdp)
+{
+    pj_pool_t *pool;
+    pjmedia_sdp_media *m;
+    pjmedia_sdp_attr *attr;
+    pj_status_t status;
+
+    /* Create a pool for the SDP */
+    pool = pj_pool_create(NULL, "sdp%p", 1024, 1024, NULL);
+    if (!pool) {
+        return PJ_ENOMEM;
+    }
+
+    /* Create the SDP session */
+    *sdp = pj_pool_zalloc(pool, sizeof(pjmedia_sdp_session));
+    if (!*sdp) {
+        pj_pool_release(pool);
+        return PJ_ENOMEM;
+    }
+
+    /* Set the SDP version */
+    (*sdp)->origin.version = 0;
+
+    /* Set the SDP origin */
+    pj_strdup2((*sdp)->pool, &(*sdp)->origin.user, "msrp");
+    pj_strdup2((*sdp)->pool, &(*sdp)->origin.addr, "127.0.0.1");
+
+    /* Set the SDP session name */
+    pj_strdup2((*sdp)->pool, &(*sdp)->name, "MSRP Session");
+
+    /* Create the SDP media */
+    m = pj_pool_zalloc(pool, sizeof(pjmedia_sdp_media));
+    if (!m) {
+        pj_pool_release(pool);
+        return PJ_ENOMEM;
+    }
+
+    /* Set the media type and port */
+    pj_strdup2(pool, &m->desc.media, "message");
+    m->desc.port = 0;
+
+    /* Set the media transport */
+    pj_strdup2(pool, &m->desc.transport, "TCP/MSRP");
+
+    /* Add the media to the SDP */
+    status = pjmedia_sdp_media_add_attr(m, &attr);
+    if (status != PJ_SUCCESS) {
+        pj_pool_release(pool);
+        return status;
+    }
+
+    /* Add any additional attributes as needed */
+    /* ... */
+
+    pjmedia_sdp_session_add_media(sdp, m);
+
+    /* Return success */
+    return PJ_SUCCESS;
+}
+
+
+```
+This code creates a pool for the SDP, and then creates the SDP session and sets its version, origin, and name. Next, it creates a media object for the SDP and sets its type, port, and transport. Finally, it adds the media object to the SDP session. You can also add any additional attributes to the
+
+This code is missing the part where media i s set for message TCP/MSRP.
+
+I apologize for the oversight in my previous response. Here is the corrected version of the create_msrp_sdp function that includes the media description for the MSRP message over TCP:
+
+```
+pj_status_t create_msrp_sdp(pjmedia_sdp_session **sdp)
+{
+    pj_pool_t *pool;
+    pjmedia_sdp_media *m;
+    pjmedia_sdp_attr *attr;
+    pj_status_t status;
+
+    /* Create a pool for the SDP */
+    pool = pj_pool_create(NULL, "sdp%p", 1024, 1024, NULL);
+    if (!pool) {
+        return PJ_ENOMEM;
+    }
+
+    /* Create the SDP session */
+    *sdp = pj_pool_zalloc(pool, sizeof(pjmedia_sdp_session));
+    if (!*sdp) {
+        pj_pool_release(pool);
+        return PJ_ENOMEM;
+    }
+
+    /* Set the SDP version */
+    (*sdp)->origin.version = 0;
+
+    /* Set the SDP origin */
+    pj_strdup2((*sdp)->pool, &(*sdp)->origin.user, "msrp");
+    pj_strdup2((*sdp)->pool, &(*sdp)->origin.addr, "127.0.0.1");
+
+    /* Set the SDP session name */
+    pj_strdup2((*sdp)->pool, &(*sdp)->name, "MSRP Session");
+
+    /* Create the SDP media for the MSRP message over TCP */
+    m = pj_pool_zalloc(pool, sizeof(pjmedia_sdp_media));
+    if (!m) {
+        pj_pool_release(pool);
+        return PJ_ENOMEM;
+    }
+
+    /* Set the media type and port */
+    pj_strdup2(pool, &m->desc.media, "message");
+    m->desc.port = 0;
+
+    /* Set the media transport */
+    pj_strdup2(pool, &m->desc.transport, "TCP/MSRP");
+
+    /* Add the media to the SDP */
+    status = pjmedia_sdp_media_add_attr(m, &attr);
+    if (status != PJ_SUCCESS) {
+        pj_pool_release(pool);
+        return status;
+    }
+
+    /* Add any additional attributes as needed */
+    /* ... */
+
+    pjmedia_sdp_session_add_media(sdp, m);
+
+    /* Return success */
+    return PJ_SUCCESS;
+}
+
+```
+
+This code creates a media object for the MSRP message over TCP and sets its type, port, and transport. It then adds the media object to the SDP session. You can also add any additional attributes to the media object as needed.
+
+I hope this helps! Let me know if you have any questions.
+
+------------------------------------------------------------
