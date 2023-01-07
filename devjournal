@@ -1113,7 +1113,7 @@ pj_status_t create_msrp_sdp(pjmedia_sdp_session **sdp)
 ```
 This code creates a pool for the SDP, and then creates the SDP session and sets its version, origin, and name. Next, it creates a media object for the SDP and sets its type, port, and transport. Finally, it adds the media object to the SDP session. You can also add any additional attributes to the
 
-This code is missing the part where media i s set for message TCP/MSRP.
+This code is missing the part where media is set for message TCP/MSRP.
 
 I apologize for the oversight in my previous response. Here is the corrected version of the create_msrp_sdp function that includes the media description for the MSRP message over TCP:
 
@@ -1185,3 +1185,206 @@ This code creates a media object for the MSRP message over TCP and sets its type
 I hope this helps! Let me know if you have any questions.
 
 ------------------------------------------------------------
+
+I am considering using pj_list to manage multiple media in the SIP calls.
+
+So I asked ChatGPT:
+
+How to use pj_list with pool?
+
+The pj_list is a doubly-linked list implementation provided by the pjlib library. You can use a pj_list with a pj_pool_t memory pool by allocating memory for the list nodes from the pool.
+
+Here is an example of how to use a pj_list with a pj_pool_t memory pool:
+```
+
+#include <pjlib.h>
+
+int main()
+{
+    pj_pool_t *pool;
+    pj_list_t list;
+
+    // Create a memory pool.
+    pool = pj_pool_create(NULL, "mypool", 1024, 1024, NULL);
+
+    // Initialize the list.
+    pj_list_init(&list);
+
+    // Allocate a list node from the pool.
+    pj_list_node *node = (pj_list_node*) pj_pool_alloc(pool, sizeof(pj_list_node));
+
+    // Insert the node into the list.
+    pj_list_insert_before(&list, node);
+
+    // The node will be automatically released back to the pool when the pool is destroyed.
+}
+
+```
+
+Note that when you allocate memory for a pj_list_node from a pj_pool_t, the memory will be automatically released back to the pool when the pool is destroyed. This can be convenient for managing the memory used by the list.
+
+You can also use the pj_list_erase function to remove a node from the list and release its memory back to the pool. Here is an example:
+
+```
+
+#include <pjlib.h>
+
+int main()
+{
+    pj_pool_t *pool;
+    pj_list_t list;
+
+    // Create a memory pool.
+    pool = pj_pool_create(NULL, "mypool", 1024, 1024, NULL);
+
+    // Initialize the list.
+    pj_list_init(&list);
+
+    // Allocate a list node from the pool.
+    pj_list_node *node = (pj_list_node*) pj_pool_alloc(pool, sizeof(pj_list_node));
+
+    // Insert the node into the list.
+    pj_list_insert_before(&list, node);
+
+    // Remove the node from the list and release its memory back to the pool.
+    pj_list_erase(node);
+}
+
+```
+
+But I could also use an array:
+
+How to use pj_array_insert with pool?
+
+You can use pj_array_insert with a pj_pool_t memory pool by allocating memory for the elements of the array from the pool.
+
+Here is an example of how to use pj_array_insert with a pj_pool_t memory pool:
+```
+
+#include <pjlib.h>
+
+int main()
+{
+    pj_pool_t *pool;
+    pj_array_t array;
+
+    // Create a memory pool.
+    pool = pj_pool_create(NULL, "mypool", 1024, 1024, NULL);
+
+    // Initialize the array with capacity for 10 elements.
+    pj_array_init(pool, &array, 10, sizeof(int), NULL);
+
+    // Allocate memory for an element from the pool.
+    int *element = (int*) pj_pool_alloc(pool, sizeof(int));
+    *element = 5;
+
+    // Insert the element into the array.
+    pj_array_insert(&array, element);
+
+    // The element will be automatically released back to the pool when the pool is destroyed.
+}
+```
+
+Note that when you allocate memory for an element of the array from a pj_pool_t, the memory will be automatically released back to the pool when the pool is destroyed. This can be convenient for managing the memory used by the array.
+
+You can also use the pj_array_erase function to remove an element from the array and release its memory back to the pool. Here is an example:
+
+```
+
+#include <pjlib.h>
+
+int main()
+{
+    pj_pool_t *pool;
+    pj_array_t array;
+
+    // Create a memory pool.
+    pool = pj_pool_create(NULL, "mypool", 1024, 1024, NULL);
+
+    // Initialize the array with capacity for 10 elements.
+    pj_array_init(pool, &array, 10, sizeof(int), NULL);
+
+    // Allocate memory for an element from the pool.
+    int *element = (int*) pj_pool_alloc(pool, sizeof(int));
+    *element = 5;
+
+    // Insert the element into the array.
+    pj_array_insert(&array, element);
+
+    // Remove the element from the array and release its memory back to the pool.
+    pj_array_erase(&array, element);
+}
+
+```
+It is OK to use pj_array_insert when the capacity of the array was already reached?
+
+Yes, it is okay to use pj_array_insert even if the capacity of the array has already been reached. When the capacity of the array has been reached and you call pj_array_insert, pj_array will automatically allocate more memory to store the new element.
+
+For example:
+
+```
+
+#include <pjlib.h>
+
+int main()
+{
+    pj_array_t array;
+    int element;
+
+    // Initialize the array with capacity for 1 element.
+    pj_array_init(NULL, &array, 1, sizeof(int), NULL);
+
+    // Insert an element into the array.
+    element = 5;
+    pj_array_insert(&array, &element);
+
+    // Insert another element into the array.
+    element = 6;
+    pj_array_insert(&array, &element);
+
+    // The array will automatically allocate more memory to store the second element.
+}
+
+```
+
+Keep in mind that constantly allocating more memory to store new elements can be inefficient, especially if you are inserting a large number of elements into the array. In such cases, it may be more efficient to initialize the array with a larger capacity to begin with, to avoid the need for frequent reallocations.
+
+You can use the pj_array_set_capacity function to set the capacity of the array to a specific value. This can be useful if you know in advance how many elements you will be inserting into the array and want to avoid the overhead of frequent reallocations.
+
+Please show me code where the array itself is allocated from the pool.
+
+Certainly. Here is an example of how you can allocate the pj_array_t structure itself from a pj_pool_t memory pool:
+
+```
+
+#include <pjlib.h>
+
+int main()
+{
+    pj_pool_t *pool;
+    pj_array_t *array;
+
+    // Create a memory pool.
+    pool = pj_pool_create(NULL, "mypool", 1024, 1024, NULL);
+
+    // Allocate the array structure from the pool.
+    array = (pj_array_t*) pj_pool_alloc(pool, sizeof(pj_array_t));
+
+    // Initialize the array with capacity for 10 elements.
+    pj_array_init(pool, array, 10, sizeof(int), NULL);
+
+    // Insert an element into the array.
+    int element = 5;
+    pj_array_insert(array, &element);
+
+    // The array and its elements will be automatically released back to the pool when the pool is destroyed.
+}
+
+```
+
+In this example, the pj_array_t structure is allocated from the memory pool and the array is initialized with a capacity for 10 elements. When you insert an element into the array, pj_array will allocate memory for the element from the pool. When the pool is destroyed, the memory used by the array and its elements will be automatically released back to the pool.
+
+Keep in mind that when you allocate the pj_array_t structure from a pj_pool_t, you must also pass the memory pool to the pj_array_init function as the first argument. This will ensure that the array allocates memory for its elements from the specified pool.
+
+
+
