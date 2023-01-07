@@ -804,3 +804,79 @@ return 0;
 I eventually implemented working smoke test code by reading docs and samples and it seems the above indeed would work as it is very similar to what I came up with.
 So although ChatGPT frequently generates bogus code with an authoritative tone, for some cases it seems to be usable.
 
+------------------------------------------------------------
+2022/01/06 takeshi:
+
+Regarding on_rx_reinvite:
+
+If we enable it like this:
+
+    inv_cb.on_rx_offer = NULL;
+    inv_cb.on_rx_offer2 = &on_rx_offer2;
+    inv_cb.on_rx_reinvite = &on_rx_reinvite;
+
+static pj_status_t on_rx_reinvite(pjsip_inv_session *inv, const pjmedia_sdp_session *offer, pjsip_rx_data *rdata) {
+    printf("on_rx_reinvite\n");
+    return PJ_SUCCESS;
+}
+
+
+then when we do a reinvite on a call like this:
+
+sip.call.reinvite(oc.id, {hold: true})
+
+we will get '200 OK' without a body like this:
+
+INVITE sip:sip-lab@127.0.0.1:5092 SIP/2.0
+Via: SIP/2.0/UDP 127.0.0.1:5090;rport;branch=z9hG4bKPj95c7dd9c-5f1f-489c-90b6-dd90d03bc905
+Max-Forwards: 70
+From: sip:alice@test.com;tag=86bee9d5-ca74-41a8-b135-8a7d6eda2de0
+To: sip:bob@127.0.0.1;tag=b7808a74-9613-458a-82a1-20d033347001
+Contact: <sip:sip@127.0.0.1:5090>
+Call-ID: fd1e8d7f-1627-4fae-b886-c64b88670eaa
+CSeq: 22618 INVITE
+Allow: MESSAGE, SUBSCRIBE, NOTIFY, REFER, INVITE, ACK, BYE, CANCEL, UPDATE
+Supported: replaces
+Content-Type: application/sdp
+Content-Length:   586
+
+v=0
+o=- 3881951753 3881951754 IN IP4 127.0.0.1
+s=pjmedia
+t=0 0
+m=audio 10000 RTP/AVP 0 8 3 96 97 98 99 9 18 120 121 122
+c=IN IP4 127.0.0.1
+b=TIAS:64000
+a=rtcp:10001 IN IP4 127.0.0.1
+a=rtpmap:0 PCMU/8000
+a=rtpmap:8 PCMA/8000
+a=rtpmap:3 GSM/8000
+a=rtpmap:96 iLBC/8000
+a=fmtp:96 mode=30
+a=rtpmap:97 speex/32000
+a=rtpmap:98 speex/16000
+a=rtpmap:99 speex/8000
+a=rtpmap:9 G722/8000
+a=rtpmap:18 G729/8000
+a=rtpmap:120 telephone-event/8000
+a=fmtp:120 0-16
+a=rtpmap:121 telephone-event/32000
+a=fmtp:121 0-16
+a=rtpmap:122 telephone-event/16000
+a=fmtp:122 0-16
+a=sendonly
+
+
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 127.0.0.1:5090;rport=5090;received=127.0.0.1;branch=z9hG4bKPj95c7dd9c-5f1f-489c-90b6-dd90d03bc905
+Call-ID: fd1e8d7f-1627-4fae-b886-c64b88670eaa
+From: <sip:alice@test.com>;tag=86bee9d5-ca74-41a8-b135-8a7d6eda2de0
+To: <sip:bob@127.0.0.1>;tag=b7808a74-9613-458a-82a1-20d033347001
+CSeq: 22618 INVITE
+Contact: <sip:sip-lab@127.0.0.1:5092>
+Allow: MESSAGE, SUBSCRIBE, NOTIFY, REFER, INVITE, ACK, BYE, CANCEL, UPDATE, PRACK
+Supported: replaces, 100rel
+Content-Length:  0
+
+
+

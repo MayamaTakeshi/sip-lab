@@ -453,7 +453,7 @@ static void on_rx_offer2(pjsip_inv_session *inv, struct pjsip_inv_on_rx_offer_cb
 
 
 /* Callback to be called when REINVITE is received */
-//static pj_status_t on_rx_reinvite(pjsip_inv_session *inv, const pjmedia_sdp_session *offer, pjsip_rx_data *rdata);
+static pj_status_t on_rx_reinvite(pjsip_inv_session *inv, const pjmedia_sdp_session *offer, pjsip_rx_data *rdata);
 
 /* Callback to be called when Redirect is received */
 static pjsip_redirect_op on_redirected(pjsip_inv_session *inv, const pjsip_uri *target, const pjsip_event *e);
@@ -933,7 +933,7 @@ int __pjw_init()
 	inv_cb.on_media_update = &on_media_update;
 	inv_cb.on_rx_offer = NULL;
     inv_cb.on_rx_offer2 = &on_rx_offer2;
-	//inv_cb.on_rx_reinvite = &on_rx_reinvite;
+	inv_cb.on_rx_reinvite = &on_rx_reinvite;
 	inv_cb.on_tsx_state_changed = &on_tsx_state_changed;
 	inv_cb.on_redirected = &on_redirected;
 
@@ -3997,6 +3997,11 @@ static void on_rx_offer2(pjsip_inv_session *inv, struct pjsip_inv_on_rx_offer_cb
     */
 
 	return;
+}
+
+static pj_status_t on_rx_reinvite(pjsip_inv_session *inv, const pjmedia_sdp_session *offer, pjsip_rx_data *rdata) {
+    printf("on_rx_reinvite\n");
+    return !PJ_SUCCESS;
 }
 
 static void on_dtmf(pjmedia_stream *stream, void *user_data, int digit){
