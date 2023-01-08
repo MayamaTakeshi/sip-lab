@@ -1387,4 +1387,328 @@ In this example, the pj_array_t structure is allocated from the memory pool and 
 Keep in mind that when you allocate the pj_array_t structure from a pj_pool_t, you must also pass the memory pool to the pj_array_init function as the first argument. This will ensure that the array allocates memory for its elements from the specified pool.
 
 
+------------------------------------------------------------
+2023/01/08 takeshi:
+
+Here are some samples of different media session offers and answers:
+
+Audio:
+```
+                    INVITE sip:UserB2@ there.com SIP/2.0
+                    Via: SIP/2.0/UDP ss1.wcom.com:5060;branch=2
+                    Via: SIP/2.0/UDP here.com:5060
+                    Record-Route:
+                    From: BigGuy
+                    To: LittleGuy
+                    Call-ID: 12345600@here.com
+                    CSeq: 1 INVITE
+                    Contact: BigGuy
+                    Content-Type: application/sdp
+                    Content-Length: ...
+
+                    v=0
+                    o=UserA 2890844526 2890844526 IN IP4 client.here.com
+                    s=Session SDP
+                    c=IN IP4 100.101.102.103
+                    t=0 0
+                    m=audio 49170 RTP/AVP 0
+                    a=rtpmap:0 PCMU/8000
+
+
+                    SIP/2.0 200 OK
+                    Via: SIP/2.0/UDP wcom.com:5060; branch=2
+                    Via: SIP/2.0/UDP here.com:5060
+                    Record-Route:
+                    From: TheBigGuy
+                    To: TheLittleGuy ;tag=123456
+                    Call-Id: 12345600@here.com
+                    CSeq: 1 INVITE
+                    Contact: TheLittleGuyVoiceMail
+                    Content-Type: application/sdp
+                    Content-Length:
+
+                    v=0
+                    o=UserB 2890844527 2890844527 IN IP4 vm.wcom.com
+                    s=Session SDP
+                    c=IN IP4 110.111.112.114
+                    t=0 0
+                    m=audio 3456 RTP/AVP 0
+                    a=rtpmap:0 PCMU/8000 
+
+```
+
+Audio and Video:
+```
+
+INVITE sip:68854109@36.13.226.123:5330 SIP/2.0
+Via: SIP/2.0/UDP 202.173.5.227;branch=z9hG4bK0ad6.98f64bc6fb1902d8a641ecf938033a0e.0
+Via: SIP/2.0/UDP 192.168.50.101:5791;received=36.13.226.123;branch=z9hG4bKLXpxn8j6AvZU87ke;rport=5791
+Contact: <sip:14084112@36.13.226.123:5791>
+Max-Forwards: 69
+From: <sip:05068608167@softphone.spc.brastel.ne.jp>;tag=E03BBCA8FF01003D4CF07357422B93FE
+Allow: ACK, BYE, CANCEL, INFO, INVITE, NOTIFY, OPTIONS, REFER
+Supported: replaces, path
+Content-Type: application/sdp
+To: "05068634601" <sip:68854109@softphone.spc.brastel.ne.jp>;tag=A96401AB587CE38E37AD7DC61D6564A1
+Call-ID: 66E9237FD24ED124E4647BBDB9AC0EBF853FFAB1
+CSeq: 1 INVITE
+User-Agent: Softphone/5.9.36 (build 1783094; iOS 15.6; arm64-neon)
+Content-Length: 546
+
+v=0
+o=- 0924519482 25587 IN IP4 172.26.170.170
+s=unazhle
+c=IN IP4 202.173.5.228
+t=0 0
+m=audio 35900 RTP/AVP 3 0 8 18 101
+a=rtpmap:3 GSM/8000
+a=rtpmap:0 PCMU/8000
+a=rtpmap:8 PCMA/8000
+a=rtpmap:18 G729/8000
+a=fmtp:18 annexb=no
+a=rtpmap:101 telephone-event/8000
+a=fmtp:101 0-15
+a=sendrecv
+a=rtcp:35901
+a=ptime:20
+m=video 35916 RTP/AVP 99 108
+a=rtpmap:99 H264/90000
+a=fmtp:99 profile-level-id=42800d;packetization-mode=1;level-asymmetry-allowed=1
+a=rtpmap:108 VP8/90000
+a=fmtp:108 max-fr=30;max-fs=3600
+a=sendrecv
+a=rtcp:35917
+
+
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 202.173.5.227;branch=z9hG4bK0ad6.98f64bc6fb1902d8a641ecf938033a0e.0
+Via: SIP/2.0/UDP 192.168.50.101:5791;received=36.13.226.123;branch=z9hG4bKLXpxn8j6AvZU87ke;rport=5791
+Record-Route: <sip:202.173.5.227;lr=on;ftag=A96401AB587CE38E37AD7DC61D6564A1;vsf=AAAAAAYNCAMMBwMNdkNeJgcfDhseDUEdFU1dEhFPEQYEH1oLCQAEFS5qcA--;did=96d.253>
+Contact: <sip:68854109@192.168.50.236:5330>
+From: <sip:05068608167@softphone.spc.brastel.ne.jp>;tag=E03BBCA8FF01003D4CF07357422B93FE
+Call-ID: 66E9237FD24ED124E4647BBDB9AC0EBF853FFAB1
+CSeq: 1 INVITE
+To: "05068634601" <sip:68854109@softphone.spc.brastel.ne.jp>;tag=A96401AB587CE38E37AD7DC61D6564A1
+Allow: ACK, BYE, CANCEL, INFO, INVITE, MESSAGE, NOTIFY, OPTIONS, REFER
+Supported: replaces, path
+Content-Type: application/sdp
+User-Agent: Softphone/5.6.5 (build 1796064; Android 9; arm64-v8a)
+Content-Length: 341
+
+v=0
+o=- 2720741187 48846 IN IP4 172.26.170.170
+s=bngitxz
+c=IN IP4 192.168.50.236
+t=0 0
+m=audio 60288 RTP/AVP 3 101
+a=rtpmap:101 telephone-event/8000
+a=fmtp:101 0-15
+a=ptime:20
+a=sendrecv
+m=video 52406 RTP/AVP 99
+a=rtpmap:99 H264/90000
+a=fmtp:99 profile-level-id=42800d;packetization-mode=1;level-asymmetry-allowed=1
+a=sendrecv
+```
+
+
+T.38:
+```
+INVITE sip:+1-650-555-2222@iftgw.there.com;user=phone SIP/2.0 
+Via: SIP/2.0/UDP obelix.wcom.com:5060; branch=2d007.1 
+Via: SIP/2.0/UDP ifax.here.com:5060 
+Record-Route: <sip:+1-650-555-2222@iftgw.there.com;  
+             maddr=obelix.wcom.com> 
+From: sip:+1-303-555-1111@ifax.here.com;user=phone;tag=ab111 
+To: sip:+1-650-555-2222@obelix.wcom.com;user=phone 
+Call-ID: 1717@ifax.here.com 
+CSeq: 17 INVITE 
+Contact: <sip:+1-303-555-1111@ifax.here.com> 
+Content-Type: application/sdp 
+Content-Length: 320 
+
+v=0 
+o=ifaxgw1 2890846527 2890846527 IN IP4 ifax.here.com 
+s=Session SDP 
+c=IN IP4 ifaxmg.here.com 
+t=0 0 
+m=image 15002 udptl t38 
+a=T38FaxVersion:0 
+a=T38MaxBitRate:14400 
+a=T38FaxFillBitRemoval:0 
+a=T38FaxTranscodingMMR:0 
+a=T38FaxTranscodingJBIG:0 
+a=T38FaxRateManagement:transferredTCF 
+a=T38FaxMaxBuffer:72 
+a=T38FaxMaxDatagram:316 
+a=T38FaxUdpEC:t38UDPFEC 
+a=T38FaxUdpEC:t38UDPRedundancy 
+
+
+SIP/2.0 200 OK 
+Via: SIP/2.0/UDP obelix.wcom.com:5060; branch=2d007.1 
+Via: SIP/2.0/UDP ifax.here.com:5060 
+From: sip:+1-303-555-1111@ifax.here.com;user=phone;tag=ab11 
+To: sip:+1-650-555-2222@obelix.wcom.com;user=phone;tag=cde17 
+Call-ID: 1717@ifax.here.com 
+CSeq: 17 INVITE 
+Contact: <sip:+1-650-555-2222@iftgw.there.com> 
+Content-Type: application/sdp 
+Content-Length: 320 
+
+v=0 
+o=faxgw1 2890844527 2890844527 IN IP4 iftgw.there.com 
+s=Session SDP 
+c=IN IP4 iftmg.there.com 
+t=0 0 
+m=image 49172 udptl t38 
+a=T38FaxVersion:0 
+a=T38MaxBitRate:14400
+```
+
+MRCPv2:
+```
+INVITE sip:mresources@example.com SIP/2.0
+Via:SIP/2.0/TCP client.atlanta.example.com:5060;
+branch=z9hG4bK74bf9
+Max-Forwards:6
+To:MediaServer <sip:mresources@example.com>
+From:sarvi <sip:sarvi@example.com>;tag=1928301774
+Call-ID:a84b4c76e66710
+CSeq:314161 INVITE
+Contact:<sip:sarvi@client.example.com>
+Content-Type:application/sdp
+Content-Length:...
+
+v=0
+o=sarvi 2890844526 2890842808 IN IP4 192.0.2.4
+s=-
+c=IN IP4 192.0.2.12
+m=application 9 TCP/MRCPv2 1
+a=setup:active
+a=connection:new
+a=resource:speechsynth
+a=cmid:1
+m=audio 49170 RTP/AVP 0
+a=rtpmap:0 pcmu/8000
+a=recvonly
+a=mid:1
+
+
+SIP/2.0 200 OK
+Via:SIP/2.0/TCP client.atlanta.example.com:5060;
+branch=z9hG4bK74bf9
+To:MediaServer <sip:mresources@example.com>;tag=62784
+From:sarvi <sip:sarvi@example.com>;tag=1928301774
+Call-ID:a84b4c76e66710
+CSeq:314161 INVITE
+Contact:<sip:mresources@server.example.com>
+Content-Type:application/sdp
+Content-Length:...
+
+v=0
+o=- 2890844526 2890842808 IN IP4 192.0.2.4
+s=-
+c=IN IP4 192.0.2.11
+m=application 32416 TCP/MRCPv2 1
+a=setup:passive
+a=connection:new
+a=channel:32AECB234338@speechsynth
+a=cmid:1
+m=audio 48260 RTP/AVP 0
+a=rtpmap:0 pcmu/8000
+a=sendonly
+a=mid:1
+```
+
+MSRP (some header lines removed for brevity):
+```
+INVITE sip:bob@biloxi.example.com SIP/2.0
+To: <sip:bob@biloxi.example.com>
+From: <sip:alice@atlanta.example.com>;tag=786
+Call-ID: 3413an89KU
+Content-Type: application/sdp
+
+c=IN IP4 atlanta.example.com
+m=message 7654 TCP/MSRP *
+a=accept-types:text/plain
+a=path:msrp://atlanta.example.com:7654/jshA7weztas;tcp
+
+
+SIP/2.0 200 OK
+To: <sip:bob@biloxi.example.com>;tag=087js
+From: <sip:alice@atlanta.example.com>;tag=786
+Call-ID: 3413an89KU
+Content-Type: application/sdp
+
+c=IN IP4 biloxi.example.com
+m=message 12763 TCP/MSRP *
+a=accept-types:text/plain
+a=path:msrp://biloxi.example.com:12763/kjhd37s2s20w2a;tcp
+```
+
+Checking just the m= lines:
+
+```
+m=audio 35900 RTP/AVP 3 0 8 18 101
+m=video 35916 RTP/AVP 99 108
+
+m=audio 60288 RTP/AVP 3 101
+m=video 52406 RTP/AVP 99
+
+m=image 15002 udptl t38 
+
+m=image 49172 udptl t38 
+
+m=application 9 TCP/MRCPv2 1
+m=audio 49170 RTP/AVP 0
+
+m=application 32416 TCP/MRCPv2 1
+m=audio 48260 RTP/AVP 0
+
+m=message 7654 TCP/MSRP *
+m=message 12763 TCP/MSRP *
+```
+
+So here is a sample of new optional parameter media_sessions to be passed to functions that send SDP offer/answer messages:
+```
+"media_sessions": [
+	{
+		"type": "audio"
+	},
+	{
+		"type": "video"
+	},
+	{
+		"type": "t38",
+		"attributes": [
+			"T38FaxVersion:0",
+			"T38MaxBitRate:14400",
+			"T38FaxFillBitRemoval:0",
+			"T38FaxTranscodingMMR:0",
+			"T38FaxTranscodingJBIG:0"
+		]
+	},
+	{
+		"type": "mrcp",
+		"attributes": ["resource:speechsynth", "recvonly"]
+	},
+	{
+		"type": "msrp",
+		"attributes": ["accept-types:text/plain"]
+	}
+]
+```
+
+For audio and video, for start there will be no attributes as they will be generated based on the codecs enabled in pjmedia (we might add support for audio/video attributes later)
+
+So when this is not passed it well be assumed to be:
+```
+"media_sessions": [
+    {
+        "type": "audio"
+    }
+]
+
+----------------------------------------------------
 
