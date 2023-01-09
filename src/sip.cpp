@@ -302,6 +302,8 @@ struct Transport {
 	pjsip_transport_type_e type;
 	pjsip_transport *sip_transport;
 	pjsip_tpfactory *tpfactory;
+    char tag[64];
+
 	char domain[100];
 	char username[100];
 	char password[100];
@@ -388,10 +390,10 @@ typedef boost::circular_buffer<Pair_Call_CallId> Pair_Call_CallId_Buf;
 Pair_Call_CallId_Buf g_LastCalls(1000);	
 	
 
-typedef map<pjsip_transport*, int> SipTransportMap;
-SipTransportMap g_SipTransportMap;
-int g_TlsTransportId = -100;
-int g_TcpTransportId = -100;
+typedef map<std::string, long> TransportMap;
+TransportMap g_TransportMap;
+//int g_TlsTransportId = -100;
+//int g_TcpTransportId = -100;
 
 typedef set< pair<string,string> > PackageSet;
 PackageSet g_PackageSet;
@@ -530,6 +532,8 @@ pjsip_tpfactory *allocate_tcp_tpfactory(pjsip_endpoint* sip_endpt, pj_str_t *ipa
 
 bool set_proxy(pjsip_dialog *dlg, const char *proxy_uri);
 
+void build_transport_tag(char *dest, const char *type, const char *address, int port);
+void build_transport_tag_from_pjsip_transport(char *dest, pjsip_transport *t);
 void build_local_contact(char *dest, pjsip_transport *transport, const char *contact_username);
 void build_local_contact_from_tpfactory(char *dest, pjsip_tpfactory *tpfactory, const char *contact_username, pjsip_transport_type_e type);
 
@@ -1315,7 +1319,8 @@ int pjw_transport_create(const char *json, int *out_t_id, char *out_t_address, i
     pjsip_transport_type_e type = PJSIP_TRANSPORT_UDP;
 
 	pj_status_t status;
-	Transport *t = NULL;
+	Transport *transport = NULL;
+    const char *tp;
 	long t_id;
 
     char buffer[MAX_JSON_INPUT];
@@ -1354,21 +1359,23 @@ int pjw_transport_create(const char *json, int *out_t_id, char *out_t_address, i
         port = document["port"].GetInt();
     }
 
+    tp = "udp";
+
     // type
     if(document.HasMember("type")) {
         if(!document["type"].IsString()) {
             set_error("Parameter type must be a string");
             goto out;
         }
-        const char *t = document["type"].GetString();
-        if(stricmp(t, "UDP") == 0) {
+        tp = (char*)document["type"].GetString();
+        if(strcmp(tp, "udp") == 0) {
             type = PJSIP_TRANSPORT_UDP;
-        } else if(stricmp(t, "TCP") == 0) {
+        } else if(strcmp(tp, "tcp") == 0) {
             type = PJSIP_TRANSPORT_TCP;
-        } else if(stricmp(t, "TLS") == 0) {
+        } else if(strcmp(tp, "tls") == 0) {
             type = PJSIP_TRANSPORT_TLS;
         } else {
-            set_error("Invalid type %s. It must be one of 'UDP' (default), 'TCP' or 'TLS'", type);
+            set_error("Invalid type %s. It must be one of 'UDP' (default), 'TCP' or 'TLS'", tp);
             goto out;
         }
     }
@@ -1388,18 +1395,16 @@ int pjw_transport_create(const char *json, int *out_t_id, char *out_t_address, i
 			goto out;
 		}
 
-		t = new Transport;
-		t->type = PJSIP_TRANSPORT_UDP;
-		t->sip_transport = sip_transport;
+		transport = new Transport;
+		transport->type = PJSIP_TRANSPORT_UDP;
+		transport->sip_transport = sip_transport;
 
-		if(!g_transport_ids.add((long)t, t_id)){
+		if(!g_transport_ids.add((long)transport, t_id)){
 			status = pjsip_udp_transport_pause(sip_transport,PJSIP_UDP_TRANSPORT_DESTROY_SOCKET);
             printf("pjsip_dup_transport_pause status=%i\n", status);
 			set_error("Failed to allocate id");
 		    goto out;	
 		}
-
-		g_SipTransportMap.insert(make_pair(sip_transport, t_id));
     } else if(type == PJSIP_TRANSPORT_TCP) {
 		pjsip_tpfactory *tpfactory;
 		//int af;
@@ -1417,18 +1422,16 @@ int pjw_transport_create(const char *json, int *out_t_id, char *out_t_address, i
             goto out;
 		}
 
-		t = new Transport;
-		t->type = PJSIP_TRANSPORT_TCP;
-		t->tpfactory = tpfactory;
+		transport = new Transport;
+		transport->type = PJSIP_TRANSPORT_TCP;
+		transport->tpfactory = tpfactory;
 
-		if(!g_transport_ids.add((long)t, t_id)){
+		if(!g_transport_ids.add((long)transport, t_id)){
 			status = (tpfactory->destroy)(tpfactory);
 
 			set_error("Failed to allocate id");
             goto out;
 		}
-
-		g_TcpTransportId = t_id; 
 	} else {
 		pjsip_tpfactory *tpfactory;
 		//int af;
@@ -1446,21 +1449,21 @@ int pjw_transport_create(const char *json, int *out_t_id, char *out_t_address, i
             goto out;
 		}
 
-		t = new Transport;
-		t->type = PJSIP_TRANSPORT_TLS;
-		t->tpfactory = tpfactory;
+		transport = new Transport;
+		transport->type = PJSIP_TRANSPORT_TLS;
+		transport->tpfactory = tpfactory;
 
-		if(!g_transport_ids.add((long)t, t_id)) {
+		if(!g_transport_ids.add((long)transport, t_id)) {
 			status = (tpfactory->destroy)(tpfactory);
 
 			set_error("Failed to allocate id");
             goto out;
 		}
-
-		g_TlsTransportId = t_id; 
 	}
 
-	t->id = t_id;
+	transport->id = t_id;
+    build_transport_tag(transport->tag, tp, addr, port);
+    g_TransportMap.insert(make_pair(transport->tag, t_id));
 
     /*
 	if(g_PacketDumper) {
@@ -1894,7 +1897,6 @@ int pjw_call_respond(long call_id, const char *json)
             status = pjmedia_sdp_neg_negotiate(call->inv->dlg->pool,
                 call->inv->neg, 
                 0);
-
             if(status != PJ_SUCCESS) {
                 close_media_endpoints(call);
                 set_error("pjmedia_sdp_neg_negotiate failed");
@@ -1904,7 +1906,6 @@ int pjw_call_respond(long call_id, const char *json)
             status = pjmedia_sdp_neg_get_active_local(call->inv->neg,
                 &local_sdp 
             );
-
             if(status != PJ_SUCCESS) {
                 close_media_endpoints(call);
                 set_error("pjmedia_sdp_neg_get_active_local failed");
@@ -1925,28 +1926,36 @@ int pjw_call_respond(long call_id, const char *json)
 		}
 
 		status = pjsip_rx_data_free_cloned(call->initial_invite_rdata);
+        printf("p4\n");
 		if(status != PJ_SUCCESS) {
 			set_error("pjsip_rx_data_free_cloned failed with status=%i", status);
             goto out;
 		}
+
 		call->initial_invite_rdata = 0;
 	} else {
+        printf("p6\n");
+        pjmedia_sdp_neg_state state = pjmedia_sdp_neg_get_state(call->inv->neg);
+        printf("neg_state=%d\n", state);
+
 		status = pjsip_inv_answer(call->inv,
 					  code,
 					  &r,
 					  local_sdp,
 					  &tdata); 
-
+        printf("p7\n");
 		if(status != PJ_SUCCESS){
 			set_error("pjsip_inv_answer failed with status=%i", status);
             goto out;
 		}
+        printf("p8\n");
 
 		if(!add_headers(call->inv->dlg->pool, tdata, document)) {
 			goto out;
 		}
 	}
 
+    printf("p9\n");
 	status = pjsip_inv_send_msg(call->inv, tdata);
 	if(status != PJ_SUCCESS){
 		set_error("pjsip_inv_send_msg failed with status=%i", status);
@@ -2222,6 +2231,32 @@ bool dlg_set_transport_by_t(Transport *t, pjsip_dialog *dlg) {
 	return true;
 }
 
+void build_transport_tag(char *dest, const char *type, const char *address, int port) {
+    sprintf(dest, "%s:%s:%d", type, address, port);
+}
+
+void build_transport_tag_from_pjsip_transport(char *dest, pjsip_transport *t) {
+    char address[16];
+    const char *type;
+    int port;
+    int tport = t->local_name.port;
+
+    assert(t->local_name.host.slen < 16);
+	strncpy(address, t->local_name.host.ptr, t->local_name.host.slen);
+
+    if(t->key.type == PJSIP_TRANSPORT_UDP) {
+		type = "udp";
+        port = tport ? tport : 5060;
+	} else if(t->key.type == PJSIP_TRANSPORT_TCP) {
+        type = "tcp";
+        port = tport ? tport : 5060;
+	} else {
+        type = "tls";
+        port = tport ? tport : 5061;
+	}
+
+    build_transport_tag(dest, type, address, port);
+}
 
 void build_local_contact(char *dest, pjsip_transport *t, const char *contact_username) {
 	char *p = dest;
@@ -4009,8 +4044,6 @@ static pj_bool_t on_rx_request( pjsip_rx_data *rdata ){
 		return PJ_TRUE;
 	}
 
-	Transport *transport;
-
 	if(rdata->msg_info.msg->line.req.method.id != PJSIP_INVITE_METHOD)
 	{
 		/*
@@ -4158,24 +4191,33 @@ static pj_bool_t on_rx_request( pjsip_rx_data *rdata ){
 		return PJ_TRUE;
 	}
 
-	call->transport = transport; 
-	call->id = call_id;
+    char tag[64];
+    build_transport_tag_from_pjsip_transport(tag, t);
 
-	int transport_id;
+    long transport_id;
 
-	SipTransportMap::iterator iter = g_SipTransportMap.find(t);
-	if( iter != g_SipTransportMap.end() ){
+    //printf("tag=%s\n", tag);
+
+	TransportMap::iterator iter = g_TransportMap.find(tag);
+	if( iter != g_TransportMap.end() ){
 		transport_id = iter->second;
 	} else {
-		if(t->key.type == PJSIP_TRANSPORT_TCP) {
-			transport_id = g_TcpTransportId;
-		} else if(t->key.type == PJSIP_TRANSPORT_TLS) {
-			transport_id = g_TlsTransportId;
-		} else {
-			transport_id = -1;
-		}
+		transport_id = -1;
 	}
+
+    //printf("transport_id=%d\n", transport_id);
+
+    long val;
+    if(g_transport_ids.get(transport_id, val)){
+        Transport *transport = (Transport*)val;
+	    call->transport = transport; 
+    } else {
+        printf("could not resolve transport id=%d\n", transport_id);
+        exit(1);
+    }
 		
+	call->id = call_id;
+
 	make_evt_incoming_call(evt, sizeof(evt), transport_id, call_id, rdata->msg_info.len, rdata->msg_info.msg_buf);
 	dispatch_event(evt);
 	
