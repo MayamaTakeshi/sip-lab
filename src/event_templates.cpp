@@ -21,8 +21,8 @@ int make_evt_media_status(char *dest, int size, long call_id, const char *status
 	}
 }
 
-int make_evt_dtmf(char *dest, int size, long call_id, int digits_len, const char *digits, int mode) {
-	return snprintf(dest, size, "{\"event\": \"dtmf\", \"call_id\": %ld, \"digits\": \"%.*s\", \"mode\": %i}", call_id, digits_len, digits, mode);
+int make_evt_dtmf(char *dest, int size, long call_id, int digits_len, const char *digits, int mode, int media_endpoint_id) {
+	return snprintf(dest, size, "{\"event\": \"dtmf\", \"call_id\": %ld, \"digits\": \"%.*s\", \"mode\": %i, \"media_endpoint_id\": %i}", call_id, digits_len, digits, mode, media_endpoint_id);
 }
 
 int make_evt_call_ended(char *dest, int size, long call_id, int sip_msg_len, const char *sip_msg) {

@@ -41,6 +41,7 @@
 
 #include "siplab_constants.h"
 
+
 using namespace rapidjson;
 using namespace std;
 
@@ -156,73 +157,78 @@ bool validate_params(Document &document, const char **valid_params) {
     return true;
 }
 
-bool json_get_string_param(Document &document, const char *param, bool optional, char **dest) {
+#define FOUND_INVALID -1
+#define NOT_FOUND_NOT_OPTIONAL 0
+#define NOT_FOUND_OPTIONAL 1
+#define FOUND 2
+
+int json_get_string_param(Document &document, const char *param, bool optional, char **dest) {
     printf("json_get_string_param %s\n", param);
     if(!document.HasMember(param)) {
         if(optional) {
-            return true;
+            return NOT_FOUND_OPTIONAL;
         } 
         set_error("Parameter %s is required", param);
-        return false;
+        return NOT_FOUND_NOT_OPTIONAL;
     }
 
     if(!document[param].IsString()) {
         set_error("Parameter %s must be a string", param);
-        return false;
+        return FOUND_INVALID;
     }
     *dest = (char*)document[param].GetString();
-    return true;
+    return FOUND;
 }
 
-bool json_get_int_param(Document &document, const char *param, bool optional, int *dest) {
+int json_get_int_param(Document &document, const char *param, bool optional, int *dest) {
     if(!document.HasMember(param)) {
         if(optional) {
-            return true;
+            return NOT_FOUND_OPTIONAL;
         } 
         set_error("Parameter %s is required", param);
-        return false;
+        return NOT_FOUND_NOT_OPTIONAL;
     }
 
     if(!document[param].IsInt()) {
         set_error("Parameter %s must be an integer", param);
-        return false;
+        return FOUND_INVALID;
     }
     *dest = document[param].GetInt();
-    return true;
+    return FOUND;
 }
 
-bool json_get_uint_param(Document &document, const char *param, bool optional, unsigned *dest) {
+int json_get_uint_param(Document &document, const char *param, bool optional, unsigned *dest) {
     if(!document.HasMember(param)) {
         if(optional) {
-            return true;
+            return NOT_FOUND_OPTIONAL;
         } 
         set_error("Parameter %s is required", param);
-        return false;
+        return NOT_FOUND_NOT_OPTIONAL;
     }
 
     if(!document[param].IsUint()) {
         set_error("Parameter %s must be an unsigned integer", param);
-        return false;
+        return FOUND_INVALID;
     }
     *dest = document[param].GetUint();
-    return true;
+    return FOUND;
 }
 
-bool json_get_bool_param(Document &document, const char *param, bool optional, bool *dest) {
+int json_get_bool_param(Document &document, const char *param, bool optional, bool *dest) {
     if(!document.HasMember(param)) {
         if(optional) {
-            return true;
+            return NOT_FOUND_OPTIONAL;
         } 
         set_error("Parameter %s is required", param);
-        return false;
+        return NOT_FOUND_NOT_OPTIONAL;
     }
 
     if(!document[param].IsBool()) {
         set_error("Parameter %s must be a boolean", param);
-        return false;
+        return FOUND_INVALID;
     }
     *dest = document[param].GetBool();
-    return true;
+    return FOUND;
 }
 
 
@@ -310,13 +316,9 @@ struct Subscription {
 	bool initialized;
 };
 
-struct Call {
-	int id;
-	pjsip_inv_session *inv;
+struct AudioEndpoint {
 	pjmedia_transport *med_transport;
 	pjmedia_stream *med_stream;
-	pj_bool_t local_hold;
-	pj_bool_t remote_hold;
 	pjmedia_master_port *master_port;
 	pjmedia_port *media_port; //will contain Null Port, WAV File Player etc.
 
@@ -327,19 +329,52 @@ struct Call {
 	chainlink *dtmfdet;
 	chainlink *fax;
 
-	Transport *transport;
-
-	bool outgoing;
-
 	char DigitBuffers[2][MAXDIGITS + 1];
 	int DigitBufferLength[2];
 	int last_digit_timestamp[2];
+};
+
+struct VideoEndpoint {
+	pjmedia_transport *med_transport;
+	pjmedia_stream *med_stream;
+	pjmedia_master_port *master_port;
+};
+
+
+#define ENDPOINT_TYPE_AUDIO 1
+#define ENDPOINT_TYPE_VIDEO 2
+#define ENDPOINT_TYPE_T38   3
+#define ENDPOINT_TYPE_MRCP  4
+#define ENDPOINT_TYPE_MSRP  5
+
+struct MediaEndpoint {
+    int type;
+    union {
+        AudioEndpoint *audio;
+        VideoEndpoint *video;
+    } endpoint;
+};
+
+struct Call {
+	int id;
+	pjsip_inv_session *inv;
+    int media_count;
+    MediaEndpoint *media_endpoints[PJMEDIA_MAX_SDP_MEDIA];
+
+	Transport *transport;
+
+	pj_bool_t local_hold;
+	pj_bool_t remote_hold;
+
+	bool outgoing;
 
 	pjsip_evsub *xfer_sub; // Xfer server subscription, if this call was triggered by xfer.
 
 	pjsip_rx_data *initial_invite_rdata;
 };
 
+bool init_media_ports(Call *c, AudioEndpoint *ae, unsigned sampling_rate, unsigned channel_count, unsigned samples_per_frame, unsigned bits_per_sample); 
+void connect_media_ports(AudioEndpoint *ae);
 
 struct Pair_Call_CallId {
 	Call *pCall;
@@ -520,20 +555,23 @@ static pj_bool_t set_ports(Call *call, pjmedia_port *stream_port, pjmedia_port *
 //static pj_bool_t stop_media_operation(Call *call);
 static void build_stream_stat(ostringstream &oss, pjmedia_rtcp_stat *stat, pjmedia_stream_info *stream_info);
 
-bool init_media_ports(Call *c, unsigned sampling_rate, unsigned channel_count, unsigned samples_per_frame, unsigned bits_per_sample); 
-void connect_media_ports(Call *c);
-
 bool prepare_wire(pj_pool_t *pool, chainlink **link, unsigned sampling_rate, unsigned channel_count, unsigned samples_per_frame, unsigned bits_per_sample);
 
-bool prepare_tonegen(Call *c); 
-bool prepare_wav_player(Call *c, const char *file);
-bool prepare_wav_writer(Call *c, const char *file); 
+bool prepare_tonegen(AudioEndpoint *ae); 
+bool prepare_wav_player(Call *c, AudioEndpoint *ae, const char *file);
+bool prepare_wav_writer(Call *c, AudioEndpoint *ae, const char *file); 
 
-bool prepare_fax(Call *c, bool is_sender, const char *file, unsigned flags); 
+bool prepare_fax(Call *c, AudioEndpoint *ae, bool is_sender, const char *file, unsigned flags); 
 
 void prepare_error_event(ostringstream *oss, char *scope, char *details);
 //void prepare_pjsipcall_error_event(ostringstream *oss, char *scope, char *function, pj_status_t s);
 void append_status(ostringstream *oss, pj_status_t s);
+
+void create_media_endpoints(Call *c, pjsip_dialog *dlg, Document &document);
+void close_media_endpoints(Call *c);
+bool create_local_sdp(Call *c, pjsip_dialog *dlg, pjmedia_sdp_session **p_sdp, bool hold, bool reinvite);
+
+typedef pj_status_t (*audio_endpoint_stop_op_t) (Call *call, AudioEndpoint *ae);
 
 static pjsip_module mod_tester =
 {
@@ -581,6 +619,33 @@ const char *translate_pjsip_inv_state(int state)
 	}
 }
 
+static int find_endpoint_by_inband_dtmf_media_stream(Call *call, pjmedia_stream *med_stream) {
+    for(int i=0 ; i<call->media_count ; i++) {
+        MediaEndpoint *me = (MediaEndpoint*)call->media_endpoints[i];
+        if(ENDPOINT_TYPE_AUDIO == me->type) {
+            AudioEndpoint *ae = (AudioEndpoint*)me->endpoint.audio;
+            if(ae->med_stream == med_stream) {
+                return i;
+            }
+        }
+    }
+    return -1;
+}
+
+static int find_endpoint_by_inband_dtmf_media_port(Call *call, pjmedia_port *port) {
+    for(int i=0 ; i<call->media_count ; i++) {
+        MediaEndpoint *me = (MediaEndpoint*)call->media_endpoints[i];
+        if(ENDPOINT_TYPE_AUDIO == me->type) {
+            AudioEndpoint *ae = (AudioEndpoint*)me->endpoint.audio;
+            if((pjmedia_port*)ae->dtmfdet == port) {
+                return i;
+            }
+        }
+    }
+    return -1;
+}
+
+
 static void on_inband_dtmf(pjmedia_port *port, void *user_data, char digit){
 	if(g_shutting_down) return;
 
@@ -594,14 +659,19 @@ static void on_inband_dtmf(pjmedia_port *port, void *user_data, char digit){
 	if(d == '*') d = 'e';
 	if(d == '#') d = 'f';
 
-	Call *c = (Call*)user_data;
+	Call *call = (Call*)user_data;
+
+    int media_id = find_endpoint_by_inband_dtmf_media_port(call, port);
+    assert(media_id >= 0);
+
+    AudioEndpoint *ae = (AudioEndpoint*)call->media_endpoints[media_id];
 
 	int mode = DTMF_MODE_INBAND;
 
 	if(g_dtmf_inter_digit_timer) {
 
 		PJW_LOCK();
-		int *pLen = &c->DigitBufferLength[mode];
+		int *pLen = &ae->DigitBufferLength[mode];
 
 		if(*pLen > MAXDIGITS) {
 			PJW_UNLOCK();
@@ -609,9 +679,9 @@ static void on_inband_dtmf(pjmedia_port *port, void *user_data, char digit){
 			return;
 		}
 
-		c->DigitBuffers[mode][*pLen] = d;
+		ae->DigitBuffers[mode][*pLen] = d;
 		(*pLen)++;
-		c->last_digit_timestamp[mode] = ms_timestamp();
+		ae->last_digit_timestamp[mode] = ms_timestamp();
 		PJW_UNLOCK();
 	} else {
 		/*
@@ -622,7 +692,7 @@ static void on_inband_dtmf(pjmedia_port *port, void *user_data, char digit){
 		*/
 
 		char evt[256];
-		make_evt_dtmf(evt, sizeof(evt), call_id, 1, &d, mode);
+		make_evt_dtmf(evt, sizeof(evt), call_id, 1, &d, mode, media_id);
 		dispatch_event(evt);
 	}
 }
@@ -1497,27 +1567,27 @@ int pjw_account_create(int t_id, const char *json, int *out_acc_id)
         goto out;
     }
 
-    if(!json_get_string_param(document, "domain", false, &domain)) {
+    if(json_get_string_param(document, "domain", false, &domain) <= 0) {
         goto out;
     }
 
-    if(!json_get_string_param(document, "server", false, &server)) {
+    if(json_get_string_param(document, "server", false, &server) <= 0) {
         goto out;
     }
 
-    if(!json_get_string_param(document, "username", false, &username)) {
+    if(json_get_string_param(document, "username", false, &username) <= 0) {
         goto out;
     }
 
-    if(!json_get_string_param(document, "password", false, &password)) {
+    if(json_get_string_param(document, "password", false, &password) <= 0) {
         goto out;
     }
 
-    if(!json_get_string_param(document, "to_uri", true, &c_to_uri)) {
+    if(json_get_string_param(document, "to_uri", true, &c_to_uri) <= 0) {
         goto out;
     }
 
-    if(!json_get_int_param(document, "expires", true, &expires)) {
+    if(json_get_int_param(document, "expires", true, &expires) <= 0) {
         goto out;
     }
 
@@ -1663,7 +1733,7 @@ int pjw_account_register(long acc_id, const char *json)
         goto out;
     }
 
-    if(!json_get_bool_param(document, "auto_refresh", true, &auto_refresh)) {
+    if(json_get_bool_param(document, "auto_refresh", true, &auto_refresh) <= 0) {
         goto out;
     }
 
@@ -1749,13 +1819,15 @@ int pjw_call_respond(long call_id, const char *json)
 
 	pjsip_tx_data *tdata;
 
+    const pjmedia_sdp_session *local_sdp;
+
 	Call *call;
 
     char buffer[MAX_JSON_INPUT];
 
     Document document;
 
-    const char *valid_params[] = {"code", "reason", "headers", ""};
+    const char *valid_params[] = {"code", "reason", "headers", "media", ""};
 
 	if(!g_call_ids.get(call_id, val)){
 		set_error("Invalid call_id");
@@ -1776,21 +1848,76 @@ int pjw_call_respond(long call_id, const char *json)
         goto out;
     }
 
-    if(!json_get_int_param(document, "code", true, &code)) {
+    if(json_get_int_param(document, "code", true, &code) <= 0) {
         goto out;
     }
 
-    if(!json_get_string_param(document, "reason", true, &reason)) {
+    if(json_get_string_param(document, "reason", true, &reason) <= 0) {
         goto out;
     }
 
 	r = pj_str((char*)reason);
 
+    if(183 == code || (code >= 200 && code < 300)) {
+        pjmedia_sdp_session *sdp;
+
+        create_media_endpoints(call, call->inv->dlg, document);
+        if(create_local_sdp(call, call->inv->dlg, &sdp, false, false) != 0) {
+            close_media_endpoints(call);
+			set_error("create_local_sdp failed");
+            goto out;
+        }
+
+        if(!call->inv->neg) {
+            // this could mean this is delayed media. So we didn't geta an offer.
+            // So we must createthe negotiator with our SDP
+            status = pjmedia_sdp_neg_create_w_local_offer(call->inv->dlg->pool,
+                sdp,
+                &call->inv->neg
+            );
+            if(status != PJ_SUCCESS) {
+                close_media_endpoints(call);
+                set_error("pjmedia_sdp_neg_create_w_local_offer failed");
+                goto out;
+            }
+            local_sdp = sdp;
+        } else {
+            status = pjmedia_sdp_neg_set_local_answer(call->inv->dlg->pool,
+                call->inv->neg,
+                sdp);
+            if(status != PJ_SUCCESS) {
+                close_media_endpoints(call);
+                set_error("pjmedia_sdp_neg_set_local_answer failed");
+                goto out;
+            }
+
+            status = pjmedia_sdp_neg_negotiate(call->inv->dlg->pool,
+                call->inv->neg, 
+                0);
+
+            if(status != PJ_SUCCESS) {
+                close_media_endpoints(call);
+                set_error("pjmedia_sdp_neg_negotiate failed");
+                goto out;
+            }
+
+            status = pjmedia_sdp_neg_get_active_local(call->inv->neg,
+                &local_sdp 
+            );
+
+            if(status != PJ_SUCCESS) {
+                close_media_endpoints(call);
+                set_error("pjmedia_sdp_neg_get_active_local failed");
+                goto out;
+            }
+        }
+    }
+
 	if(call->initial_invite_rdata) {
 		status = pjsip_inv_initial_answer(call->inv, call->initial_invite_rdata,
 						code,
 						&r,
-						NULL,
+						local_sdp,
 						&tdata);
 		if(status != PJ_SUCCESS) {
 			set_error("pjsip_inv_initial_answer failed with status=%i", status);
@@ -1807,7 +1934,7 @@ int pjw_call_respond(long call_id, const char *json)
 		status = pjsip_inv_answer(call->inv,
 					  code,
 					  &r,
-					  NULL,
+					  local_sdp,
 					  &tdata); 
 
 		if(status != PJ_SUCCESS){
@@ -1869,11 +1996,11 @@ int pjw_call_terminate(long call_id, const char *json)
         goto out;
     }
 
-    if(!json_get_int_param(document, "code", true, &code)) {
+    if(json_get_int_param(document, "code", true, &code) <= 0) {
         goto out;
     }
 
-    if(!json_get_string_param(document, "reason", true, &reason)) {
+    if(json_get_string_param(document, "reason", true, &reason) <= 0) {
         goto out;
     }
 
@@ -1948,7 +2075,7 @@ int pjw_call_create(long t_id, const char *json, long *out_call_id, char *out_si
 
     Document document;
 
-    const char *valid_params[] = {"from_uri", "to_uri", "request_uri", "proxy_uri", "auth", "delayed_media", "headers", ""};
+    const char *valid_params[] = {"from_uri", "to_uri", "request_uri", "proxy_uri", "auth", "delayed_media", "headers", "media", ""};
 
 	if(!g_transport_ids.get(t_id, val)){
 		set_error("Invalid transport_id");
@@ -2223,88 +2350,60 @@ int call_create(Transport *t, unsigned flags, pjsip_dialog *dlg, const char *pro
 	//in_addr addr;
 	//addr.s_addr = t->local_addr.ipv4.sin_addr.s_addr;
 	//pj_str_t str_addr = pj_str( inet_ntoa(addr) );
-	in_addr in_a;
-	if(t->type == PJSIP_TRANSPORT_UDP) {
-		in_a = (in_addr&)t->sip_transport->local_addr.ipv4.sin_addr.s_addr;
-	} else {
-		in_a = (in_addr&)t->tpfactory->local_addr.ipv4.sin_addr.s_addr;
-	}
-
-	pj_str_t str_addr = pj_str( inet_ntoa(in_a) );
-	pjmedia_transport *med_transport = create_media_transport(&str_addr);
-
 	pj_status_t status;
 
-	if(!med_transport)
-	{
-		status = pjsip_dlg_terminate(dlg); //ToDo:
-		set_error("create_media_transport failed");
-		return -1;
-	}
+	Call *call = (Call*)pj_pool_alloc(dlg->pool, sizeof(Call));
+	pj_bzero(call, sizeof(Call));
 
-	pjmedia_transport_info med_tpinfo;
-	pjmedia_transport_info_init(&med_tpinfo);
-	pjmedia_transport_get_info(med_transport, &med_tpinfo);
-	
-	pjmedia_sdp_session *sdp = 0;
+	call->transport = t;
+
+    pjmedia_sdp_session *sdp = 0;
 
 	if(!(flags & CALL_FLAG_DELAYED_MEDIA)) {
-		status = pjmedia_endpt_create_sdp( g_med_endpt, 
-				dlg->pool, 
-				1,
-				&med_tpinfo.sock_info,
-				&sdp);
-		if(status != PJ_SUCCESS) {
-			close_media_transport(med_transport);
-			status = pjsip_dlg_terminate(dlg); //ToDo:
-			set_error("pjmedia_endpt_create_sdp failed");
-			return -1; 
-		}
+        create_media_endpoints(call, dlg, document);
+        if(create_local_sdp(call, dlg, &sdp, false, false) != 0) {
+            close_media_endpoints(call);
+            return -1; 
+        }
 	}
 
 	status = pjsip_inv_create_uac(dlg, sdp, 0, &inv);
 	if(status != PJ_SUCCESS) {
-		close_media_transport(med_transport);
+		close_media_endpoints(call);
 		status = pjsip_dlg_terminate(dlg); //ToDo:
 		set_error("pjsip_inv_create_uac failed");
 		return -1;
 	}
 
+	call->inv = inv;
+
 	if(!set_proxy(dlg, proxy_uri)) {
+		close_media_endpoints(call);
+		status = pjsip_dlg_terminate(dlg); //ToDo:
 		return -1;
 	}
 
-	Call *call = (Call*)pj_pool_alloc(dlg->pool, sizeof(Call));
-	pj_bzero(call, sizeof(Call));
-
-
-	call->inv = inv;
-	call->med_transport = med_transport;
-
 	long call_id;
 	if(!g_call_ids.add((long)call, call_id)){
-		close_media_transport(med_transport);
+		close_media_endpoints(call);
 		status = pjsip_dlg_terminate(dlg); //ToDo:
 		set_error("Failed to allocate id");
 		return -1;
 	}
-	call->transport = t;
 	call->id = call_id;
 	pjsip_tx_data *tdata;
 	status = pjsip_inv_invite(inv, &tdata);
 	if(status != PJ_SUCCESS) {
 		g_call_ids.remove(call_id, (long &)call);
-		close_media_transport(med_transport);
+		close_media_endpoints(call);
 		status = pjsip_dlg_terminate(dlg); //ToDo:
 		set_error("pjsip_inv_invite failed");
 		return -1;
 	}
 
-	
-
 	if(!add_headers(dlg->pool, tdata, document)) {
 		g_call_ids.remove(call_id, (long &)call);
-		close_media_transport(med_transport); //Todo:
+		close_media_endpoints(call); //Todo:
 		status = pjsip_dlg_terminate(dlg); //ToDo:	
 		return -1;
 	}
@@ -2319,7 +2418,7 @@ int call_create(Transport *t, unsigned flags, pjsip_dialog *dlg, const char *pro
 	pj_perror(0, "", status, "");
 	if(status != PJ_SUCCESS) {
 		g_call_ids.remove(call_id, (long &)call);
-		close_media_transport(med_transport); //Todo:
+		close_media_endpoints(call); //Todo:
 		//The below code cannot be called here it will cause seg fault
 		//status = pjsip_dlg_terminate(dlg); //ToDo:
 		set_error("pjsip_inv_send_msg failed");
@@ -2330,7 +2429,7 @@ int call_create(Transport *t, unsigned flags, pjsip_dialog *dlg, const char *pro
 	status = pjsip_dlg_add_usage(dlg, &mod_tester, call);
 	if(status != PJ_SUCCESS) {
 		g_call_ids.remove(call_id, (long &)call);
-		close_media_transport(med_transport); //Todo:
+		close_media_endpoints(call); //Todo:
 		status = pjsip_dlg_terminate(dlg); //ToDo:
 		set_error("pjsip_dlg_add_usage failed");
 		return  -1;
@@ -2342,12 +2441,65 @@ int call_create(Transport *t, unsigned flags, pjsip_dialog *dlg, const char *pro
 	return call_id;
 }
 
-//int pjw_call_send_dtmf(long call_id, const char *digits, int mode)
-int pjw_call_send_dtmf(long call_id, const char *json)
-{
+pj_status_t audio_endpoint_send_dtmf(AudioEndpoint *ae, const char *digits, const int mode) {
 #define ON_DURATION 200
 #define OFF_DURATION 50
 
+    pj_status_t status;
+
+	if(DTMF_MODE_RFC2833 == mode) {
+        if(!ae->med_stream) {
+            set_error("Unable to send DTMF: Media not ready");
+            return -1;
+        }
+	    pj_str_t ds = pj_str((char*)digits);
+		status = pjmedia_stream_dial_dtmf(ae->med_stream, &ds);
+		if(status != PJ_SUCCESS)
+		{
+			set_error("pjmedia_stream_dial_dtmf failed.");
+            return status;
+		}
+	} else {
+		if(!prepare_tonegen(ae)) {
+			set_error("prepare_tonegen failed.");
+            return -1;
+		}
+
+        int len = strlen(digits);
+
+		for(int i=0; i<len ; ++i) {
+			pjmedia_tone_digit tone;
+			tone.digit = digits[i];
+			tone.on_msec = ON_DURATION;
+			tone.off_msec = OFF_DURATION;
+			tone.volume = 0;
+			status = chainlink_tonegen_play_digits((pjmedia_port*)ae->tonegen, 1, &tone, 0);
+			if(status != PJ_SUCCESS) {
+				set_error("chainlink_tonegen_play_digits failed.");
+                return status;
+			}
+		}
+	}
+}
+
+pj_status_t send_dtmf(Call *call, const char *digits, int mode) {
+    for(int i=0 ; i<call->media_count ; i++) {
+        MediaEndpoint *me = (MediaEndpoint*)call->media_endpoints[i];
+        if(me->type != ENDPOINT_TYPE_AUDIO) continue;
+
+        AudioEndpoint *ae = (AudioEndpoint*)me->endpoint.audio;
+          
+        pj_status_t status = audio_endpoint_send_dtmf(ae, digits, mode);
+        if(status != PJ_SUCCESS) return status;
+    }
+
+    return PJ_SUCCESS;
+}
+
+
+//int pjw_call_send_dtmf(long call_id, const char *digits, int mode)
+int pjw_call_send_dtmf(long call_id, const char *json)
+{
 #define MAX_LENGTH 31 // pjsip allows for 31 digits (inband allows for 32 digits)
 
 	PJW_LOCK();
@@ -2357,11 +2509,6 @@ int pjw_call_send_dtmf(long call_id, const char *json)
     char *digits;
     int mode = 0;;
 
-    int len;
-
-	char adjusted_digits[MAX_LENGTH+1]; // use the greater size
-
-	pj_str_t ds;
 	pj_status_t status;
 
     Call *call;
@@ -2371,7 +2518,6 @@ int pjw_call_send_dtmf(long call_id, const char *json)
     Document document;
 
     const char *valid_params[] = {"digits", "mode", ""};
-
 
     if(!parse_json(document, json, buffer, MAX_JSON_INPUT)) {
         goto out;
@@ -2387,11 +2533,11 @@ int pjw_call_send_dtmf(long call_id, const char *json)
 	}
 	call = (Call*)val;
 
-    if(!json_get_string_param(document, "digits", false, &digits)) {
+    if(json_get_string_param(document, "digits", false, &digits) <= 0) {
         goto out;
     }
 
-    if(!json_get_int_param(document, "mode", false, &mode)) {
+    if(json_get_int_param(document, "mode", false, &mode) <= 0) {
         goto out;
     }
 
@@ -2400,16 +2546,14 @@ int pjw_call_send_dtmf(long call_id, const char *json)
         goto out;
     }
 
+    int len;
+
+	char adjusted_digits[MAX_LENGTH+1]; // use the greater size
+
 	len = strlen(digits);
 
 	if(len > MAX_LENGTH) {
 		set_error("DTMF string too long");
-        goto out;
-	}
-
-	if(!call->med_stream)
-	{
-		set_error("Unable to send DTMF: Media not ready");
         goto out;
 	}
 
@@ -2433,36 +2577,9 @@ int pjw_call_send_dtmf(long call_id, const char *json)
 		}
 	}
 	adjusted_digits[len] = 0;
-	//addon_log(LOG_LEVEL_DEBUG, ">>%s<<\n", adjusted_digits);
+	//addon_log(LOG_LEVEL_DEBUG, "adjusted_digits >>%s<<\n", adjusted_digits);
 
-	ds = pj_str((char*)adjusted_digits);
-
-	if(DTMF_MODE_RFC2833 == mode) {
-		status = pjmedia_stream_dial_dtmf(call->med_stream, &ds);
-		if(status != PJ_SUCCESS)
-		{
-			set_error("pjmedia_stream_dial_dtmf failed.");
-            goto out;
-		}
-	} else {
-		if(!prepare_tonegen(call)) {
-			set_error("prepare_tonegen failed.");
-            goto out;
-		}
-
-		for(int i=0; i<len ; ++i) {
-			pjmedia_tone_digit tone;
-			tone.digit = adjusted_digits[i];
-			tone.on_msec = ON_DURATION;
-			tone.off_msec = OFF_DURATION;
-			tone.volume = 0;
-			status = chainlink_tonegen_play_digits((pjmedia_port*)call->tonegen, 1, &tone, 0);
-			if(status != PJ_SUCCESS) {
-				set_error("chainlink_tonegen_play_digits failed.");
-                goto out;
-			}
-		}
-	}
+    send_dtmf(call, adjusted_digits, mode);
 
 out:
 	PJW_UNLOCK();
@@ -2484,6 +2601,7 @@ int pjw_call_reinvite(long call_id, const char *json)
 
 	long val;
     Call *call;
+	pjsip_inv_session *inv;
 
 	pj_status_t status;
 
@@ -2504,6 +2622,8 @@ int pjw_call_reinvite(long call_id, const char *json)
 	}
 	call = (Call*)val;
 
+    inv = call->inv;
+
     if(!parse_json(document, json, buffer, MAX_JSON_INPUT)) {
         goto out;
     }
@@ -2512,7 +2632,7 @@ int pjw_call_reinvite(long call_id, const char *json)
         goto out;
     }
 
-    if(!json_get_bool_param(document, "hold", true, &hold)) {
+    if(json_get_bool_param(document, "hold", true, &hold) <= 0) {
         goto out;
     }
 
@@ -2527,54 +2647,13 @@ int pjw_call_reinvite(long call_id, const char *json)
         }
     }
 
-	call->local_hold = hold;
+    call->local_hold = hold;
 
 	if(!(flags & CALL_FLAG_DELAYED_MEDIA)) {
-		pjmedia_transport_info tpinfo;
-		pjmedia_transport_info_init(&tpinfo);
-		pjmedia_transport_get_info(call->med_transport,&tpinfo);
-
-		status = pjmedia_endpt_create_sdp(g_med_endpt,
-						call->inv->pool,
-						1,
-						&tpinfo.sock_info,
-						&sdp);
-		if(status != PJ_SUCCESS){
-			set_error("pjmedia_endpt_create_sdp failed");
+        if(create_local_sdp(call, inv->dlg, &sdp, hold, true) != 0) {
             goto out;
-		}
-	
-		pjmedia_sdp_attr *attr;
-
-		pjmedia_sdp_media_remove_all_attr(sdp->media[0], "sendrecv");
-		pjmedia_sdp_media_remove_all_attr(sdp->media[0], "sendonly");
-		pjmedia_sdp_media_remove_all_attr(sdp->media[0], "recvonly");
-		pjmedia_sdp_media_remove_all_attr(sdp->media[0], "inactive");
-
-		if(call->local_hold){
-			if(call->remote_hold) {
-				attr = pjmedia_sdp_attr_create(call->inv->pool, "inactive", NULL);
-			} else {
-				attr = pjmedia_sdp_attr_create(call->inv->pool, "sendonly", NULL);
-			}
-		} else if(call->remote_hold) {
-			attr = pjmedia_sdp_attr_create(call->inv->pool, "recvonly", NULL);
-		} else {
-			attr = pjmedia_sdp_attr_create(call->inv->pool, "sendrecv", NULL);
-		}
-
-		pjmedia_sdp_media_add_attr(sdp->media[0], attr);
-
-		old_sdp = NULL;
-
-		status = pjmedia_sdp_neg_get_active_local(call->inv->neg, &old_sdp);
-		if (status != PJ_SUCCESS || old_sdp == NULL){
-			set_error("pjmedia_sdp_neg_get_active failed");
-            goto out;
-		}
-
-		sdp->origin.version = old_sdp->origin.version + 1;
-	}
+        }
+    }
 
 	status = pjsip_inv_reinvite(call->inv, NULL, sdp, &tdata);
 	if(status != PJ_SUCCESS){
@@ -2644,19 +2723,19 @@ int pjw_call_send_request(long call_id, const char *json)
 	}
 	call = (Call*)val;
 
-    if(!json_get_string_param(document, "method", false, &method)) {
+    if(json_get_string_param(document, "method", false, &method) <= 0) {
         goto out;
     }
 
-    if(!json_get_string_param(document, "body", true, &body)) {
+    if(json_get_string_param(document, "body", true, &body) <= 0) {
         goto out;
     }
 
-    if(!json_get_string_param(document, "ct_type", true, &ct_type)) {
+    if(json_get_string_param(document, "ct_type", true, &ct_type) <= 0) {
         goto out;
     }
 
-    if(!json_get_string_param(document, "ct_subtype", true, &ct_subtype)) {
+    if(json_get_string_param(document, "ct_subtype", true, &ct_subtype) <= 0) {
         goto out;
     }
 
@@ -2715,6 +2794,15 @@ out:
 	return 0;
 }
 
+int count_media_endpoints_by_type(Call *call, int type) {
+    int total = 0;
+    for(int i=0 ; i<call->media_count ; i++) {
+        MediaEndpoint *me = (MediaEndpoint*)call->media_endpoints[i];
+        if(type == me->type) total++;
+    }
+    return total;
+}
+
 //int pjw_call_start_record_wav(long call_id, const char *file)
 int pjw_call_start_record_wav(long call_id, const char *json)
 {
@@ -2726,13 +2814,19 @@ int pjw_call_start_record_wav(long call_id, const char *json)
 	pj_status_t status;
 	pjmedia_port *stream_port;
 
+    unsigned media_id;
+
+    MediaEndpoint *me;
+    AudioEndpoint *ae;
+    int ae_count;
+
     char *file;
 
     char buffer[MAX_JSON_INPUT];
 
     Document document;
 
-    const char *valid_params[] = {"file", ""};
+    const char *valid_params[] = {"file", "media_id", ""};
 
 	if(!g_call_ids.get(call_id, val)){
 		set_error("Invalid call_id");
@@ -2740,11 +2834,13 @@ int pjw_call_start_record_wav(long call_id, const char *json)
 	}
 	call = (Call*)val;
 
-	if(!call->med_stream)
-	{
-		set_error("Media not ready");
-		goto out;
-	}
+    ae_count = count_media_endpoints_by_type(call, ENDPOINT_TYPE_AUDIO);
+
+    if(ae_count == 0)
+    {
+        set_error("No audio endpoint");
+        goto out;
+    }
 
     if(!parse_json(document, json, buffer, MAX_JSON_INPUT)) {
         goto out;
@@ -2754,24 +2850,35 @@ int pjw_call_start_record_wav(long call_id, const char *json)
         goto out;
     }
 
-    if(!json_get_string_param(document, "file", false, &file)) {
+    if(json_get_string_param(document, "file", false, &file) <= 0) {
         goto out;
     }
- 
+
     if(!file[0]) {
         set_error("file cannot be blank string");
         goto out;
     }
- 
-	status = pjmedia_stream_get_port(call->med_stream,
-					&stream_port);
-	if(status != PJ_SUCCESS)
-	{
-		set_error("pjmedia_stream_get_port failed with status=%i", status);
-        goto out;
-	}
 
-	if(!prepare_wav_writer(call, file)) {
+    if(ae_count > 1) {
+        if(json_get_uint_param(document, "media_id", false, &media_id) <= 0) {
+            goto out;
+        }
+    }
+
+    if(media_id >= call->media_count) {
+        set_error("invalid media_id");
+        goto out;
+    }
+
+    me = (MediaEndpoint*)call->media_endpoints[media_id];
+    if(ENDPOINT_TYPE_AUDIO != me->type) {
+        set_error("media_endpoint is not audio endpoint");
+        goto out;
+    }
+
+    ae = (AudioEndpoint*)me->endpoint.audio;
+
+	if(!prepare_wav_writer(call, ae, file)) {
 		set_error("prepare_wav_writer failed");
         goto out;
 	}
@@ -2783,6 +2890,22 @@ out:
 	}
 
 	return 0;
+}
+
+pj_status_t audio_endpoint_start_play_wav(Call *call, AudioEndpoint *ae, const char *file) {
+    pjmedia_port *stream_port;
+	pj_status_t status = pjmedia_stream_get_port(ae->med_stream,
+					&stream_port);
+	if(status != PJ_SUCCESS)
+	{
+		set_error("pjmedia_stream_get_port failed with status=%i", status);
+        return status;
+	}
+
+	if(!prepare_wav_player(call, ae, file)){
+		set_error("prepare_wav_player failed");
+        return -1;
+	}
 }
 
 
@@ -2797,13 +2920,19 @@ int pjw_call_start_play_wav(long call_id, const char *json)
 	pj_status_t status;
 	pjmedia_port *stream_port;
 
+    MediaEndpoint *me;
+    AudioEndpoint *ae;
+    int ae_count;
+
+    unsigned media_id;
+
     char *file;
 
     char buffer[MAX_JSON_INPUT];
 
     Document document;
     
-    const char *valid_params[] = {"file", ""};
+    const char *valid_params[] = {"file", "media_id", ""};
 
 	if(!g_call_ids.get(call_id, val)){
 		set_error("Invalid call_id");
@@ -2811,11 +2940,14 @@ int pjw_call_start_play_wav(long call_id, const char *json)
 	}
 	call = (Call*)val;
 
-	if(!call->med_stream)
-	{
-		set_error("Media not ready");
-		goto out;
-	}
+    ae_count = count_media_endpoints_by_type(call, ENDPOINT_TYPE_AUDIO);
+
+    if(ae_count == 0)
+    {
+        set_error("No audio endpoint");
+        goto out;
+    }
+
 
     if(!parse_json(document, json, buffer, MAX_JSON_INPUT)) {
         goto out;
@@ -2825,7 +2957,7 @@ int pjw_call_start_play_wav(long call_id, const char *json)
         goto out;
     }
 
-    if(!json_get_string_param(document, "file", false, &file)) {
+    if(json_get_string_param(document, "file", false, &file) <= 0) {
         goto out;
     }
   
@@ -2834,18 +2966,26 @@ int pjw_call_start_play_wav(long call_id, const char *json)
         goto out;
     }
 
-	status = pjmedia_stream_get_port(call->med_stream,
-					&stream_port);
-	if(status != PJ_SUCCESS)
-	{
-		set_error("pjmedia_stream_get_port failed with status=%i", status);
-        goto out;
-	}
+    if(ae_count > 1) {
+        if(json_get_uint_param(document, "media_id", false, &media_id) <= 0) {
+            goto out;
+        }
+    }
 
-	if(!prepare_wav_player(call, file)){
-		set_error("prepare_wav_player failed");
-        goto out; 
-	}
+    if(media_id >= call->media_count) {
+        set_error("invalid media_id");
+        goto out;
+    }
+
+    me = (MediaEndpoint*)call->media_endpoints[media_id];
+    if(ENDPOINT_TYPE_AUDIO != me->type) {
+        set_error("media_endpoint is not audio endpoint");
+        goto out;
+    }
+
+    ae = (AudioEndpoint*)me->endpoint.audio;
+
+    audio_endpoint_start_play_wav(call, ae, file);
 
 out:
 	PJW_UNLOCK();
@@ -2856,17 +2996,63 @@ out:
 	return 0;
 }
 
-int pjw_call_stop_play_wav(long call_id)
+pj_status_t call_stop_audio_endpoints_op(Call *call, audio_endpoint_stop_op_t op) {
+    pj_status_t status;
+    for(int i=0 ; i<call->media_count ; i++) {
+        MediaEndpoint *me = (MediaEndpoint*)call->media_endpoints[i];
+        if(ENDPOINT_TYPE_AUDIO != me->type) continue;
+
+        AudioEndpoint *ae = (AudioEndpoint*)me->endpoint.audio;
+
+        status = op(call, ae);
+	    if(status != PJ_SUCCESS) {
+            return status;
+        }
+    }
+}
+
+pj_status_t audio_endpoint_stop_play_wav(Call *call, AudioEndpoint *ae) {
+    pjmedia_port *stream_port;
+	pj_status_t status = pjmedia_stream_get_port(ae->med_stream,
+					&stream_port);
+	if(status != PJ_SUCCESS) {
+		set_error("pjmedia_stream_get_port failed with status=%i", status);
+        return status;
+	}	
+
+	if(!prepare_wire(call->inv->pool, &ae->wav_player, PJMEDIA_PIA_SRATE(&stream_port->info), PJMEDIA_PIA_CCNT(&stream_port->info), PJMEDIA_PIA_SPF(&stream_port->info), PJMEDIA_PIA_BITS(&stream_port->info))) {
+		set_error("prepare_wire failed.");
+        return -1;
+	}
+
+	connect_media_ports(ae);
+
+    return PJ_SUCCESS;
+}
+
+int pjw_call_stop_play_wav(long call_id, const char *json)
 {
 	PJW_LOCK();
     clear_error();
 
     Call *call;
 
-	pjmedia_port *stream_port;
 	pj_status_t status;
 
 	long val;
+
+    MediaEndpoint *me;
+    AudioEndpoint *ae;
+    int ae_count;
+    int res;
+
+    unsigned media_id;
+
+    char buffer[MAX_JSON_INPUT];
+
+    const char *valid_params[] = {"media_id", ""};
+
+    Document document;
 
 	if(!g_call_ids.get(call_id, val)){
 		set_error("Invalid call_id");
@@ -2874,19 +3060,42 @@ int pjw_call_stop_play_wav(long call_id)
 	}
 	call = (Call*)val;
 
-	status = pjmedia_stream_get_port(call->med_stream,
-					&stream_port);
-	if(status != PJ_SUCCESS) {
-		set_error("pjmedia_stream_get_port failed with status=%i", status);
+    if(!parse_json(document, json, buffer, MAX_JSON_INPUT)) {
         goto out;
-	}	
+    }
 
-	if(!prepare_wire(call->inv->pool, &call->wav_player, PJMEDIA_PIA_SRATE(&stream_port->info), PJMEDIA_PIA_CCNT(&stream_port->info), PJMEDIA_PIA_SPF(&stream_port->info), PJMEDIA_PIA_BITS(&stream_port->info))) {
-		set_error("prepare_wire failed.");
+    res = json_get_uint_param(document, "media_id", true, &media_id);
+    if(res <= 0)  {
         goto out;
-	}
+    }
 
-	connect_media_ports(call);
+    if(NOT_FOUND_OPTIONAL == res) {
+        // Stop play wav in all audio endpoints
+        status = call_stop_audio_endpoints_op(call, audio_endpoint_stop_play_wav);
+        if(status != PJ_SUCCESS) {
+            goto out;
+        }
+    } else {
+        // Stop play wav on specified media_id 
+
+        if(media_id >= call->media_count) {
+            set_error("invalid media_id");
+            goto out;
+        }
+
+        me = (MediaEndpoint*)call->media_endpoints[media_id];
+        if(ENDPOINT_TYPE_AUDIO != me->type) {
+            set_error("invalid media_id non audio");
+            goto out;
+        }
+
+        ae = (AudioEndpoint*)me->endpoint.audio;
+
+        status = audio_endpoint_stop_play_wav(call, ae);
+	    if(status != PJ_SUCCESS) {
+            goto out;
+        }
+    }
 	
 out:
 	PJW_UNLOCK();
@@ -2897,7 +3106,27 @@ out:
 	return 0;
 }
 
-int pjw_call_stop_record_wav(long call_id)
+pj_status_t audio_endpoint_stop_record_wav(Call *call, AudioEndpoint *ae) {
+    pjmedia_port *stream_port;
+
+    pj_status_t status = pjmedia_stream_get_port(ae->med_stream,
+					&stream_port);
+	if(status != PJ_SUCCESS) {
+		set_error("pjmedia_stream_get_port failed.");
+        return status;
+	}	
+
+	if(!prepare_wire(call->inv->pool, &ae->wav_writer, PJMEDIA_PIA_SRATE(&stream_port->info), PJMEDIA_PIA_CCNT(&stream_port->info), PJMEDIA_PIA_SPF(&stream_port->info), PJMEDIA_PIA_BITS(&stream_port->info))) {
+		set_error("prepare_wire failed.");
+        return -1;
+	}
+
+	connect_media_ports(ae);
+
+    return PJ_SUCCESS;
+}
+	
+int pjw_call_stop_record_wav(long call_id, const char *json)
 {
 	PJW_LOCK();
     clear_error();
@@ -2907,26 +3136,62 @@ int pjw_call_stop_record_wav(long call_id)
 	pjmedia_port *stream_port;
 	pj_status_t status;
 
+    MediaEndpoint *me;
+    AudioEndpoint *ae;
+    int ae_count;
+    int res;
+
+    unsigned media_id;
+
+    char buffer[MAX_JSON_INPUT];
+
+    const char *valid_params[] = {"media_id", ""};
+
+    Document document;
+
 	if(!g_call_ids.get(call_id, val)){
 		set_error("Invalid call_id");
         goto out;
 	}
 	call = (Call*)val;
 
-	status = pjmedia_stream_get_port(call->med_stream,
-					&stream_port);
-	if(status != PJ_SUCCESS) {
-		set_error("pjmedia_stream_get_port failed.");
+    if(!parse_json(document, json, buffer, MAX_JSON_INPUT)) {
         goto out;
-	}	
+    }
 
-	if(!prepare_wire(call->inv->pool, &call->wav_writer, PJMEDIA_PIA_SRATE(&stream_port->info), PJMEDIA_PIA_CCNT(&stream_port->info), PJMEDIA_PIA_SPF(&stream_port->info), PJMEDIA_PIA_BITS(&stream_port->info))) {
-		set_error("prepare_wire failed.");
+    res = json_get_uint_param(document, "media_id", true, &media_id);
+    if(res <= 0)  {
         goto out;
-	}
+    }
 
-	connect_media_ports(call);
-	
+    if(NOT_FOUND_OPTIONAL == res) {
+        // Stop record wav in all audio endpoints
+        status = call_stop_audio_endpoints_op(call, audio_endpoint_stop_record_wav);
+        if(status != PJ_SUCCESS) {
+            goto out;
+        }
+    } else {
+        // Stop record wav on specified media_id 
+
+        if(media_id >= call->media_count) {
+            set_error("invalid media_id");
+            goto out;
+        }
+
+        me = (MediaEndpoint*)call->media_endpoints[media_id];
+        if(ENDPOINT_TYPE_AUDIO != me->type) {
+            set_error("invalid media_id non audio");
+            goto out;
+        }
+
+        ae = (AudioEndpoint*)me->endpoint.audio;
+
+        status = audio_endpoint_stop_record_wav(call, ae);
+	    if(status != PJ_SUCCESS) {
+            goto out;
+        }
+    }
+
 out:
 	PJW_UNLOCK();
 	if(pjw_errorstring[0]){
@@ -2952,11 +3217,18 @@ int pjw_call_start_fax(long call_id, const char *json)
     unsigned flags = 0;
     bool flag;
 
+
+    MediaEndpoint *me;
+    AudioEndpoint *ae;
+    int ae_count;
+
+    unsigned media_id;
+
     char buffer[MAX_JSON_INPUT];
 
-    Document document;
+    const char *valid_params[] = {"is_sender", "file", "transmit_on_idle", "media_id", ""};
 
-    const char *valid_params[] = {"is_sender", "file", "transmit_on_idle", ""};
+    Document document;
 
 	if(!g_call_ids.get(call_id, val)){
 		set_error("Invalid call_id");
@@ -2964,11 +3236,13 @@ int pjw_call_start_fax(long call_id, const char *json)
 	}
 	call = (Call*)val;
 
-	if(!call->med_stream)
-	{
-		set_error("Media not ready");
-		goto out;
-	}
+    ae_count = count_media_endpoints_by_type(call, ENDPOINT_TYPE_AUDIO);
+
+    if(ae_count == 0)
+    {
+        set_error("No audio endpoint");
+        goto out;
+    }
 
     if(!parse_json(document, json, buffer, MAX_JSON_INPUT)) {
         goto out;
@@ -2978,11 +3252,47 @@ int pjw_call_start_fax(long call_id, const char *json)
         goto out;
     }
 
-    if(!json_get_bool_param(document, "is_sender", false, &is_sender)) {
+    if(json_get_string_param(document, "file", false, &file) <= 0) {
         goto out;
     }
 
-    if(!json_get_string_param(document, "file", false, &file)) {
+    if(!file[0]) {
+        set_error("file cannot be blank string");
+        goto out;
+    }
+
+    if(ae_count > 1) {
+        if(json_get_uint_param(document, "media_id", false, &media_id) <= 0) {
+            goto out;
+        }
+    }
+
+    if(media_id >= call->media_count) {
+        set_error("invalid media_id");
+        goto out;
+    }
+
+    me = (MediaEndpoint*)call->media_endpoints[media_id];
+    if(ENDPOINT_TYPE_AUDIO != me->type) {
+        set_error("media_endpoint is not audio endpoint");
+        goto out;
+    }
+
+    ae = (AudioEndpoint*)me->endpoint.audio;
+
+    if(!parse_json(document, json, buffer, MAX_JSON_INPUT)) {
+        goto out;
+    }
+
+    if(!validate_params(document, valid_params)) {
+        goto out;
+    }
+
+    if(json_get_bool_param(document, "is_sender", false, &is_sender) <= 0) {
+        goto out;
+    }
+
+    if(json_get_string_param(document, "file", false, &file) <= 0) {
         goto out;
     }
   
@@ -2993,22 +3303,13 @@ int pjw_call_start_fax(long call_id, const char *json)
 
 
     flag = false;
-    if(!json_get_bool_param(document, "transmit_on_idle", true, &flag)) {
+    if(json_get_bool_param(document, "transmit_on_idle", true, &flag) <= 0) {
         goto out;
     } else {
         if(flag) flags |= FAX_FLAG_TRANSMIT_ON_IDLE;
     }
     
-
-	status = pjmedia_stream_get_port(call->med_stream,
-					&stream_port);
-	if(status != PJ_SUCCESS)
-	{
-		set_error("pjmedia_stream_get_port failed with status=%i", status);
-        goto out;
-	}
-
-	if(!prepare_fax(call, is_sender, file, flags)){
+	if(!prepare_fax(call, ae, is_sender, file, flags)){
 		set_error("prepare_fax failed");
         goto out;
 	}
@@ -3022,8 +3323,26 @@ out:
 	return 0;
 }
 
+pj_status_t audio_endpoint_stop_fax(Call *call, AudioEndpoint *ae) {
+    pjmedia_port *stream_port;
+	pj_status_t status = pjmedia_stream_get_port(ae->med_stream,
+					&stream_port);
+	if(status != PJ_SUCCESS) {
+		set_error("pjmedia_stream_get_port failed.");
+        return status;
+	}
 
-int pjw_call_stop_fax(long call_id)
+	if(!prepare_wire(call->inv->pool, &ae->fax, PJMEDIA_PIA_SRATE(&stream_port->info), PJMEDIA_PIA_CCNT(&stream_port->info), PJMEDIA_PIA_SPF(&stream_port->info), PJMEDIA_PIA_BITS(&stream_port->info))) {
+		set_error("prepare_wire failed.");
+        return -1;
+	}
+
+	connect_media_ports(ae);
+
+    return PJ_SUCCESS;
+}
+
+int pjw_call_stop_fax(long call_id, const char *json)
 {
 	PJW_LOCK();
     clear_error();
@@ -3034,26 +3353,61 @@ int pjw_call_stop_fax(long call_id)
 	pjmedia_port *stream_port;
 	pj_status_t status;
 
+    MediaEndpoint *me;
+    AudioEndpoint *ae;
+    int ae_count;
+    int res;
+
+    unsigned media_id;
+
+    char buffer[MAX_JSON_INPUT];
+
+    const char *valid_params[] = {"media_id", ""};
+
+    Document document;
+
 	if(!g_call_ids.get(call_id, val)){
 		set_error("Invalid call_id");
         goto out;
 	}
-
 	call = (Call*)val;
 
-	status = pjmedia_stream_get_port(call->med_stream,
-					&stream_port);
-	if(status != PJ_SUCCESS) {
-		set_error("pjmedia_stream_get_port failed.");
+    if(!parse_json(document, json, buffer, MAX_JSON_INPUT)) {
         goto out;
-	}	
+    }
 
-	if(!prepare_wire(call->inv->pool, &call->fax, PJMEDIA_PIA_SRATE(&stream_port->info), PJMEDIA_PIA_CCNT(&stream_port->info), PJMEDIA_PIA_SPF(&stream_port->info), PJMEDIA_PIA_BITS(&stream_port->info))) {
-		set_error("prepare_wire failed.");
+    res = json_get_uint_param(document, "media_id", true, &media_id);
+    if(res <= 0)  {
         goto out;
-	}
+    }
 
-	connect_media_ports(call);
+    if(NOT_FOUND_OPTIONAL == res) {
+        // Stop fax in all audio endpoints
+        status = call_stop_audio_endpoints_op(call, audio_endpoint_stop_fax);
+        if(status != PJ_SUCCESS) {
+            goto out;
+        }
+    } else {
+        // Stop fax on specified media_id 
+
+        if(media_id >= call->media_count) {
+            set_error("invalid media_id");
+            goto out;
+        }
+
+        me = (MediaEndpoint*)call->media_endpoints[media_id];
+        if(ENDPOINT_TYPE_AUDIO != me->type) {
+            set_error("invalid media_id non audio");
+            goto out;
+        }
+
+        ae = (AudioEndpoint*)me->endpoint.audio;
+
+        status = audio_endpoint_stop_fax(call, ae);
+	    if(status != PJ_SUCCESS) {
+            goto out;
+        }
+    }
 
 out:
 	PJW_UNLOCK();
@@ -3065,12 +3419,18 @@ out:
 }
 
 
-int pjw_call_get_stream_stat(long call_id, char *out_stats){
+int pjw_call_get_stream_stat(long call_id, const char *json, char *out_stats){
 	PJW_LOCK();
     clear_error();
 
 	long val;
     Call *call;
+
+    char buffer[MAX_JSON_INPUT];
+
+    const char *valid_params[] = {"media_id", ""};
+
+    Document document;
 
 	pj_status_t status;
 	pjmedia_rtcp_stat stat;
@@ -3078,28 +3438,68 @@ int pjw_call_get_stream_stat(long call_id, char *out_stats){
 
 	ostringstream oss;
 
+    MediaEndpoint *me;
+    AudioEndpoint *ae;
+    VideoEndpoint *ve;
+
+    unsigned media_id;
+
+    pjmedia_stream *med_stream = NULL;
+
 	if(!g_call_ids.get(call_id, val)){
 		set_error("Invalid call_id");
         goto out;
 	}
 	call = (Call*)val;
 
-	if(!call->med_stream){
-		set_error("Could not get stream stats. No media session");
+    if(!parse_json(document, json, buffer, MAX_JSON_INPUT)) {
         goto out;
-	}
+    }
 
-	status = pjmedia_stream_get_stat(call->med_stream, &stat);
-	if(status != PJ_SUCCESS){
-		set_error("Could not get stream stats. Call to pjmedia_stream_get_stream_stat failed with status=%i", status);
+    if(!json_get_uint_param(document, "media_id", false, &media_id)) {
         goto out;
-	}
+    }
 
-	status = pjmedia_stream_get_info(call->med_stream, &stream_info);
-	if(status != PJ_SUCCESS){
-		set_error("Could not get stream info. Call to pjmedia_stream_get_info failed with status=%i", status);
+    if(media_id >= call->media_count) {
+        set_error("invalid media_id");
         goto out;
-	}
+    }
+
+    me = (MediaEndpoint*)call->media_endpoints[media_id];
+    if(ENDPOINT_TYPE_AUDIO == me->type) {
+        ae = (AudioEndpoint*)me->endpoint.audio;
+
+        if(!ae->med_stream){
+            set_error("Could not get stream stats. No media session");
+            goto out;
+        }
+
+        med_stream = ae->med_stream;
+    } else if(ENDPOINT_TYPE_VIDEO == me->type) {
+        ve = (VideoEndpoint*)me->endpoint.video;
+
+        if(!ve->med_stream){
+            set_error("Could not get stream stats. No media session");
+            goto out;
+        }
+
+        med_stream = ve->med_stream;
+    } else {
+        set_error("non streaming media endpoint");
+        goto out;
+    }
+
+    status = pjmedia_stream_get_stat(med_stream, &stat);
+    if(status != PJ_SUCCESS){
+        set_error("Could not get stream stats. Call to pjmedia_stream_get_stream_stat failed with status=%i", status);
+        goto out;
+    }
+
+    status = pjmedia_stream_get_info(med_stream, &stream_info);
+    if(status != PJ_SUCCESS){
+        set_error("Could not get stream info. Call to pjmedia_stream_get_info failed with status=%i", status);
+        goto out;
+    }
 
 	build_stream_stat(oss, &stat, &stream_info);
 	strcpy(out_stats, oss.str().c_str());
@@ -3140,14 +3540,28 @@ static void on_media_update( pjsip_inv_session *inv, pj_status_t status){
 		return;
 	}
 
-	if(call->master_port){
-		status = pjmedia_master_port_stop(call->master_port);
-		if(status != PJ_SUCCESS){
-			make_evt_media_status(evt, sizeof(evt), call_id, "setup_failed", "", "");
-			dispatch_event(evt);
-			return;
-		}
-	}
+    for(int i=0 ; i<call->media_count ; i++) {
+        MediaEndpoint *me = (MediaEndpoint*)call->media_endpoints[i];
+        pjmedia_master_port *master_port = NULL;
+        if(ENDPOINT_TYPE_AUDIO == me->type) {
+            AudioEndpoint *ae = (AudioEndpoint*)me->endpoint.audio;
+            master_port = ae->master_port;
+        } else if(ENDPOINT_TYPE_VIDEO == me->type) {
+            VideoEndpoint *ve = (VideoEndpoint*)me->endpoint.video;
+            master_port = ve->master_port;
+        } else {
+            continue;
+        }
+
+        if(master_port){
+            status = pjmedia_master_port_stop(master_port);
+            if(status != PJ_SUCCESS) {
+                make_evt_media_status(evt, sizeof(evt), call_id, "setup_failed", "", "");
+                dispatch_event(evt);
+                return;
+            }
+        }
+    }
 
 	status = pjmedia_sdp_neg_get_active_local(inv->neg, &local_sdp);
 	if(status != PJ_SUCCESS){
@@ -3163,95 +3577,100 @@ static void on_media_update( pjsip_inv_session *inv, pj_status_t status){
 		return;
 	}
 
-	status = pjmedia_stream_info_from_sdp(
-					&stream_info,
-					inv->dlg->pool,
-					g_med_endpt,
-					local_sdp,
-					remote_sdp,
-					0);
-	if(status != PJ_SUCCESS){
-		make_evt_media_status(evt, sizeof(evt), call_id, "setup_failed", "", "");
-		dispatch_event(evt);
-		return;
-	}
+    // TODO: complete the below
+    /*
 
-	if(call->med_stream){
-		status = pjmedia_stream_destroy(call->med_stream);
-		if(status != PJ_SUCCESS){
-			make_evt_media_status(evt, sizeof(evt), call_id, "setup_failed", "", "");
-			dispatch_event(evt);
-			return;
-		}
-	}
+    for(int i=0 ; i<si->stream_cnt ; i++) {
+        status = pjmedia_stream_info_from_sdp(
+                        &stream_info,
+                        inv->dlg->pool,
+                        g_med_endpt,
+                        local_sdp,
+                        remote_sdp,
+                        i);
+        if(status != PJ_SUCCESS){
+            make_evt_media_status(evt, sizeof(evt), call_id, "setup_failed", "", "");
+            dispatch_event(evt);
+            return;
+        }
 
-	status = pjmedia_stream_create(
-				g_med_endpt,
-				inv->dlg->pool,
-				&stream_info,
-				call->med_transport, 
-				NULL,
-				&call->med_stream);
-	if(status != PJ_SUCCESS){
-		make_evt_media_status(evt, sizeof(evt), call_id, "setup_failed", "", "");
-		dispatch_event(evt);
-		return;
-	}
+        if(call->med_stream){
+            status = pjmedia_stream_destroy(call->med_stream);
+            if(status != PJ_SUCCESS){
+                make_evt_media_status(evt, sizeof(evt), call_id, "setup_failed", "", "");
+                dispatch_event(evt);
+                return;
+            }
+        }
+        status = pjmedia_stream_create(
+                    g_med_endpt,
+                    inv->dlg->pool,
+                    &stream_info,
+                    ((AudioEndpoint*)(MediaEndpoint*)call->media_endpoints[i]).endpoint.audio)->med_transport, 
+                    NULL,
+                    &call->med_stream);
+        if(status != PJ_SUCCESS){
+            make_evt_media_status(evt, sizeof(evt), call_id, "setup_failed", "", "");
+            dispatch_event(evt);
+            return;
+        }
 
-	status = pjmedia_stream_start(call->med_stream);
-	if(status != PJ_SUCCESS){
-		make_evt_media_status(evt, sizeof(evt), call_id, "setup_failed", "", "");
-		dispatch_event(evt);
-		return;
-	}
+        status = pjmedia_stream_start(call->med_stream);
+        if(status != PJ_SUCCESS){
+            make_evt_media_status(evt, sizeof(evt), call_id, "setup_failed", "", "");
+            dispatch_event(evt);
+            return;
+        }
 
-	status = pjmedia_stream_set_dtmf_callback(call->med_stream,
-						&on_dtmf,
-						call);
-	if(status != PJ_SUCCESS){
-		make_evt_media_status(evt, sizeof(evt), call_id, "setup_failed", "", "");
-		dispatch_event(evt);
-		return;
-	}
+        status = pjmedia_stream_set_dtmf_callback(call->med_stream,
+                            &on_dtmf,
+                            call);
+        if(status != PJ_SUCCESS){
+            make_evt_media_status(evt, sizeof(evt), call_id, "setup_failed", "", "");
+            dispatch_event(evt);
+            return;
+        }
 
-    /* Start the UDP media transport */
-    pjmedia_transport_media_start(call->med_transport, 0, 0, 0, 0);
+        pjmedia_transport_media_start(call->med_transport, 0, 0, 0, 0);
 
-	pjmedia_port *stream_port;
-	status = pjmedia_stream_get_port(call->med_stream, &stream_port);
-	if(status != PJ_SUCCESS){
-		make_evt_media_status(evt, sizeof(evt), call_id, "setup_failed", "", "");
-		dispatch_event(evt);
-		return;
-	}
+        pjmedia_port *stream_port;
+        status = pjmedia_stream_get_port(call->med_stream, &stream_port);
+        if(status != PJ_SUCCESS){
+            make_evt_media_status(evt, sizeof(evt), call_id, "setup_failed", "", "");
+            dispatch_event(evt);
+            return;
+        }
 
-	if(!init_media_ports(call,
-				PJMEDIA_PIA_SRATE(&stream_port->info),
-				PJMEDIA_PIA_CCNT(&stream_port->info),
-				PJMEDIA_PIA_SPF(&stream_port->info),
-				PJMEDIA_PIA_BITS(&stream_port->info))) {
-		make_evt_media_status(evt, sizeof(evt), call_id, "setup_failed", "", "");
-		dispatch_event(evt);
-		return;
-	}
+        if(!init_media_ports(call,
+                    PJMEDIA_PIA_SRATE(&stream_port->info),
+                    PJMEDIA_PIA_CCNT(&stream_port->info),
+                    PJMEDIA_PIA_SPF(&stream_port->info),
+                    PJMEDIA_PIA_BITS(&stream_port->info))) {
+            make_evt_media_status(evt, sizeof(evt), call_id, "setup_failed", "", "");
+            dispatch_event(evt);
+            return;
+        }
 
-	if(!set_ports(call, stream_port, (pjmedia_port*)call->dtmfdet))
-	{
-		make_evt_media_status(evt, sizeof(evt), call_id, "setup_failed", "", "");
-		dispatch_event(evt);
-		return;
-	}
+        if(!set_ports(call, stream_port, (pjmedia_port*)call->dtmfdet))
+        {
+            make_evt_media_status(evt, sizeof(evt), call_id, "setup_failed", "", "");
+            dispatch_event(evt);
+            return;
+        }
 
-	int local_media_mode = get_media_mode(local_sdp->media[0]->attr, local_sdp->media[0]->attr_count); 
-	int remote_media_mode = get_media_mode(remote_sdp->media[0]->attr, remote_sdp->media[0]->attr_count); 
+        int local_media_mode = get_media_mode(local_sdp->media[0]->attr, local_sdp->media[0]->attr_count); 
+        int remote_media_mode = get_media_mode(remote_sdp->media[0]->attr, remote_sdp->media[0]->attr_count); 
 
-	char *local_mode = get_media_mode_str(local_media_mode);
-	char *remote_mode = get_media_mode_str(remote_media_mode);
+        char *local_mode = get_media_mode_str(local_media_mode);
+        char *remote_mode = get_media_mode_str(remote_media_mode);
 
-	make_evt_media_status(evt, sizeof(evt), call_id, "setup_ok", local_mode, remote_mode);
-	dispatch_event(evt);
+        make_evt_media_status(evt, sizeof(evt), call_id, "setup_ok", local_mode, remote_mode);
+        dispatch_event(evt);
+    }
+    */
 }
 
+/*
 static pj_bool_t set_ports(Call *call, pjmedia_port *stream_port, pjmedia_port *media_port)
 {
 	pj_status_t status;
@@ -3313,6 +3732,7 @@ static pj_bool_t set_ports(Call *call, pjmedia_port *stream_port, pjmedia_port *
 
 	return PJ_TRUE;
 }
+*/
 
 static void on_state_changed( pjsip_inv_session *inv, 
 				   pjsip_event *e){
@@ -3329,8 +3749,7 @@ static void on_state_changed( pjsip_inv_session *inv,
 
 	if(g_shutting_down) return;
 
-	if(PJSIP_INV_STATE_DISCONNECTED == inv->state)
-	{
+	if(PJSIP_INV_STATE_DISCONNECTED == inv->state) {
 		Call *call = (Call*)inv->dlg->mod_data[mod_tester.id];
 		//addon_log(LOG_LEVEL_DEBUG, "call will terminate call=%x\n",call);
 		pj_status_t status;
@@ -3341,72 +3760,75 @@ static void on_state_changed( pjsip_inv_session *inv,
 			return;
 		}
 
-		if(call->master_port)
-		{
-			status = pjmedia_master_port_stop(call->master_port);
-			if(status != PJ_SUCCESS)
-			{
-				addon_log(LOG_LEVEL_DEBUG, "pjmedia_master_port_stop failed\n");
-			}
+        for(int i=0 ; i<call->media_count ; i++) {
+            MediaEndpoint *me = call->media_endpoints[i];
+            if(ENDPOINT_TYPE_AUDIO == me->type) {
+                AudioEndpoint *ae = (AudioEndpoint*)me->endpoint.audio;
+                if(ae->master_port)
+                {
+                    status = pjmedia_master_port_stop(ae->master_port);
+                    if(status != PJ_SUCCESS)
+                    {
+                        addon_log(LOG_LEVEL_DEBUG, "pjmedia_master_port_stop failed\n");
+                    }
 
-			status = pjmedia_master_port_destroy(call->master_port, PJ_FALSE);
-			if(status != PJ_SUCCESS)
-			{
-				addon_log(LOG_LEVEL_DEBUG, "pjmedia_master_port_destroy failed\n");
-			}
-		}
+                    status = pjmedia_master_port_destroy(ae->master_port, PJ_FALSE);
+                    if(status != PJ_SUCCESS)
+                    {
+                        addon_log(LOG_LEVEL_DEBUG, "pjmedia_master_port_destroy failed\n");
+                    }
+                }
 
-		if(call->media_port)
-		{
-			status = pjmedia_port_destroy(call->media_port);
-			if(status != PJ_SUCCESS)
-			{
-				addon_log(LOG_LEVEL_DEBUG, "pjmedia_port_destroy failed\n");
-			}
-		}
+                if(ae->media_port)
+                {
+                    status = pjmedia_port_destroy(ae->media_port);
+                    if(status != PJ_SUCCESS)
+                    {
+                        addon_log(LOG_LEVEL_DEBUG, "pjmedia_port_destroy failed\n");
+                    }
+                }
 
-		if(call->med_stream)
-		{
-			status = pjmedia_stream_destroy(call->med_stream);
-			if(status != PJ_SUCCESS)
-			{
-				addon_log(LOG_LEVEL_DEBUG, "pjmedia_stream_destroy failed\n");
-			}
-		}
+                if(ae->med_stream)
+                {
+                    status = pjmedia_stream_destroy(ae->med_stream);
+                    if(status != PJ_SUCCESS)
+                    {
+                        addon_log(LOG_LEVEL_DEBUG, "pjmedia_stream_destroy failed\n");
+                    }
+                }
+            }
 
-		if(call->med_transport)
-		{
-			close_media_transport(call->med_transport);
-		}
+            close_media_endpoints(call);
 
-		long val;
-		if(!g_call_ids.remove(call_id, val))
-		{
-			addon_log(LOG_LEVEL_DEBUG, "g_call_ids.remove failed\n");
-		}
-		
-		Pair_Call_CallId pcc;
-		pcc.pCall = call;
-		pcc.id = call_id;
-		g_LastCalls.push_back(pcc);	
+            long val;
+            if(!g_call_ids.remove(call_id, val))
+            {
+                addon_log(LOG_LEVEL_DEBUG, "g_call_ids.remove failed\n");
+            }
+            
+            Pair_Call_CallId pcc;
+            pcc.pCall = call;
+            pcc.id = call_id;
+            g_LastCalls.push_back(pcc);	
 
-		//delete call->last_responses;
-	
-		/*
-		ostringstream oss;
-		oss << "event=termination" << EVT_DATA_SEP << "call=" << call_id;
-		dispatch_event(oss.str().c_str());
-		*/
+            //delete call->last_responses;
+        
+            /*
+            ostringstream oss;
+            oss << "event=termination" << EVT_DATA_SEP << "call=" << call_id;
+            dispatch_event(oss.str().c_str());
+            */
 
-		char evt[2048];
-		int sip_msg_len = 0;
-		char *sip_msg = (char*)"";
-		if(e->type == PJSIP_EVENT_TSX_STATE) {
-			sip_msg_len = e->body.rx_msg.rdata->msg_info.len;
-			sip_msg = e->body.rx_msg.rdata->msg_info.msg_buf;
-		}
-		make_evt_call_ended(evt, sizeof(evt), call_id, sip_msg_len, sip_msg);
-		dispatch_event(evt);
+            char evt[2048];
+            int sip_msg_len = 0;
+            char *sip_msg = (char*)"";
+            if(e->type == PJSIP_EVENT_TSX_STATE) {
+                sip_msg_len = e->body.rx_msg.rdata->msg_info.len;
+                sip_msg = e->body.rx_msg.rdata->msg_info.msg_buf;
+            }
+            make_evt_call_ended(evt, sizeof(evt), call_id, sip_msg_len, sip_msg);
+            dispatch_event(evt);
+        }
 	}
 }
 
@@ -3656,43 +4078,19 @@ static pj_bool_t on_rx_request( pjsip_rx_data *rdata ){
 		return PJ_TRUE;
 	}
 
-	pjsip_transport *t = rdata->tp_info.transport;
-	pj_str_t str_addr = pj_str( inet_ntoa( (in_addr&)t->local_addr.ipv4.sin_addr.s_addr ) );
-	pjmedia_transport *med_transport = create_media_transport(&str_addr);
-
-	if(!med_transport)
-	{
-		reason = pj_str((char*)"Internal Server Error (could not create media transport)");
-		pjsip_endpt_respond_stateless(g_sip_endpt, rdata, 500, &reason, NULL, NULL);
-		return PJ_TRUE;
-	}
-
-	pjmedia_transport_info med_tpinfo;
-	pjmedia_transport_info_init(&med_tpinfo);
-	pjmedia_transport_get_info(med_transport, &med_tpinfo);
-
-	pjmedia_sdp_session *sdp;
-	status = pjmedia_endpt_create_sdp( g_med_endpt, rdata->tp_info.pool, 1,
-			&med_tpinfo.sock_info,
-			&sdp);
-	if(status != PJ_SUCCESS) {
-		close_media_transport(med_transport);
-		reason = pj_str((char*)"Internal Server Error (pjmedia_endprt_create_sdp failed)");
-		pjsip_endpt_respond_stateless(g_sip_endpt, rdata, 500, &reason, NULL, NULL);
-		return PJ_TRUE;
-	}
-
 	pjsip_inv_session *inv;
-	status = pjsip_inv_create_uas(dlg, rdata, sdp, 0, &inv);
+	status = pjsip_inv_create_uas(dlg, rdata, NULL, 0, &inv);
 	if(status != PJ_SUCCESS) {
-		close_media_transport(med_transport);
 		reason = pj_str((char*)"Internal Server Error (pjsip_inv_create_uas failed)");
 		pjsip_endpt_respond_stateless(g_sip_endpt, rdata, 500, &reason, NULL, NULL);
 		return PJ_TRUE;
 	}
 
+	pjsip_transport *t = rdata->tp_info.transport;
+	Call *call = (Call*)pj_pool_alloc(inv->pool, sizeof(Call));
+	pj_bzero(call, sizeof(Call));
+
 	if(!dlg_set_transport(t, dlg)) {
-		close_media_transport(med_transport);
 		reason = pj_str((char*)"Internal Server Error (set_transport failed)");
 		pjsip_endpt_respond_stateless(g_sip_endpt, rdata, 500, &reason, NULL, NULL);
 		return PJ_TRUE;
@@ -3708,7 +4106,6 @@ static pj_bool_t on_rx_request( pjsip_rx_data *rdata ){
 						100,
 						NULL, NULL, &tdata);
 		if(status != PJ_SUCCESS) {
-			close_media_transport(med_transport);
 			reason = pj_str((char*)"Internal Server Error (pjsip_inv_initial_answer failed)");
 			pjsip_endpt_respond_stateless(g_sip_endpt, rdata, 500, &reason, NULL, NULL);
 			return PJ_TRUE;
@@ -3717,7 +4114,6 @@ static pj_bool_t on_rx_request( pjsip_rx_data *rdata ){
 		//Send 100 response
 		status = pjsip_inv_send_msg(inv, tdata);
 		if(status != PJ_SUCCESS) {
-			close_media_transport(med_transport);
 			reason = pj_str((char*)"Internal Server Error (pjsip_inv_send_msg failed)");
 			pjsip_endpt_respond_stateless(g_sip_endpt, rdata, 500, &reason, NULL, NULL);
 			return PJ_TRUE;
@@ -3726,27 +4122,21 @@ static pj_bool_t on_rx_request( pjsip_rx_data *rdata ){
 		status = pjsip_rx_data_clone(rdata, 0, &cloned_rdata);
 
 		if(status != PJ_SUCCESS) {
-			close_media_transport(med_transport);
 			reason = pj_str((char*)"Internal Server Error (pjsip_rx_data_clone failed)");
 			pjsip_endpt_respond_stateless(g_sip_endpt, rdata, 500, &reason, NULL, NULL);
 			return PJ_TRUE;
 		}
 	}
 
-	Call *call = (Call*)pj_pool_alloc(inv->pool, sizeof(Call));
-	pj_bzero(call, sizeof(Call));
-
 	call->initial_invite_rdata = cloned_rdata;
 
 	if(status != PJ_SUCCESS) {
-		close_media_transport(med_transport);
 		reason = pj_str((char*)"Internal Server Error (pjsip_rx_data_clone failed)");
 		pjsip_endpt_respond_stateless(g_sip_endpt, rdata, 500, &reason, NULL, NULL);
 		return PJ_TRUE;
 	}
 
 	call->inv = inv;
-	call->med_transport = med_transport;
 
 	if(!inv->dlg) {
 		return PJ_TRUE;
@@ -3757,7 +4147,6 @@ static pj_bool_t on_rx_request( pjsip_rx_data *rdata ){
 	//Without this, on_rx_response will not be called
 	status = pjsip_dlg_add_usage(dlg, &mod_tester, call);
 	if(status != PJ_SUCCESS) {
-		close_media_transport(med_transport);
 		reason = pj_str((char*)"Internal Server Error (pjsip_dlg_add_usage failed)");
 		pjsip_endpt_respond_stateless(g_sip_endpt, rdata, 500, &reason, NULL, NULL);
 		return PJ_TRUE;
@@ -3914,13 +4303,39 @@ static void on_rx_offer2(pjsip_inv_session *inv, struct pjsip_inv_on_rx_offer_cb
 
 	pj_status_t status;
 
-    const pjmedia_sdp_session *offer = param->offer;
     const pjsip_rx_data *rdata = param->rdata;
+
+    if (inv->neg == NULL) {
+        status = pjmedia_sdp_neg_create_w_remote_offer(inv->dlg->pool,
+            NULL, // local remote not set
+            param->offer,
+            &inv->neg);
+        if (status != PJ_SUCCESS) {
+            printf("error: pjmedia_sdp_neg_create_w_remote_offer failed\n");
+            exit(1);
+            return;
+        }
+    } else {
+        status = pjmedia_sdp_neg_set_remote_offer(inv->dlg->pool,
+            inv->neg,
+            param->offer
+        );   
+        if (status != PJ_SUCCESS) {
+            printf("error: pjmedia_sdp_neg_set_remote_offer failed\n");
+            exit(1);
+            return;
+        }
+    }
+
+	
+    // TODO: reenable this code after adjustments to handle multiple media
+    /*
 
 	pjmedia_sdp_conn *conn;
 	conn = offer->media[0]->conn;
 	if(!conn) conn = offer->conn;	
-	
+
+
 	pjmedia_transport_info tpinfo;
 	pjmedia_transport_info_init(&tpinfo);
 	pjmedia_transport_get_info(call->med_transport,&tpinfo);
@@ -3988,6 +4403,8 @@ static void on_rx_offer2(pjsip_inv_session *inv, struct pjsip_inv_on_rx_offer_cb
 		dispatch_event(evt); 
 		return;
 	}
+    */
+
 
     // The below cannot be used: in case of delayed media scenarios, on_rx_offer and on_rx_offer2 will be called when the '200 OK'
     // is received for an INVITE without SDP.
@@ -4019,14 +4436,19 @@ static void on_dtmf(pjmedia_stream *stream, void *user_data, int digit){
 	if(d == '*') d = 'e';
 	if(d == '#') d = 'f';
 
-	Call *c = (Call*)user_data;
+	Call *call = (Call*)user_data;
+
+    int media_id = find_endpoint_by_inband_dtmf_media_stream(call, stream);
+    assert(media_id >= 0);
+
+    AudioEndpoint *ae = (AudioEndpoint*)call->media_endpoints[media_id];
 
 	int mode = DTMF_MODE_RFC2833;
 
 	if(g_dtmf_inter_digit_timer) {
 
 		PJW_LOCK();
-		int *pLen = &c->DigitBufferLength[mode];
+		int *pLen = &ae->DigitBufferLength[mode];
 
 		if(*pLen > MAXDIGITS) {
 			PJW_UNLOCK();
@@ -4034,12 +4456,12 @@ static void on_dtmf(pjmedia_stream *stream, void *user_data, int digit){
 			return;
 		}
 
-		c->DigitBuffers[mode][*pLen] = d;
+		ae->DigitBuffers[mode][*pLen] = d;
 		(*pLen)++;
-		c->last_digit_timestamp[mode] = ms_timestamp();
+		ae->last_digit_timestamp[mode] = ms_timestamp();
 		PJW_UNLOCK();
 	} else {
-		make_evt_dtmf(evt, sizeof(evt), call_id, 1, &d, mode);
+		make_evt_dtmf(evt, sizeof(evt), call_id, 1, &d, mode, media_id);
 		dispatch_event(evt);
 	}
 }
@@ -4470,75 +4892,215 @@ void close_media_transport(pjmedia_transport *med_transport) {
 	}
 }
 
+void create_media_endpoints(Call *c, pjsip_dialog *dlg, Document &document) {
+    Transport *t = c->transport;
 
-bool init_media_ports(Call *c, unsigned sampling_rate, unsigned channel_count, unsigned samples_per_frame, unsigned bits_per_sample) {
+	in_addr in_a;
+	if(t->type == PJSIP_TRANSPORT_UDP) {
+		in_a = (in_addr&)t->sip_transport->local_addr.ipv4.sin_addr.s_addr;
+	} else {
+		in_a = (in_addr&)t->tpfactory->local_addr.ipv4.sin_addr.s_addr;
+	}
+
+    pj_status_t status;
+    
+    Value mes = document["media"].GetArray();
+    assert(mes.Size() <= PJMEDIA_MAX_SDP_MEDIA);
+
+    for (SizeType i = 0; i < mes.Size(); i++) {
+        Value me = mes[i].GetObject();
+
+        MediaEndpoint *media_endpt = (MediaEndpoint*)pj_pool_alloc(dlg->pool, sizeof(MediaEndpoint));
+	    pj_bzero(media_endpt, sizeof(MediaEndpoint));
+
+        const char *type = (const char*)me["type"].GetString();
+
+        if(strcmp("audio", type) == 0) {
+            pj_str_t str_addr = pj_str( inet_ntoa(in_a) );
+            pjmedia_transport *med_transport = create_media_transport(&str_addr);
+
+            if(!med_transport)
+            {
+                status = pjsip_dlg_terminate(dlg); //ToDo:
+                set_error("create_media_transport failed");
+                return;
+            }
+
+            AudioEndpoint *audio = (AudioEndpoint*)pj_pool_alloc(dlg->pool, sizeof(AudioEndpoint));
+            audio->med_transport = med_transport; 
+
+            media_endpt->type = ENDPOINT_TYPE_AUDIO;
+            media_endpt->endpoint.audio = audio;
+
+            c->media_endpoints[c->media_count++] = media_endpt; 
+        } else {
+            // for all other cases, media_endpt->type will be zero, so wil not be used.
+        }
+    }
+}
+
+bool create_local_sdp(Call *call, pjsip_dialog *dlg, pjmedia_sdp_session **p_sdp, bool hold, bool reinvite) {
+    pj_status_t status;
+    pjmedia_sdp_session *sdp;
+
+	pj_sockaddr origin;
+    pj_sockaddr_init(pj_AF_INET(), &origin, NULL, 0);
+
+    status = pjmedia_endpt_create_base_sdp(
+        g_med_endpt,
+        dlg->pool,
+        NULL,
+        &origin,
+        &sdp);
+    if(status != PJ_SUCCESS) {
+        status = pjsip_dlg_terminate(dlg); //ToDo:
+        set_error("pjmedia_endpt_create_base_sdp failed");
+        return -1; 
+    }
+    
+    for(int i=0 ; i<call->media_count ; i++) {
+        MediaEndpoint *me = (MediaEndpoint*)call->media_endpoints[i];
+        if(ENDPOINT_TYPE_AUDIO == me->type) {
+            AudioEndpoint *audio = (AudioEndpoint*)me->endpoint.audio;
+            pjmedia_transport_info med_tpinfo;
+            pjmedia_transport_info_init(&med_tpinfo);
+            pjmedia_transport_get_info(audio->med_transport, &med_tpinfo);
+
+            pjmedia_sdp_media *sdpMedia;
+            status = pjmedia_endpt_create_audio_sdp(
+                g_med_endpt,
+                dlg->pool,
+                &med_tpinfo.sock_info,
+                0,
+                &sdpMedia);
+            if(status != PJ_SUCCESS) {
+                status = pjsip_dlg_terminate(dlg); //ToDo:
+                close_media_endpoints(call);
+                set_error("pjmedia_endpt_create_audio_sdp failed");
+                return -1;
+            }
+
+            pjmedia_sdp_media_remove_all_attr(sdpMedia, "sendrecv");
+            pjmedia_sdp_media_remove_all_attr(sdpMedia, "sendonly");
+            pjmedia_sdp_media_remove_all_attr(sdpMedia, "recvonly");
+            pjmedia_sdp_media_remove_all_attr(sdpMedia, "inactive");
+
+            pjmedia_sdp_attr *attr;
+
+            // TODO: probably it is better to use inv-> instead of dlg->pool
+            if(call->local_hold){
+                if(call->remote_hold) {
+                    attr = pjmedia_sdp_attr_create(dlg->pool, "inactive", NULL);
+                } else {
+                    attr = pjmedia_sdp_attr_create(dlg->pool, "sendonly", NULL);
+                }
+            } else if(call->remote_hold) {
+                attr = pjmedia_sdp_attr_create(dlg->pool, "recvonly", NULL);
+            } else {
+                attr = pjmedia_sdp_attr_create(dlg->pool, "sendrecv", NULL);
+            }
+
+            pjmedia_sdp_media_add_attr(sdpMedia, attr);
+
+            sdp->media[sdp->media_count++] = sdpMedia;
+        }
+    }
+
+    if(reinvite) {
+        const pjmedia_sdp_session *old_sdp = NULL;
+
+        status = pjmedia_sdp_neg_get_active_local(call->inv->neg, &old_sdp);
+        if (status != PJ_SUCCESS || old_sdp == NULL){
+            set_error("pjmedia_sdp_neg_get_active failed");
+            return -1;
+        }
+
+        sdp->origin.version = old_sdp->origin.version + 1;
+    } 
+
+    *p_sdp = sdp;
+    return 0;
+}
+
+
+void close_media_endpoints(Call *c) {
+    for(int i=0 ; i<c->media_count ; ++ i) {
+        MediaEndpoint *me = c->media_endpoints[i];
+        if(ENDPOINT_TYPE_AUDIO == me->type) {
+            close_media_transport(me->endpoint.audio->med_transport);
+        }
+    }
+}
+
+
+bool init_media_ports(Call *call, AudioEndpoint *ae, unsigned sampling_rate, unsigned channel_count, unsigned samples_per_frame, unsigned bits_per_sample) {
 	pj_status_t status;
 
-	if(!c->null_port) {
-		status = pjmedia_null_port_create(c->inv->pool,
+	if(!ae->null_port) {
+		status = pjmedia_null_port_create(call->inv->pool,
 						sampling_rate,
 						channel_count,
 						samples_per_frame,
 						bits_per_sample,
-						&c->null_port);
+						&ae->null_port);
 		if(status != PJ_SUCCESS) return false;
 	}
 
-	if(!c->wav_writer) {
-		if(!prepare_wire(c->inv->pool, &c->wav_writer, sampling_rate, channel_count, samples_per_frame, bits_per_sample)) {
+	if(!ae->wav_writer) {
+		if(!prepare_wire(call->inv->pool, &ae->wav_writer, sampling_rate, channel_count, samples_per_frame, bits_per_sample)) {
 			return false;
 		}
 	}
 
-	if(!c->wav_player) {
-		if(!prepare_wire(c->inv->pool, &c->wav_player, sampling_rate, channel_count, samples_per_frame, bits_per_sample)) {
+	if(!ae->wav_player) {
+		if(!prepare_wire(call->inv->pool, &ae->wav_player, sampling_rate, channel_count, samples_per_frame, bits_per_sample)) {
 			return false;
 		}
 	}
 
-	if(!c->tonegen) {
-		if(!prepare_wire(c->inv->pool, &c->tonegen, sampling_rate, channel_count, samples_per_frame, bits_per_sample)) {
+	if(!ae->tonegen) {
+		if(!prepare_wire(call->inv->pool, &ae->tonegen, sampling_rate, channel_count, samples_per_frame, bits_per_sample)) {
 			return false;
 		}
 	}
 
-	if(!c->dtmfdet) {
-		status = chainlink_dtmfdet_create(c->inv->pool,
+	if(!ae->dtmfdet) {
+		status = chainlink_dtmfdet_create(call->inv->pool,
 						sampling_rate,
 						channel_count,
 						samples_per_frame,
 						bits_per_sample,
 						on_inband_dtmf,
-						c,
-						(pjmedia_port**)&c->dtmfdet);
+						call,
+						(pjmedia_port**)&ae->dtmfdet);
 		if(status != PJ_SUCCESS) return false;
 	}
 
-   if(!c->fax) {
-       if(!prepare_wire(c->inv->pool, &c->fax, sampling_rate, channel_count, samples_per_frame, bits_per_sample)) {
+   if(!ae->fax) {
+       if(!prepare_wire(call->inv->pool, &ae->fax, sampling_rate, channel_count, samples_per_frame, bits_per_sample)) {
            return false;
        }
    }
 
-	connect_media_ports(c);
+	connect_media_ports(ae);
 	return true;
 }
 
-void connect_media_ports(Call *c) {
-	((chainlink*)c->dtmfdet)->next = (pjmedia_port*)c->tonegen;
-	((chainlink*)c->tonegen)->next = (pjmedia_port*)c->wav_player;
-	((chainlink*)c->wav_player)->next = (pjmedia_port*)c->wav_writer;
-    ((chainlink*)c->wav_writer)->next = (pjmedia_port*)c->fax;
-    ((chainlink*)c->fax)->next = c->null_port;
+void connect_media_ports(AudioEndpoint *ae) {
+	((chainlink*)ae->dtmfdet)->next = (pjmedia_port*)ae->tonegen;
+	((chainlink*)ae->tonegen)->next = (pjmedia_port*)ae->wav_player;
+	((chainlink*)ae->wav_player)->next = (pjmedia_port*)ae->wav_writer;
+    ((chainlink*)ae->wav_writer)->next = (pjmedia_port*)ae->fax;
+    ((chainlink*)ae->fax)->next = ae->null_port;
 }
 
-bool prepare_tonegen(Call *c) {
+bool prepare_tonegen(Call *c, AudioEndpoint *ae) {
 	pj_status_t status;
 
-	chainlink *link = (chainlink*)c->tonegen;
+	chainlink *link = (chainlink*)ae->tonegen;
 
 	pjmedia_port *stream_port;
-	status = pjmedia_stream_get_port(c->med_stream,
+	status = pjmedia_stream_get_port(ae->med_stream,
 					&stream_port);
 	if(status != PJ_SUCCESS)
 	{
@@ -4552,21 +5114,21 @@ bool prepare_tonegen(Call *c) {
 						PJMEDIA_PIA_SPF(&stream_port->info),
 						PJMEDIA_PIA_BITS(&stream_port->info),
 						0,
-						(pjmedia_port**)&c->tonegen);
+						(pjmedia_port**)&ae->tonegen);
 		if(status != PJ_SUCCESS) return false;
 	}
 	
-	connect_media_ports(c);
+	connect_media_ports(ae);
 	return true;
 }
 
-bool prepare_wav_player(Call *c, const char *file) {
+bool prepare_wav_player(Call *c, AudioEndpoint *ae, const char *file) {
 	pj_status_t status;
 
-	chainlink *link = (chainlink*)c->wav_player;
+	chainlink *link = (chainlink*)ae->wav_player;
 
 	pjmedia_port *stream_port;
-	status = pjmedia_stream_get_port(c->med_stream,
+	status = pjmedia_stream_get_port(ae->med_stream,
 					&stream_port);
 	if(status != PJ_SUCCESS) return false;
 
@@ -4581,20 +5143,20 @@ bool prepare_wav_player(Call *c, const char *file) {
 						wav_ptime,
 						0,
 						-1,
-						(pjmedia_port**)&c->wav_player);
+						(pjmedia_port**)&ae->wav_player);
 	if(status != PJ_SUCCESS) return false;
 	
-	connect_media_ports(c);
+	connect_media_ports(ae);
 	return true;
 }
 
-bool prepare_wav_writer(Call *c, const char *file) {
+bool prepare_wav_writer(Call *c, AudioEndpoint *ae, const char *file) {
 	pj_status_t status;
 
-	chainlink *link = (chainlink*)c->wav_writer;
+	chainlink *link = (chainlink*)ae->wav_writer;
 
 	pjmedia_port *stream_port;
-	status = pjmedia_stream_get_port(c->med_stream,
+	status = pjmedia_stream_get_port(ae->med_stream,
 					&stream_port);
 	if(status != PJ_SUCCESS) return false;
 
@@ -4609,21 +5171,21 @@ bool prepare_wav_writer(Call *c, const char *file) {
 						PJMEDIA_PIA_BITS(&stream_port->info),
 						PJMEDIA_FILE_WRITE_PCM,
 						0,
-						(pjmedia_port**)&c->wav_writer);
+						(pjmedia_port**)&ae->wav_writer);
 	if(status != PJ_SUCCESS) return false;
 	
-	connect_media_ports(c);
+	connect_media_ports(ae);
 	return true;
 }
 
 
-bool prepare_fax(Call *c, bool is_sender, const char *file, unsigned flags) {
+bool prepare_fax(Call *c, AudioEndpoint *ae, bool is_sender, const char *file, unsigned flags) {
    pj_status_t status;
 
-   chainlink *link = (chainlink*)c->fax;
+   chainlink *link = (chainlink*)ae->fax;
 
    pjmedia_port *stream_port;
-   status = pjmedia_stream_get_port(c->med_stream,
+   status = pjmedia_stream_get_port(ae->med_stream,
                    &stream_port);
    if(status != PJ_SUCCESS) return false;
 
@@ -4640,10 +5202,10 @@ bool prepare_fax(Call *c, bool is_sender, const char *file, unsigned flags) {
                        is_sender,
                        file,
                        flags, 
-                       (pjmedia_port**)&c->fax);
+                       (pjmedia_port**)&ae->fax);
    if(status != PJ_SUCCESS) return false;
 
-   connect_media_ports(c);
+   connect_media_ports(ae);
    return true;
 }
 
@@ -5206,6 +5768,8 @@ int pjw_call_get_info(long call_id, const char *required_info, char *out_info)
 	if(strcmp(required_info, "Call-ID") == 0) {
 		strncpy(info, call->inv->dlg->call_id->id.ptr, call->inv->dlg->call_id->id.slen);
 		info[call->inv->dlg->call_id->id.slen] = 0;
+    // TODO: update to use multiple media
+    /*
 	} else if(strcmp(required_info, "RemoteMediaEndPoint") == 0) {
 		if(!call->med_stream) {
 			PJW_UNLOCK();
@@ -5221,6 +5785,7 @@ int pjw_call_get_info(long call_id, const char *required_info, char *out_info)
 		pj_str_t str_addr = pj_str( inet_ntoa( (in_addr&)session_info.rem_addr.ipv4.sin_addr.s_addr ) );
 		pj_uint16_t port = session_info.rem_addr.ipv4.sin_port;
 		sprintf(info, "%.*s:%u", (int)str_addr.slen, str_addr.ptr, ntohs(port));
+    */
 	} else {
 		PJW_UNLOCK();
 		set_error("Unsupported info");
@@ -5349,19 +5914,19 @@ int pjw_notify(long subscriber_id, const char *json)
         goto out;
     }
 
-    if(!json_get_string_param(document, "content_type", false, &content_type)) {
+    if(json_get_string_param(document, "content_type", false, &content_type) <= 0) {
         goto out;
     }
 
-    if(!json_get_string_param(document, "body", false, &body)) {
+    if(json_get_string_param(document, "body", false, &body) <= 0) {
         goto out;
     }
 
-    if(!json_get_int_param(document, "subscription_state", false, &subscription_state)) {
+    if(json_get_int_param(document, "subscription_state", false, &subscription_state) <= 0) {
         goto out;
     }
 
-    if(!json_get_string_param(document, "reason", true, &reason)) {
+    if(json_get_string_param(document, "reason", true, &reason) <= 0) {
         goto out;
     }
 
@@ -5420,15 +5985,15 @@ int pjw_notify_xfer(long subscriber_id, const char *json) {
         goto out;
     }
 
-    if(!json_get_int_param(document, "subscription_state", false, &subscription_state)) {
+    if(json_get_int_param(document, "subscription_state", false, &subscription_state) <= 0) {
         goto out;
     }
 
-    if(!json_get_int_param(document, "code", false, &code)) {
+    if(json_get_int_param(document, "code", false, &code) <= 0) {
         goto out;
     }
 
-    if(!json_get_string_param(document, "reason", false, &reason)) {
+    if(json_get_string_param(document, "reason", false, &reason) <= 0) {
         goto out;
     }
 
@@ -5718,11 +6283,11 @@ int pjw_subscription_create(long transport_id, const char *json, long *out_subsc
         goto out;
     }
 
-    if(!json_get_string_param(document, "event", false, &event)) {
+    if(json_get_string_param(document, "event", false, &event) <= 0) {
         goto out;
     }
 
-    if(!json_get_string_param(document, "accept", false, &accept)) {
+    if(json_get_string_param(document, "accept", false, &accept) <= 0) {
         goto out;
     }
 
@@ -5931,7 +6496,7 @@ int pjw_subscription_subscribe(long subscription_id, const char *json) {
         goto out;
     }
 
-    if(!json_get_int_param(document, "expires", true, &expires)) {
+    if(json_get_int_param(document, "expires", true, &expires) <= 0) {
         goto out;
     }
 
@@ -6037,18 +6602,25 @@ int pjw_set_flags(unsigned flags)
 static int g_now;
 
 
-void check_digit_buffer(Call *c, int mode) {
+void check_digit_buffer(Call *call, int mode) {
 	//addon_log(LOG_LEVEL_DEBUG, "check_digit_buffer g_now=%i for call_id=%i and mode=%i timestamp=%i len=%i\n", g_now, c->id, mode, c->last_digit_timestamp[mode], c->DigitBufferLength[mode]);
 	char evt[256];
 
-	if(c->last_digit_timestamp[mode] > 0 && g_now - c->last_digit_timestamp[mode] > g_dtmf_inter_digit_timer) {
-		int *pLen = &c->DigitBufferLength[mode];
-		c->DigitBuffers[mode][*pLen] = 0;
-		make_evt_dtmf(evt, sizeof(evt), c->id, *pLen, c->DigitBuffers[mode], mode); 
-		dispatch_event(evt);
-		*pLen = 0;
-		c->last_digit_timestamp[mode] = 0;
-	}
+    for(int i=0 ; i<call->media_count ; i++) {
+        MediaEndpoint *me = (MediaEndpoint*)call->media_endpoints[i];
+        if(ENDPOINT_TYPE_AUDIO != me->type) continue;
+    
+        AudioEndpoint *ae = (AudioEndpoint*)me->endpoint.audio;
+ 
+        if(ae->last_digit_timestamp[mode] > 0 && g_now - ae->last_digit_timestamp[mode] > g_dtmf_inter_digit_timer) {
+            int *pLen = &ae->DigitBufferLength[mode];
+            ae->DigitBuffers[mode][*pLen] = 0;
+            make_evt_dtmf(evt, sizeof(evt), call->id, *pLen, ae->DigitBuffers[mode], mode, i); 
+            dispatch_event(evt);
+            *pLen = 0;
+            ae->last_digit_timestamp[mode] = 0;
+        }
+    }
 }
 
 void check_digit_buffers(long id, long val) {

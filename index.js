@@ -49,8 +49,20 @@ addon.account = {
 }
 
 addon.call = {
-  create: (t_id, params) => { return addon.call_create(t_id, JSON.stringify(params)) },
-  respond: (c_id, params) => { return addon.call_respond(c_id, JSON.stringify(params)) },
+  create: (t_id, params) => { 
+    if(!params.media) {
+      params.media = [{ "type": "audio" }]
+    }
+    return addon.call_create(t_id, JSON.stringify(params))
+  },
+  respond: (c_id, params) => { 
+    if(183 == params.code || (params.code >= 200 && params.code < 300)) {
+      if(!params.media) {
+        params.media = [{ "type": "audio" }]
+      }
+    }
+    return addon.call_respond(c_id, JSON.stringify(params)) 
+  },
   terminate: (c_id, params) => { return addon.call_terminate(c_id, JSON.stringify(params ? params : {})) },
   send_dtmf: (c_id, params) => { return addon.call_send_dtmf(c_id, JSON.stringify(params)) },
   reinvite: (c_id, params) => { return addon.call_reinvite(c_id, JSON.stringify(params ? params : {})) },

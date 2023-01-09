@@ -54,16 +54,16 @@ int pjw_call_start_record_wav(long call_id, const char *file);
 //int pjw_call_start_play_wav(long call_id, const char *file);
 int pjw_call_start_play_wav(long call_id, const char *file);
 
-int pjw_call_stop_play_wav(long call_id);
+int pjw_call_stop_play_wav(long call_id, const char *json);
 
-int pjw_call_stop_record_wav(long call_id);
+int pjw_call_stop_record_wav(long call_id, const char *json);
 
 //int pjw_call_start_fax(long call_id, bool is_sender, const char *file);
 int pjw_call_start_fax(long call_id, const char *json);
 
-int pjw_call_stop_fax(long call_id);
+int pjw_call_stop_fax(long call_id, const char *json);
 
-int pjw_call_get_stream_stat(long call_id, char *out_stats);
+int pjw_call_get_stream_stat(long call_id, const char *json, char *out_stats);
 
 //int pjw_call_refer(long call_id, const char *dest_uri, const char *additional_headers, long *out_subscription_id);
 int pjw_call_refer(long call_id, const char *json, long *out_subscription_id);
