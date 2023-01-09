@@ -1885,6 +1885,7 @@ int pjw_call_respond(long call_id, const char *json)
             }
             local_sdp = sdp;
         } else {
+            /* 
             status = pjmedia_sdp_neg_set_local_answer(call->inv->dlg->pool,
                 call->inv->neg,
                 sdp);
@@ -1911,6 +1912,8 @@ int pjw_call_respond(long call_id, const char *json)
                 set_error("pjmedia_sdp_neg_get_active_local failed");
                 goto out;
             }
+            */
+            local_sdp = sdp;
         }
     }
 
@@ -2243,6 +2246,7 @@ void build_transport_tag_from_pjsip_transport(char *dest, pjsip_transport *t) {
 
     assert(t->local_name.host.slen < 16);
 	strncpy(address, t->local_name.host.ptr, t->local_name.host.slen);
+    address[t->local_name.host.slen] = 0;
 
     if(t->key.type == PJSIP_TRANSPORT_UDP) {
 		type = "udp";
@@ -4196,7 +4200,7 @@ static pj_bool_t on_rx_request( pjsip_rx_data *rdata ){
 
     long transport_id;
 
-    //printf("tag=%s\n", tag);
+    printf("tag=%s\n", tag);
 
 	TransportMap::iterator iter = g_TransportMap.find(tag);
 	if( iter != g_TransportMap.end() ){
@@ -4968,11 +4972,12 @@ void create_media_endpoints(Call *c, pjsip_dialog *dlg, Document &document) {
                 return;
             }
 
-            AudioEndpoint *audio = (AudioEndpoint*)pj_pool_alloc(dlg->pool, sizeof(AudioEndpoint));
-            audio->med_transport = med_transport; 
+            AudioEndpoint *audio_endpt = (AudioEndpoint*)pj_pool_alloc(dlg->pool, sizeof(AudioEndpoint));
+	        pj_bzero(audio_endpt, sizeof(AudioEndpoint));
+            audio_endpt->med_transport = med_transport; 
 
             media_endpt->type = ENDPOINT_TYPE_AUDIO;
-            media_endpt->endpoint.audio = audio;
+            media_endpt->endpoint.audio = audio_endpt;
 
             c->media_endpoints[c->media_count++] = media_endpt; 
         } else {
