@@ -302,6 +302,8 @@ struct Transport {
 	pjsip_transport_type_e type;
 	pjsip_transport *sip_transport;
 	pjsip_tpfactory *tpfactory;
+    char address[32];
+    int port;
     char tag[64];
 
 	char domain[100];
@@ -342,6 +344,10 @@ struct VideoEndpoint {
 	pjmedia_master_port *master_port;
 };
 
+struct MrcpEndpoint {
+
+};
+
 
 #define ENDPOINT_TYPE_AUDIO 1
 #define ENDPOINT_TYPE_VIDEO 2
@@ -354,6 +360,7 @@ struct MediaEndpoint {
     union {
         AudioEndpoint *audio;
         VideoEndpoint *video;
+        MrcpEndpoint  *mrcp;
     } endpoint;
 };
 
@@ -1462,6 +1469,9 @@ int pjw_transport_create(const char *json, int *out_t_id, char *out_t_address, i
 	}
 
 	transport->id = t_id;
+    strcpy(transport->address, addr);
+    transport->port = port;
+
     build_transport_tag(transport->tag, tp, addr, port);
     g_TransportMap.insert(make_pair(transport->tag, t_id));
 
@@ -1873,7 +1883,7 @@ int pjw_call_respond(long call_id, const char *json)
 
         if(!call->inv->neg) {
             // this could mean this is delayed media. So we didn't geta an offer.
-            // So we must createthe negotiator with our SDP
+            // So we must create the negotiator with our SDP
             status = pjmedia_sdp_neg_create_w_local_offer(call->inv->dlg->pool,
                 sdp,
                 &call->inv->neg
@@ -1885,7 +1895,7 @@ int pjw_call_respond(long call_id, const char *json)
             }
             local_sdp = sdp;
         } else {
-            /* 
+            /*
             status = pjmedia_sdp_neg_set_local_answer(call->inv->dlg->pool,
                 call->inv->neg,
                 sdp);
@@ -1913,7 +1923,9 @@ int pjw_call_respond(long call_id, const char *json)
                 goto out;
             }
             */
-            local_sdp = sdp;
+            status = pjsip_inv_set_sdp_answer(call->inv, sdp);
+
+            local_sdp = NULL;
         }
     }
 
@@ -1929,7 +1941,6 @@ int pjw_call_respond(long call_id, const char *json)
 		}
 
 		status = pjsip_rx_data_free_cloned(call->initial_invite_rdata);
-        printf("p4\n");
 		if(status != PJ_SUCCESS) {
 			set_error("pjsip_rx_data_free_cloned failed with status=%i", status);
             goto out;
@@ -1937,28 +1948,24 @@ int pjw_call_respond(long call_id, const char *json)
 
 		call->initial_invite_rdata = 0;
 	} else {
-        printf("p6\n");
         pjmedia_sdp_neg_state state = pjmedia_sdp_neg_get_state(call->inv->neg);
         printf("neg_state=%d\n", state);
 
 		status = pjsip_inv_answer(call->inv,
 					  code,
 					  &r,
-					  local_sdp,
+					  NULL, //local_sdp,
 					  &tdata); 
-        printf("p7\n");
 		if(status != PJ_SUCCESS){
 			set_error("pjsip_inv_answer failed with status=%i", status);
             goto out;
 		}
-        printf("p8\n");
 
 		if(!add_headers(call->inv->dlg->pool, tdata, document)) {
 			goto out;
 		}
 	}
 
-    printf("p9\n");
 	status = pjsip_inv_send_msg(call->inv, tdata);
 	if(status != PJ_SUCCESS){
 		set_error("pjsip_inv_send_msg failed with status=%i", status);
@@ -2398,8 +2405,9 @@ int call_create(Transport *t, unsigned flags, pjsip_dialog *dlg, const char *pro
 
     pjmedia_sdp_session *sdp = 0;
 
+    create_media_endpoints(call, dlg, document);
+
 	if(!(flags & CALL_FLAG_DELAYED_MEDIA)) {
-        create_media_endpoints(call, dlg, document);
         if(create_local_sdp(call, dlg, &sdp, false, false) != 0) {
             close_media_endpoints(call);
             return -1; 
@@ -3566,6 +3574,7 @@ static void on_media_update( pjsip_inv_session *inv, pj_status_t status){
 		addon_log(LOG_LEVEL_DEBUG, "on_media_update: Failed to get call_id. Event will not be notified.\n");	
 		return;
 	}
+    printf("call_id=%d\n", call_id);
 
 	pjmedia_stream_info stream_info;
 	const pjmedia_sdp_session *local_sdp;
@@ -3609,17 +3618,21 @@ static void on_media_update( pjsip_inv_session *inv, pj_status_t status){
 		return;
 	}		
 
+    /*
 	status = pjmedia_sdp_neg_get_active_remote(inv->neg, &remote_sdp);
 	if(status != PJ_SUCCESS){
 		make_evt_media_status(evt, sizeof(evt), call_id, "setup_failed", "", "");
 		dispatch_event(evt);
 		return;
 	}
+    */
 
-    // TODO: complete the below
+    for(int i=0 ; i<local_sdp->media_count ; i++) {
+        pjmedia_sdp_media *m = local_sdp->media[i];
+        printf("media: %.*s port: %d transport: %.*s fmt_count: %d fmt[0]: %.*s\n", m->desc.media.slen, m->desc.media.ptr, m->desc.port, m->desc.transport.slen, m->desc.transport.ptr, m->desc.fmt_count, m->desc.fmt[0].slen, m->desc.fmt[0].ptr);
+    }
+
     /*
-
-    for(int i=0 ; i<si->stream_cnt ; i++) {
         status = pjmedia_stream_info_from_sdp(
                         &stream_info,
                         inv->dlg->pool,
@@ -4346,6 +4359,7 @@ static void on_rx_offer2(pjsip_inv_session *inv, struct pjsip_inv_on_rx_offer_cb
 	char evt[2048];
 
 	Call *call = (Call*)inv->dlg->mod_data[mod_tester.id];
+    printf("on_rx_offer2 call_id=%d\n", call->id);
 
 	pj_status_t status;
 
@@ -4362,14 +4376,34 @@ static void on_rx_offer2(pjsip_inv_session *inv, struct pjsip_inv_on_rx_offer_cb
             return;
         }
     } else {
-        status = pjmedia_sdp_neg_set_remote_offer(inv->dlg->pool,
-            inv->neg,
-            param->offer
-        );   
-        if (status != PJ_SUCCESS) {
-            printf("error: pjmedia_sdp_neg_set_remote_offer failed\n");
-            exit(1);
-            return;
+        pjmedia_sdp_neg_state state = pjmedia_sdp_neg_get_state(inv->neg);
+        printf("neg state: %d\n", state);
+        if(PJMEDIA_SDP_NEG_STATE_NULL == state || PJMEDIA_SDP_NEG_STATE_DONE == state ) {
+            status = pjmedia_sdp_neg_set_remote_offer(inv->dlg->pool,
+                inv->neg,
+                param->offer
+            );   
+            if (status != PJ_SUCCESS) {
+                printf("error: pjmedia_sdp_neg_set_remote_offer failed\n");
+                exit(1);
+                return;
+            }
+        } else {
+            // this is delayed media scenario
+            // So we must generate SDP answer based on media_endpoints set when call was created.
+
+            pjmedia_sdp_session *sdp = 0;
+            if(create_local_sdp(call, call->inv->dlg, &sdp, false, false) != 0) {
+                close_media_endpoints(call);
+                return; 
+            }
+
+            status = pjsip_inv_set_sdp_answer(call->inv, sdp);
+            if(status != PJ_SUCCESS) {
+                set_error("pjsip_inv_set_sdp_answer failed");
+                close_media_endpoints(call);
+                return; 
+            }
         }
     }
 
@@ -4972,13 +5006,18 @@ void create_media_endpoints(Call *c, pjsip_dialog *dlg, Document &document) {
                 return;
             }
 
-            AudioEndpoint *audio_endpt = (AudioEndpoint*)pj_pool_alloc(dlg->pool, sizeof(AudioEndpoint));
-	        pj_bzero(audio_endpt, sizeof(AudioEndpoint));
+            AudioEndpoint *audio_endpt = (AudioEndpoint*)pj_pool_zalloc(dlg->pool, sizeof(AudioEndpoint));
             audio_endpt->med_transport = med_transport; 
 
             media_endpt->type = ENDPOINT_TYPE_AUDIO;
             media_endpt->endpoint.audio = audio_endpt;
 
+            c->media_endpoints[c->media_count++] = media_endpt; 
+        } else if(strcmp("mrcp", type) == 0) {
+            MrcpEndpoint *mrcp_endpt = (MrcpEndpoint*)pj_pool_zalloc(dlg->pool, sizeof(MrcpEndpoint));
+
+            media_endpt->type = ENDPOINT_TYPE_MRCP;
+            media_endpt->endpoint.mrcp = mrcp_endpt;
             c->media_endpoints[c->media_count++] = media_endpt; 
         } else {
             // for all other cases, media_endpt->type will be zero, so wil not be used.
@@ -5050,6 +5089,29 @@ bool create_local_sdp(Call *call, pjsip_dialog *dlg, pjmedia_sdp_session **p_sdp
             pjmedia_sdp_media_add_attr(sdpMedia, attr);
 
             sdp->media[sdp->media_count++] = sdpMedia;
+        } else if(ENDPOINT_TYPE_MRCP == me->type) {
+            pjmedia_sdp_media *m;
+            m = (pjmedia_sdp_media*)pj_pool_zalloc(dlg->pool, sizeof(pjmedia_sdp_media));
+            if(!m) {
+                status = pjsip_dlg_terminate(dlg); //ToDo:
+                close_media_endpoints(call);
+                set_error("create pjmedia_sdp_media for mrcp endpoint failed");
+                return -1;
+            }
+
+            pj_strdup2(dlg->pool, &m->desc.media, "application");
+
+            pj_strdup2(dlg->pool, &m->desc.transport, "TCP/MRCPv2");
+
+            m->desc.port = 1000;
+            pj_strdup2(dlg->pool, &m->desc.fmt[m->desc.fmt_count++], "XXX");
+
+            m->conn = (pjmedia_sdp_conn*)pj_pool_zalloc(dlg->pool, sizeof(pjmedia_sdp_conn));
+            pj_strdup2(dlg->pool, &m->conn->net_type, "IN");
+            pj_strdup2(dlg->pool, &m->conn->addr_type, "IP4");
+            pj_strdup2(dlg->pool, &m->conn->addr, call->transport->address);
+            
+            sdp->media[sdp->media_count++] = m;
         }
     }
 
