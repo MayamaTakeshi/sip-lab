@@ -3936,6 +3936,7 @@ static pjmedia_transport *create_media_transport(const pj_str_t *addr)
 				}
 			}
             */
+            printf("media_transport created %d\n", med_transport);
 			return med_transport;
 		}
 	}
@@ -4974,6 +4975,7 @@ static void build_stream_stat(ostringstream &oss, pjmedia_rtcp_stat *stat, pjmed
 }
 
 void close_media_transport(pjmedia_transport *med_transport) {
+    printf("close_media_transport %d\n", med_transport);
 	pjmedia_transport_info tpinfo;
 	pjmedia_transport_info_init(&tpinfo);
 	pj_status_t status = pjmedia_transport_get_info(med_transport, &tpinfo);
@@ -5160,12 +5162,14 @@ bool create_local_sdp(Call *call, pjsip_dialog *dlg, pjmedia_sdp_session **p_sdp
 
 
 void close_media_endpoints(Call *c) {
+    printf("close_media_endpoints call_id=%d\n", c->id);
     for(int i=0 ; i<c->media_count ; ++ i) {
         MediaEndpoint *me = c->media_endpoints[i];
         if(ENDPOINT_TYPE_AUDIO == me->type) {
             close_media_transport(me->endpoint.audio->med_transport);
         }
     }
+    c->media_count = 0;
 }
 
 

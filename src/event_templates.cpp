@@ -26,7 +26,7 @@ int make_evt_dtmf(char *dest, int size, long call_id, int digits_len, const char
 }
 
 int make_evt_call_ended(char *dest, int size, long call_id, int sip_msg_len, const char *sip_msg) {
-	printf("sip_msg_len=%i sip_msg=%x\n", sip_msg_len, sip_msg);
+	printf("make_evt_call_ended sip_msg_len=%i sip_msg=%x\n", sip_msg_len, sip_msg);
     if(!sip_msg || sip_msg == (char*)0xc000000000000) {
         // received invalid pointer to sip_msg so do not add the message to the event
 		return snprintf(dest, size, "{\"event\": \"call_ended\", \"call_id\": %ld}", call_id); 
