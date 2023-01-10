@@ -2697,12 +2697,37 @@ int pjw_call_reinvite(long call_id, const char *json)
     call->local_hold = hold;
 
 	if(!(flags & CALL_FLAG_DELAYED_MEDIA)) {
+        // The below call to create_local_sdp  causes subsequent callt pjsip_inv_reinvite() to fail as  the function wants
+        // inv->invite_tsx to be NULL
+        // but it will not.
+
         if(create_local_sdp(call, inv->dlg, &sdp, hold, true) != 0) {
+            goto out;
+        }
+
+        /*
+        status = pjmedia_sdp_neg_modify_local_offer(call->inv->dlg->pool, call->inv->neg, offer, sdp);
+        if(status != PJ_SUCCESS){
+            set_error("pjmedia_sdp_neg_modify_local_offer failed");
+            goto out;
+        }
+        */
+
+        status = pjsip_inv_set_local_sdp(call->inv, sdp);
+        if(status != PJ_SUCCESS){
+            set_error("pjsip_inv_set_local_sdp failed");
             goto out;
         }
     }
 
+    {
+        //assert(inv->invite_tsx==NULL);
+        pjmedia_sdp_neg_state state = pjmedia_sdp_neg_get_state(call->inv->neg);
+        printf("neg state: %d\n", state);
+    }
+
 	status = pjsip_inv_reinvite(call->inv, NULL, sdp, &tdata);
+    printf("status=%d\n", status);
 	if(status != PJ_SUCCESS){
 		set_error("pjsip_inv_reinvite failed");
         goto out;
@@ -5115,6 +5140,7 @@ bool create_local_sdp(Call *call, pjsip_dialog *dlg, pjmedia_sdp_session **p_sdp
         }
     }
 
+    /*
     if(reinvite) {
         const pjmedia_sdp_session *old_sdp = NULL;
 
@@ -5126,6 +5152,7 @@ bool create_local_sdp(Call *call, pjsip_dialog *dlg, pjmedia_sdp_session **p_sdp
 
         sdp->origin.version = old_sdp->origin.version + 1;
     } 
+    */
 
     *p_sdp = sdp;
     return 0;
