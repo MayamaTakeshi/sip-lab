@@ -368,7 +368,7 @@ struct Call {
 	int id;
 	pjsip_inv_session *inv;
     int media_count;
-    MediaEndpoint *media_endpoints[PJMEDIA_MAX_SDP_MEDIA];
+    MediaEndpoint *media[PJMEDIA_MAX_SDP_MEDIA];
 
 	Transport *transport;
 
@@ -578,8 +578,8 @@ void prepare_error_event(ostringstream *oss, char *scope, char *details);
 //void prepare_pjsipcall_error_event(ostringstream *oss, char *scope, char *function, pj_status_t s);
 void append_status(ostringstream *oss, pj_status_t s);
 
-void create_media_endpoints(Call *c, pjsip_dialog *dlg, Document &document);
-void close_media_endpoints(Call *c);
+void create_media(Call *c, pjsip_dialog *dlg, Document &document);
+void close_media(Call *c);
 bool create_local_sdp(Call *c, pjsip_dialog *dlg, pjmedia_sdp_session **p_sdp, bool hold, bool reinvite);
 
 typedef pj_status_t (*audio_endpoint_stop_op_t) (Call *call, AudioEndpoint *ae);
@@ -632,7 +632,7 @@ const char *translate_pjsip_inv_state(int state)
 
 static int find_endpoint_by_inband_dtmf_media_stream(Call *call, pjmedia_stream *med_stream) {
     for(int i=0 ; i<call->media_count ; i++) {
-        MediaEndpoint *me = (MediaEndpoint*)call->media_endpoints[i];
+        MediaEndpoint *me = (MediaEndpoint*)call->media[i];
         if(ENDPOINT_TYPE_AUDIO == me->type) {
             AudioEndpoint *ae = (AudioEndpoint*)me->endpoint.audio;
             if(ae->med_stream == med_stream) {
@@ -645,7 +645,7 @@ static int find_endpoint_by_inband_dtmf_media_stream(Call *call, pjmedia_stream 
 
 static int find_endpoint_by_inband_dtmf_media_port(Call *call, pjmedia_port *port) {
     for(int i=0 ; i<call->media_count ; i++) {
-        MediaEndpoint *me = (MediaEndpoint*)call->media_endpoints[i];
+        MediaEndpoint *me = (MediaEndpoint*)call->media[i];
         if(ENDPOINT_TYPE_AUDIO == me->type) {
             AudioEndpoint *ae = (AudioEndpoint*)me->endpoint.audio;
             if((pjmedia_port*)ae->dtmfdet == port) {
@@ -675,7 +675,7 @@ static void on_inband_dtmf(pjmedia_port *port, void *user_data, char digit){
     int media_id = find_endpoint_by_inband_dtmf_media_port(call, port);
     assert(media_id >= 0);
 
-    AudioEndpoint *ae = (AudioEndpoint*)call->media_endpoints[media_id];
+    AudioEndpoint *ae = (AudioEndpoint*)call->media[media_id];
 
 	int mode = DTMF_MODE_INBAND;
 
@@ -1874,9 +1874,9 @@ int pjw_call_respond(long call_id, const char *json)
     if(183 == code || (code >= 200 && code < 300)) {
         pjmedia_sdp_session *sdp;
 
-        create_media_endpoints(call, call->inv->dlg, document);
+        create_media(call, call->inv->dlg, document);
         if(create_local_sdp(call, call->inv->dlg, &sdp, false, false) != 0) {
-            close_media_endpoints(call);
+            close_media(call);
 			set_error("create_local_sdp failed");
             goto out;
         }
@@ -1889,7 +1889,7 @@ int pjw_call_respond(long call_id, const char *json)
                 &call->inv->neg
             );
             if(status != PJ_SUCCESS) {
-                close_media_endpoints(call);
+                close_media(call);
                 set_error("pjmedia_sdp_neg_create_w_local_offer failed");
                 goto out;
             }
@@ -1900,7 +1900,7 @@ int pjw_call_respond(long call_id, const char *json)
                 call->inv->neg,
                 sdp);
             if(status != PJ_SUCCESS) {
-                close_media_endpoints(call);
+                close_media(call);
                 set_error("pjmedia_sdp_neg_set_local_answer failed");
                 goto out;
             }
@@ -1909,7 +1909,7 @@ int pjw_call_respond(long call_id, const char *json)
                 call->inv->neg, 
                 0);
             if(status != PJ_SUCCESS) {
-                close_media_endpoints(call);
+                close_media(call);
                 set_error("pjmedia_sdp_neg_negotiate failed");
                 goto out;
             }
@@ -1918,7 +1918,7 @@ int pjw_call_respond(long call_id, const char *json)
                 &local_sdp 
             );
             if(status != PJ_SUCCESS) {
-                close_media_endpoints(call);
+                close_media(call);
                 set_error("pjmedia_sdp_neg_get_active_local failed");
                 goto out;
             }
@@ -2405,18 +2405,18 @@ int call_create(Transport *t, unsigned flags, pjsip_dialog *dlg, const char *pro
 
     pjmedia_sdp_session *sdp = 0;
 
-    create_media_endpoints(call, dlg, document);
+    create_media(call, dlg, document);
 
 	if(!(flags & CALL_FLAG_DELAYED_MEDIA)) {
         if(create_local_sdp(call, dlg, &sdp, false, false) != 0) {
-            close_media_endpoints(call);
+            close_media(call);
             return -1; 
         }
 	}
 
 	status = pjsip_inv_create_uac(dlg, sdp, 0, &inv);
 	if(status != PJ_SUCCESS) {
-		close_media_endpoints(call);
+		close_media(call);
 		status = pjsip_dlg_terminate(dlg); //ToDo:
 		set_error("pjsip_inv_create_uac failed");
 		return -1;
@@ -2425,14 +2425,14 @@ int call_create(Transport *t, unsigned flags, pjsip_dialog *dlg, const char *pro
 	call->inv = inv;
 
 	if(!set_proxy(dlg, proxy_uri)) {
-		close_media_endpoints(call);
+		close_media(call);
 		status = pjsip_dlg_terminate(dlg); //ToDo:
 		return -1;
 	}
 
 	long call_id;
 	if(!g_call_ids.add((long)call, call_id)){
-		close_media_endpoints(call);
+		close_media(call);
 		status = pjsip_dlg_terminate(dlg); //ToDo:
 		set_error("Failed to allocate id");
 		return -1;
@@ -2442,7 +2442,7 @@ int call_create(Transport *t, unsigned flags, pjsip_dialog *dlg, const char *pro
 	status = pjsip_inv_invite(inv, &tdata);
 	if(status != PJ_SUCCESS) {
 		g_call_ids.remove(call_id, (long &)call);
-		close_media_endpoints(call);
+		close_media(call);
 		status = pjsip_dlg_terminate(dlg); //ToDo:
 		set_error("pjsip_inv_invite failed");
 		return -1;
@@ -2450,7 +2450,7 @@ int call_create(Transport *t, unsigned flags, pjsip_dialog *dlg, const char *pro
 
 	if(!add_headers(dlg->pool, tdata, document)) {
 		g_call_ids.remove(call_id, (long &)call);
-		close_media_endpoints(call); //Todo:
+		close_media(call); //Todo:
 		status = pjsip_dlg_terminate(dlg); //ToDo:	
 		return -1;
 	}
@@ -2465,7 +2465,7 @@ int call_create(Transport *t, unsigned flags, pjsip_dialog *dlg, const char *pro
 	pj_perror(0, "", status, "");
 	if(status != PJ_SUCCESS) {
 		g_call_ids.remove(call_id, (long &)call);
-		close_media_endpoints(call); //Todo:
+		close_media(call); //Todo:
 		//The below code cannot be called here it will cause seg fault
 		//status = pjsip_dlg_terminate(dlg); //ToDo:
 		set_error("pjsip_inv_send_msg failed");
@@ -2476,7 +2476,7 @@ int call_create(Transport *t, unsigned flags, pjsip_dialog *dlg, const char *pro
 	status = pjsip_dlg_add_usage(dlg, &mod_tester, call);
 	if(status != PJ_SUCCESS) {
 		g_call_ids.remove(call_id, (long &)call);
-		close_media_endpoints(call); //Todo:
+		close_media(call); //Todo:
 		status = pjsip_dlg_terminate(dlg); //ToDo:
 		set_error("pjsip_dlg_add_usage failed");
 		return  -1;
@@ -2531,7 +2531,7 @@ pj_status_t audio_endpoint_send_dtmf(AudioEndpoint *ae, const char *digits, cons
 
 pj_status_t send_dtmf(Call *call, const char *digits, int mode) {
     for(int i=0 ; i<call->media_count ; i++) {
-        MediaEndpoint *me = (MediaEndpoint*)call->media_endpoints[i];
+        MediaEndpoint *me = (MediaEndpoint*)call->media[i];
         if(me->type != ENDPOINT_TYPE_AUDIO) continue;
 
         AudioEndpoint *ae = (AudioEndpoint*)me->endpoint.audio;
@@ -2866,10 +2866,10 @@ out:
 	return 0;
 }
 
-int count_media_endpoints_by_type(Call *call, int type) {
+int count_media_by_type(Call *call, int type) {
     int total = 0;
     for(int i=0 ; i<call->media_count ; i++) {
-        MediaEndpoint *me = (MediaEndpoint*)call->media_endpoints[i];
+        MediaEndpoint *me = (MediaEndpoint*)call->media[i];
         if(type == me->type) total++;
     }
     return total;
@@ -2906,7 +2906,7 @@ int pjw_call_start_record_wav(long call_id, const char *json)
 	}
 	call = (Call*)val;
 
-    ae_count = count_media_endpoints_by_type(call, ENDPOINT_TYPE_AUDIO);
+    ae_count = count_media_by_type(call, ENDPOINT_TYPE_AUDIO);
 
     if(ae_count == 0)
     {
@@ -2942,7 +2942,7 @@ int pjw_call_start_record_wav(long call_id, const char *json)
         goto out;
     }
 
-    me = (MediaEndpoint*)call->media_endpoints[media_id];
+    me = (MediaEndpoint*)call->media[media_id];
     if(ENDPOINT_TYPE_AUDIO != me->type) {
         set_error("media_endpoint is not audio endpoint");
         goto out;
@@ -3012,7 +3012,7 @@ int pjw_call_start_play_wav(long call_id, const char *json)
 	}
 	call = (Call*)val;
 
-    ae_count = count_media_endpoints_by_type(call, ENDPOINT_TYPE_AUDIO);
+    ae_count = count_media_by_type(call, ENDPOINT_TYPE_AUDIO);
 
     if(ae_count == 0)
     {
@@ -3049,7 +3049,7 @@ int pjw_call_start_play_wav(long call_id, const char *json)
         goto out;
     }
 
-    me = (MediaEndpoint*)call->media_endpoints[media_id];
+    me = (MediaEndpoint*)call->media[media_id];
     if(ENDPOINT_TYPE_AUDIO != me->type) {
         set_error("media_endpoint is not audio endpoint");
         goto out;
@@ -3071,7 +3071,7 @@ out:
 pj_status_t call_stop_audio_endpoints_op(Call *call, audio_endpoint_stop_op_t op) {
     pj_status_t status;
     for(int i=0 ; i<call->media_count ; i++) {
-        MediaEndpoint *me = (MediaEndpoint*)call->media_endpoints[i];
+        MediaEndpoint *me = (MediaEndpoint*)call->media[i];
         if(ENDPOINT_TYPE_AUDIO != me->type) continue;
 
         AudioEndpoint *ae = (AudioEndpoint*)me->endpoint.audio;
@@ -3155,7 +3155,7 @@ int pjw_call_stop_play_wav(long call_id, const char *json)
             goto out;
         }
 
-        me = (MediaEndpoint*)call->media_endpoints[media_id];
+        me = (MediaEndpoint*)call->media[media_id];
         if(ENDPOINT_TYPE_AUDIO != me->type) {
             set_error("invalid media_id non audio");
             goto out;
@@ -3250,7 +3250,7 @@ int pjw_call_stop_record_wav(long call_id, const char *json)
             goto out;
         }
 
-        me = (MediaEndpoint*)call->media_endpoints[media_id];
+        me = (MediaEndpoint*)call->media[media_id];
         if(ENDPOINT_TYPE_AUDIO != me->type) {
             set_error("invalid media_id non audio");
             goto out;
@@ -3308,7 +3308,7 @@ int pjw_call_start_fax(long call_id, const char *json)
 	}
 	call = (Call*)val;
 
-    ae_count = count_media_endpoints_by_type(call, ENDPOINT_TYPE_AUDIO);
+    ae_count = count_media_by_type(call, ENDPOINT_TYPE_AUDIO);
 
     if(ae_count == 0)
     {
@@ -3344,7 +3344,7 @@ int pjw_call_start_fax(long call_id, const char *json)
         goto out;
     }
 
-    me = (MediaEndpoint*)call->media_endpoints[media_id];
+    me = (MediaEndpoint*)call->media[media_id];
     if(ENDPOINT_TYPE_AUDIO != me->type) {
         set_error("media_endpoint is not audio endpoint");
         goto out;
@@ -3467,7 +3467,7 @@ int pjw_call_stop_fax(long call_id, const char *json)
             goto out;
         }
 
-        me = (MediaEndpoint*)call->media_endpoints[media_id];
+        me = (MediaEndpoint*)call->media[media_id];
         if(ENDPOINT_TYPE_AUDIO != me->type) {
             set_error("invalid media_id non audio");
             goto out;
@@ -3537,7 +3537,7 @@ int pjw_call_get_stream_stat(long call_id, const char *json, char *out_stats){
         goto out;
     }
 
-    me = (MediaEndpoint*)call->media_endpoints[media_id];
+    me = (MediaEndpoint*)call->media[media_id];
     if(ENDPOINT_TYPE_AUDIO == me->type) {
         ae = (AudioEndpoint*)me->endpoint.audio;
 
@@ -3614,7 +3614,7 @@ static void on_media_update( pjsip_inv_session *inv, pj_status_t status){
 	}
 
     for(int i=0 ; i<call->media_count ; i++) {
-        MediaEndpoint *me = (MediaEndpoint*)call->media_endpoints[i];
+        MediaEndpoint *me = (MediaEndpoint*)call->media[i];
         pjmedia_master_port *master_port = NULL;
         if(ENDPOINT_TYPE_AUDIO == me->type) {
             AudioEndpoint *ae = (AudioEndpoint*)me->endpoint.audio;
@@ -3683,7 +3683,7 @@ static void on_media_update( pjsip_inv_session *inv, pj_status_t status){
                     g_med_endpt,
                     inv->dlg->pool,
                     &stream_info,
-                    ((AudioEndpoint*)(MediaEndpoint*)call->media_endpoints[i]).endpoint.audio)->med_transport, 
+                    ((AudioEndpoint*)(MediaEndpoint*)call->media[i]).endpoint.audio)->med_transport, 
                     NULL,
                     &call->med_stream);
         if(status != PJ_SUCCESS){
@@ -3838,7 +3838,7 @@ static void on_state_changed( pjsip_inv_session *inv,
 		}
 
         for(int i=0 ; i<call->media_count ; i++) {
-            MediaEndpoint *me = call->media_endpoints[i];
+            MediaEndpoint *me = call->media[i];
             if(ENDPOINT_TYPE_AUDIO == me->type) {
                 AudioEndpoint *ae = (AudioEndpoint*)me->endpoint.audio;
                 if(ae->master_port)
@@ -3875,7 +3875,7 @@ static void on_state_changed( pjsip_inv_session *inv,
                 }
             }
 
-            close_media_endpoints(call);
+            close_media(call);
 
             long val;
             if(!g_call_ids.remove(call_id, val))
@@ -3936,7 +3936,7 @@ static pjmedia_transport *create_media_transport(const pj_str_t *addr)
 				}
 			}
             */
-            printf("media_transport created %d\n", med_transport);
+            printf("create_media_transport created %d\n", med_transport);
 			return med_transport;
 		}
 	}
@@ -4416,18 +4416,18 @@ static void on_rx_offer2(pjsip_inv_session *inv, struct pjsip_inv_on_rx_offer_cb
             }
         } else {
             // this is delayed media scenario
-            // So we must generate SDP answer based on media_endpoints set when call was created.
+            // So we must generate SDP answer based on media set when call was created.
 
             pjmedia_sdp_session *sdp = 0;
             if(create_local_sdp(call, call->inv->dlg, &sdp, false, false) != 0) {
-                close_media_endpoints(call);
+                close_media(call);
                 return; 
             }
 
             status = pjsip_inv_set_sdp_answer(call->inv, sdp);
             if(status != PJ_SUCCESS) {
                 set_error("pjsip_inv_set_sdp_answer failed");
-                close_media_endpoints(call);
+                close_media(call);
                 return; 
             }
         }
@@ -4547,7 +4547,7 @@ static void on_dtmf(pjmedia_stream *stream, void *user_data, int digit){
     int media_id = find_endpoint_by_inband_dtmf_media_stream(call, stream);
     assert(media_id >= 0);
 
-    AudioEndpoint *ae = (AudioEndpoint*)call->media_endpoints[media_id];
+    AudioEndpoint *ae = (AudioEndpoint*)call->media[media_id];
 
 	int mode = DTMF_MODE_RFC2833;
 
@@ -4999,7 +4999,7 @@ void close_media_transport(pjmedia_transport *med_transport) {
 	}
 }
 
-void create_media_endpoints(Call *c, pjsip_dialog *dlg, Document &document) {
+void create_media(Call *c, pjsip_dialog *dlg, Document &document) {
     Transport *t = c->transport;
 
 	in_addr in_a;
@@ -5039,13 +5039,13 @@ void create_media_endpoints(Call *c, pjsip_dialog *dlg, Document &document) {
             media_endpt->type = ENDPOINT_TYPE_AUDIO;
             media_endpt->endpoint.audio = audio_endpt;
 
-            c->media_endpoints[c->media_count++] = media_endpt; 
+            c->media[c->media_count++] = media_endpt; 
         } else if(strcmp("mrcp", type) == 0) {
             MrcpEndpoint *mrcp_endpt = (MrcpEndpoint*)pj_pool_zalloc(dlg->pool, sizeof(MrcpEndpoint));
 
             media_endpt->type = ENDPOINT_TYPE_MRCP;
             media_endpt->endpoint.mrcp = mrcp_endpt;
-            c->media_endpoints[c->media_count++] = media_endpt; 
+            c->media[c->media_count++] = media_endpt; 
         } else {
             // for all other cases, media_endpt->type will be zero, so wil not be used.
         }
@@ -5072,7 +5072,7 @@ bool create_local_sdp(Call *call, pjsip_dialog *dlg, pjmedia_sdp_session **p_sdp
     }
     
     for(int i=0 ; i<call->media_count ; i++) {
-        MediaEndpoint *me = (MediaEndpoint*)call->media_endpoints[i];
+        MediaEndpoint *me = (MediaEndpoint*)call->media[i];
         if(ENDPOINT_TYPE_AUDIO == me->type) {
             AudioEndpoint *audio = (AudioEndpoint*)me->endpoint.audio;
             pjmedia_transport_info med_tpinfo;
@@ -5088,7 +5088,7 @@ bool create_local_sdp(Call *call, pjsip_dialog *dlg, pjmedia_sdp_session **p_sdp
                 &sdpMedia);
             if(status != PJ_SUCCESS) {
                 status = pjsip_dlg_terminate(dlg); //ToDo:
-                close_media_endpoints(call);
+                close_media(call);
                 set_error("pjmedia_endpt_create_audio_sdp failed");
                 return -1;
             }
@@ -5121,7 +5121,7 @@ bool create_local_sdp(Call *call, pjsip_dialog *dlg, pjmedia_sdp_session **p_sdp
             m = (pjmedia_sdp_media*)pj_pool_zalloc(dlg->pool, sizeof(pjmedia_sdp_media));
             if(!m) {
                 status = pjsip_dlg_terminate(dlg); //ToDo:
-                close_media_endpoints(call);
+                close_media(call);
                 set_error("create pjmedia_sdp_media for mrcp endpoint failed");
                 return -1;
             }
@@ -5161,10 +5161,10 @@ bool create_local_sdp(Call *call, pjsip_dialog *dlg, pjmedia_sdp_session **p_sdp
 }
 
 
-void close_media_endpoints(Call *c) {
-    printf("close_media_endpoints call_id=%d\n", c->id);
+void close_media(Call *c) {
+    printf("close_media call_id=%d\n", c->id);
     for(int i=0 ; i<c->media_count ; ++ i) {
-        MediaEndpoint *me = c->media_endpoints[i];
+        MediaEndpoint *me = c->media[i];
         if(ENDPOINT_TYPE_AUDIO == me->type) {
             close_media_transport(me->endpoint.audio->med_transport);
         }
@@ -6747,7 +6747,7 @@ void check_digit_buffer(Call *call, int mode) {
 	char evt[256];
 
     for(int i=0 ; i<call->media_count ; i++) {
-        MediaEndpoint *me = (MediaEndpoint*)call->media_endpoints[i];
+        MediaEndpoint *me = (MediaEndpoint*)call->media[i];
         if(ENDPOINT_TYPE_AUDIO != me->type) continue;
     
         AudioEndpoint *ae = (AudioEndpoint*)me->endpoint.audio;

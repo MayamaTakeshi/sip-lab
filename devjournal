@@ -1849,6 +1849,39 @@ but pjmedia_session was deprecated long ago:
   https://github.com/pjsip/pjproject/issues/1207
 
 
+-----------------------------------------------------
+2023/01/09 takeshi:
+
+Basic changes for #42 were completed:
+  - works with reinvite
+  - works with delayed_media (including in reinvites with delayed media)
+  - sends full list of codecs (solves #3).    
+But only SIP works.
+We need to update the code to create/start/recreate the media streams upon SDP negotiation.
+Then after this gets working we will add code to support connection-based (TCP/TLS) media (MRCP, MSRP etc).
+
+Draft:
+  - add call->media_neg and call->media_neg_count
+  - in call_create, call_respond(with_media) call_reinvite, we populate the call->media_neg array (creating media components as necessary)
+  - when building call->media_nego we must search for the same media already present in call->media. 
+    - If the media is already present, copy the pointer from call->media to media->neg (the search should be done igonoring specifics like port number, we just need to search for the same type).
+    - else create a media endpoint anew and add it to media->neg
+  - always use call->media_nego to create local_sdp to be sent to the peer
+  - the MediaEndpoint should include a computed tag "MEDIA:TRANSPORT:ADDRESS:PORT". Ex: "mrcp:TCP/MRCPv2:127.0.0.1:1000"
+  - at on_media_update (negotiation was successful):
+    - get the active local pjmedia_sdp_session
+    - create an array with the computed tags "MEDIA:TRANSPORT:ADDRESS:PORT" for each pjmedia_sdp_session that is present (non-zero m->desc.port)
+    - for each m in call->media_neg:
+      - if (m tag is present in the array of tags) and m is not present in call->media, move the m to call->media (which is the array with active media).
+      - else remove m from call->media_neg (destroy media components if necessary)
+      - after this operation, call->media_neg should be empty
+    - for each m in call->media:
+      - if m tag not is present in the array of tags then remove m from call->media (destroy media components if necessary) 
+
+Also:
+  - the negotiated codec for an existing media stream could change. So we must preserve this info and in case it changed, to restart the component with the new codec. 
+  - if the codec didn't change then we should not stop the media stream.
+
 
 
 
