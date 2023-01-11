@@ -357,9 +357,9 @@ struct MrcpEndpoint {
 
 struct MediaEndpoint {
     int type;
-    pj_str_t *media;
-    pj_str_t *transport;
-    pj_str_t *addr;
+    pj_str_t media;
+    pj_str_t transport;
+    pj_str_t addr;
     int port;
 
     union {
@@ -2628,9 +2628,9 @@ out:
 	return 0;
 }		
 
-//int pjw_call_reinvite(long call_id, int hold, unsigned flags)
-int pjw_call_reinvite(long call_id, const char *json)
-{
+int pjw_call_reinvite(long call_id, const char *json) {
+	addon_log(LOG_LEVEL_DEBUG, "pjw_call_reinvite call_id=%d\n", call_id);
+    
 	PJW_LOCK();
 	clear_error();
 
@@ -2652,7 +2652,7 @@ int pjw_call_reinvite(long call_id, const char *json)
 
     Document document;
     
-    const char *valid_params[] = {"hold", "delayed_media", ""};
+    const char *valid_params[] = {"hold", "delayed_media", "media", ""};
 
 	if(!g_call_ids.get(call_id, val)){
 	    set_error("Invalid call_id");
@@ -2687,6 +2687,10 @@ int pjw_call_reinvite(long call_id, const char *json)
 
     call->local_hold = hold;
 
+    if(!create_media_neg(call, inv->dlg, document)) {
+        goto out;
+    }
+
 	if(!(flags & CALL_FLAG_DELAYED_MEDIA)) {
         // The below call to create_local_sdp  causes subsequent callt pjsip_inv_reinvite() to fail as  the function wants
         // inv->invite_tsx to be NULL
@@ -2696,8 +2700,13 @@ int pjw_call_reinvite(long call_id, const char *json)
             goto out;
         }
 
+        char buf[2048];
+        pjmedia_sdp_print(sdp, buf, 2048);
+        printf("local sdp:\n");
+        printf("%s\n", buf);
+
         /*
-        status = pjmedia_sdp_neg_modify_local_offer(call->inv->dlg->pool, call->inv->neg, offer, sdp);
+        status = pjmedia_sdp_neg_modify_local_offer(call->inv->dlg->pool, call->inv->neg, sdp);
         if(status != PJ_SUCCESS){
             set_error("pjmedia_sdp_neg_modify_local_offer failed");
             goto out;
@@ -2717,7 +2726,8 @@ int pjw_call_reinvite(long call_id, const char *json)
         printf("neg state: %d\n", state);
     }
 
-	status = pjsip_inv_reinvite(call->inv, NULL, sdp, &tdata);
+	//status = pjsip_inv_reinvite(call->inv, NULL, sdp, &tdata);
+	status = pjsip_inv_reinvite(call->inv, NULL, NULL, &tdata);
     printf("status=%d\n", status);
 	if(status != PJ_SUCCESS){
 		set_error("pjsip_inv_reinvite failed");
@@ -3601,13 +3611,20 @@ bool stop_master_ports(Call *call) {
 }
 
 bool media_endpoint_present_in_session_media(MediaEndpoint *me, const pjmedia_sdp_session *local_sdp) {
+    printf("media_endpoint_present_in_session_media:\n"); 
     for(int i=0 ; i<local_sdp->media_count ; i++) {
         pjmedia_sdp_media *media = local_sdp->media[i];
+        printf("port: %d %d\n", me->port, media->desc.port);
+        printf("media: %.*s %.*s\n", me->media.slen, me->media.ptr, media->desc.media.slen, media->desc.media.ptr);
         if((me->port == media->desc.port) &&
-           (pj_strcmp(me->media, &media->desc.media) == 0) &&
-           (pj_strcmp(me->transport, &media->desc.transport) == 0) &&
-           (pj_strcmp(me->addr, &media->conn->addr) == 0)) return true;
+           (pj_strcmp(&me->media, &media->desc.media) == 0) &&
+           (pj_strcmp(&me->transport, &media->desc.transport) == 0) &&
+           (pj_strcmp(&me->addr, &media->conn->addr) == 0)) {
+                printf("  true\n");
+                return true;
+        }
     }
+    printf("  false\n");
     return false;
 }
 
@@ -3666,28 +3683,38 @@ static void on_media_update( pjsip_inv_session *inv, pj_status_t status){
         printf("DEBUG media: %.*s port: %d transport: %.*s fmt_count: %d fmt[0]: %.*s\n", m->desc.media.slen, m->desc.media.ptr, m->desc.port, m->desc.transport.slen, m->desc.transport.ptr, m->desc.fmt_count, m->desc.fmt[0].slen, m->desc.fmt[0].ptr);
     }
 
-    // Process call->media_neg
+    printf("Processing call->media_neg\n");
     bool activate_chart[PJMEDIA_MAX_SDP_MEDIA] = {false};
 
     for(int i=0 ; i<call->media_neg_count ; i++) {
         MediaEndpoint *med_endpt = call->media_neg[i];
-        if(media_endpoint_present_in_session_media(med_endpt, local_sdp) && !is_media_active(call, med_endpt)) {
-            activate_chart[i] = true;
+        if(media_endpoint_present_in_session_media(med_endpt, local_sdp)) {
+            if(!is_media_active(call, med_endpt)) {
+                activate_chart[i] = true;
+                printf("activate_chart[%d] set to %d\n", i, activate_chart[i]);
+            } else {
+                printf("media %d already active\n", i);
+            }
         }
     }
 
     for(int i=0 ; i<call->media_neg_count ; i++) {
         if(activate_chart[i]) {
+            printf("activating media_neg[%d]\n", i);
             call->media[call->media_count++] = call->media_neg[i];
         } else {
+            printf("closing media_neg[%d]\n", i);
             close_media_endpoint(call->media_neg[i]); 
         }
     }
 
-    // Process call->media
+    call->media_neg_count = 0;
+
+    printf("Processing call->media\n");
     for(int i=call->media_count-1 ; i>=0 ; i--) {
         MediaEndpoint *med_endpt = call->media[i];
         if(!media_endpoint_present_in_session_media(med_endpt, local_sdp)) {
+            printf("closing media[%d]\n", i);
             close_media_endpoint(med_endpt);
             call->media_count--;
         }
@@ -4561,7 +4588,16 @@ static void on_rx_offer2(pjsip_inv_session *inv, struct pjsip_inv_on_rx_offer_cb
 
 static pj_status_t on_rx_reinvite(pjsip_inv_session *inv, const pjmedia_sdp_session *offer, pjsip_rx_data *rdata) {
     printf("on_rx_reinvite\n");
-    return !PJ_SUCCESS;
+
+	char evt[2048];
+
+	Call *call = (Call*)inv->dlg->mod_data[mod_tester.id];
+    printf("on_rx_reinvite call_id=%d\n", call->id);
+
+    make_evt_reinvite(evt, sizeof(evt), call->id, rdata->msg_info.len, rdata->msg_info.msg_buf);
+    dispatch_event(evt);
+
+    return PJ_SUCCESS;
 }
 
 static void on_dtmf(pjmedia_stream *stream, void *user_data, int digit){
@@ -5037,6 +5073,7 @@ void close_media_transport(pjmedia_transport *med_transport) {
 }
 
 bool create_media_endpoint(Call *call, Value &descr, pjsip_dialog *dlg, char *address, MediaEndpoint **out) {
+    printf("create_media_endpoint call_id=%d\n", call->id); 
     MediaEndpoint *med_endpt = (MediaEndpoint*)pj_pool_zalloc(dlg->pool, sizeof(MediaEndpoint));
     if(!med_endpt) {
         set_error("failed to allocate med_endpt");
@@ -5060,9 +5097,9 @@ bool create_media_endpoint(Call *call, Value &descr, pjsip_dialog *dlg, char *ad
         audio_endpt->med_transport = med_transport; 
 
         med_endpt->type = ENDPOINT_TYPE_AUDIO;
-        pj_strdup2(dlg->pool, med_endpt->media, "audio");
-        pj_strdup(dlg->pool, med_endpt->addr, &str_addr);
-        pj_strdup2(dlg->pool, med_endpt->transport, "RTP/AVP");
+        pj_strdup2(dlg->pool, &med_endpt->media, "audio");
+        pj_strdup(dlg->pool, &med_endpt->addr, &str_addr);
+        pj_strdup2(dlg->pool, &med_endpt->transport, "RTP/AVP");
         med_endpt->port = allocated_port;
         med_endpt->endpoint.audio = audio_endpt;
     } else if(strcmp("mrcp", type) == 0) {
@@ -5076,9 +5113,9 @@ bool create_media_endpoint(Call *call, Value &descr, pjsip_dialog *dlg, char *ad
         }
 
         med_endpt->type = ENDPOINT_TYPE_MRCP;
-        pj_strdup2(dlg->pool, med_endpt->media, "application");
-        pj_strdup(dlg->pool, med_endpt->addr, &str_addr);
-        pj_strdup2(dlg->pool, med_endpt->transport, "TCP/MRCPv2");
+        pj_strdup2(dlg->pool, &med_endpt->media, "application");
+        pj_strdup(dlg->pool, &med_endpt->addr, &str_addr);
+        pj_strdup2(dlg->pool, &med_endpt->transport, "TCP/MRCPv2");
         med_endpt->port = allocated_port;
         med_endpt->endpoint.mrcp = mrcp_endpt;
     } else {
@@ -5086,6 +5123,7 @@ bool create_media_endpoint(Call *call, Value &descr, pjsip_dialog *dlg, char *ad
     }
 
     *out = med_endpt;
+    printf("create_media_endpoint call_id=%d %d\n", call->id, med_endpt); 
 
     return true;
 }
@@ -5125,6 +5163,9 @@ bool find_active_media(Call *call, Value &descr, MediaEndpoint **out, bool in_us
 }
 
 bool create_media_neg(Call *call, pjsip_dialog *dlg, Document &document) {
+    printf("create_media_neg call_id=%d\n", call->id);
+    assert(call->media_neg_count == 0);
+
     bool in_use_chart[PJMEDIA_MAX_SDP_MEDIA] = {false};
 
     Transport *t = call->transport;
@@ -5138,18 +5179,23 @@ bool create_media_neg(Call *call, pjsip_dialog *dlg, Document &document) {
         MediaEndpoint *med_endpt;
 
         if(find_active_media(call, descr, &med_endpt, in_use_chart)) {
+            printf("i=%d found active media\n", i);
             call->media_neg[call->media_neg_count++] = med_endpt;
         } else {
+            printf("i=%d no active media\n", i);
             if(!create_media_endpoint(call, descr, dlg, t->address, &med_endpt)) return false;
-            call->media[call->media_count++] = med_endpt;
+            printf("i=%d media created\n", i);
+            call->media_neg[call->media_neg_count++] = med_endpt;
         }
     }
 
+    printf("call->media_count=%i\n", call->media_count);
     return true;
 }
 
 
 bool create_local_sdp(Call *call, pjsip_dialog *dlg, pjmedia_sdp_session **p_sdp, bool hold, bool reinvite) {
+    printf("create_local_sdp call_id=%d\n", call->id);
     pj_status_t status;
     pjmedia_sdp_session *sdp;
 
@@ -5163,11 +5209,11 @@ bool create_local_sdp(Call *call, pjsip_dialog *dlg, pjmedia_sdp_session **p_sdp
         &origin,
         &sdp);
     if(status != PJ_SUCCESS) {
-        status = pjsip_dlg_terminate(dlg); //ToDo:
         set_error("pjmedia_endpt_create_base_sdp failed");
         return false;
     }
     
+    printf("media_neg_count=%d\n", call->media_neg_count);
     for(int i=0 ; i<call->media_neg_count ; i++) {
         MediaEndpoint *me = (MediaEndpoint*)call->media_neg[i];
         if(ENDPOINT_TYPE_AUDIO == me->type) {
@@ -5214,6 +5260,7 @@ bool create_local_sdp(Call *call, pjsip_dialog *dlg, pjmedia_sdp_session **p_sdp
             pjmedia_sdp_media_add_attr(sdpMedia, attr);
 
             sdp->media[sdp->media_count++] = sdpMedia;
+            assert(sdp->media_count > 0);
         } else if(ENDPOINT_TYPE_MRCP == me->type) {
             pjmedia_sdp_media *m;
             m = (pjmedia_sdp_media*)pj_pool_zalloc(dlg->pool, sizeof(pjmedia_sdp_media));
@@ -5223,9 +5270,9 @@ bool create_local_sdp(Call *call, pjsip_dialog *dlg, pjmedia_sdp_session **p_sdp
                 return false;
             }
 
-            pj_strdup(dlg->pool, &m->desc.media, me->media);
+            pj_strdup(dlg->pool, &m->desc.media, &me->media);
 
-            pj_strdup(dlg->pool, &m->desc.transport, me->transport);
+            pj_strdup(dlg->pool, &m->desc.transport, &me->transport);
 
             m->desc.port = me->port;
             pj_strdup2(dlg->pool, &m->desc.fmt[m->desc.fmt_count++], "1"); //must be "1" (https://www.rfc-editor.org/rfc/rfc6787.html)
@@ -5236,6 +5283,9 @@ bool create_local_sdp(Call *call, pjsip_dialog *dlg, pjmedia_sdp_session **p_sdp
             pj_strdup2(dlg->pool, &m->conn->addr, call->transport->address);
             
             sdp->media[sdp->media_count++] = m;
+        } else {
+            printf("unsupported me->type %d\n", me->type);
+            assert(0);
         }
     }
 
@@ -5253,6 +5303,7 @@ bool create_local_sdp(Call *call, pjsip_dialog *dlg, pjmedia_sdp_session **p_sdp
     } 
     */
 
+    printf("sdp->media_count=%d\n", sdp->media_count);
     *p_sdp = sdp;
     return true;
 }
@@ -5266,6 +5317,7 @@ bool is_media_active(Call *c, MediaEndpoint *me) {
 }
 
 void close_media_endpoint(MediaEndpoint *me) {
+    printf("close_media_endpoint %d\n", me);
     if(ENDPOINT_TYPE_AUDIO == me->type) {
         close_media_transport(me->endpoint.audio->med_transport);
     }
@@ -5916,20 +5968,22 @@ static void on_tsx_state_changed(pjsip_inv_session *inv,
 
     //ostringstream oss;
     //Transport *t;
-    if (tsx->role==PJSIP_ROLE_UAS &&
-	tsx->state==PJSIP_TSX_STATE_TRYING) {
-	if(pjsip_method_cmp(&tsx->method, pjsip_get_refer_method())==0) {
-		/*
-		 * Incoming REFER request.
-		 */
+    if (tsx->role==PJSIP_ROLE_UAS && tsx->state==PJSIP_TSX_STATE_TRYING) {
+        if(pjsip_method_cmp(&tsx->method, pjsip_get_refer_method())==0) {
+            /*
+             * Incoming REFER request.
+             */
 
-		process_in_dialog_refer(call->inv->dlg, e->body.tsx_state.src.rdata);
-	} else {
-		make_evt_request(evt, sizeof(evt), "call", call->id, e->body.tsx_state.src.rdata->msg_info.len, e->body.tsx_state.src.rdata->msg_info.msg_buf);
-    		dispatch_event(evt);    
+            process_in_dialog_refer(call->inv->dlg, e->body.tsx_state.src.rdata);
+        } else {
+            if(tsx->method.id != PJSIP_INVITE_METHOD) {
+                // REINVITE should be handled by on_rx_reinvite
+                make_evt_request(evt, sizeof(evt), "call", call->id, e->body.tsx_state.src.rdata->msg_info.len, e->body.tsx_state.src.rdata->msg_info.msg_buf);
+                dispatch_event(evt);    
 
-		pjsip_dlg_respond(call->inv->dlg, e->body.tsx_state.src.rdata, 200, NULL, NULL, NULL);
-	}
+                pjsip_dlg_respond(call->inv->dlg, e->body.tsx_state.src.rdata, 200, NULL, NULL, NULL);
+            }
+        }
     }
 }
 

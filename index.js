@@ -65,7 +65,12 @@ addon.call = {
   },
   terminate: (c_id, params) => { return addon.call_terminate(c_id, JSON.stringify(params ? params : {})) },
   send_dtmf: (c_id, params) => { return addon.call_send_dtmf(c_id, JSON.stringify(params)) },
-  reinvite: (c_id, params) => { return addon.call_reinvite(c_id, JSON.stringify(params ? params : {})) },
+  reinvite: (c_id, params) => { 
+    if(!params.media) {
+      params.media = [{ "type": "audio" }]
+    }
+    return addon.call_reinvite(c_id, JSON.stringify(params ? params : {}))
+  },
   send_request: (c_id, params) => { return addon.call_send_request(c_id, JSON.stringify(params)) },
   start_recording: (c_id, params) => { return addon.call_start_record_wav(c_id, JSON.stringify(params)) },
   start_playing: (c_id, params) => { return addon.call_start_play_wav(c_id, JSON.stringify(params)) },
