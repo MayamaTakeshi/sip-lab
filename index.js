@@ -73,7 +73,7 @@ addon.call = {
   stop_playing: addon.call_stop_play_wav,
   start_fax: (c_id, params) => { return addon.call_start_fax(c_id, JSON.stringify(params)) },
   stop_fax: addon.call_stop_fax,
-  get_stream_stat: addon.call_get_stream_stat,
+  get_stream_stat: (c_id, params) => { return addon.call_get_stream_stat(c_id, JSON.stringify(params ? params : {})) },
   refer: (c_id, params) => { return addon.call_refer(c_id, JSON.stringify(params)) },
   get_info: addon.call_get_info,
   gen_string_replaces: addon.call_gen_string_replaces,

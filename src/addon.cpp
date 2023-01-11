@@ -537,7 +537,7 @@ Napi::Value call_get_stream_stat(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
 
   if (info.Length() != 2) {
-    Napi::Error::New(env, "Wrong number of arguments. Expected: call_id").ThrowAsJavaScriptException();
+    Napi::Error::New(env, "Wrong number of arguments. Expected: call_id, params").ThrowAsJavaScriptException();
     return env.Null();
   }
 

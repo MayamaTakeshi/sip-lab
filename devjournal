@@ -1772,6 +1772,28 @@ a=fmtp:121 0-16
 a=rtpmap:122 telephone-event/16000
 a=fmtp:122 0-16
 
+
+Also, here sample SDP for SRTP:
+
+v=0
+o=jdoe 2890844526 2890842807 IN IP4 10.47.16.5
+s=SDP Seminar
+i=A Seminar on the session description protocol
+u=http://www.example.com/seminars/sdp.pdf
+e=j.doe@example.com (Jane Doe)
+c=IN IP4 161.44.17.12/127
+t=2873397496 2873404696
+m=video 51372 RTP/SAVP 31
+a=crypto:1 AES_CM_128_HMAC_SHA1_80
+inline:d0RmdmcmVCspeEc3QGZiNWpVLFJhQX1cfHAwJSoj|2^20|1:32
+m=audio 49170 RTP/SAVP 0
+a=crypto:1 AES_CM_128_HMAC_SHA1_32
+inline:NzB4d1BINUAvLEw6UzF3WSJ+PSdFcGdUJShpX1Zj|2^20|1:32
+m=application 32416 udp wb
+a=orient:portrait
+
+https://www.rfc-editor.org/rfc/rfc4568.html
+
 --------------------------------------------------------
 2023/01/08 takeshi:
 
@@ -1854,8 +1876,8 @@ but pjmedia_session was deprecated long ago:
 
 Basic changes for #42 were completed:
   - works with reinvite
-  - works with delayed_media (including in reinvites with delayed media)
-  - sends full list of codecs (solves #3).    
+  - works with delayed media (including reinvites with delayed media)
+  - sends full list of codecs (solves #3).
 But only SIP works.
 We need to update the code to create/start/recreate the media streams upon SDP negotiation.
 Then after this gets working we will add code to support connection-based (TCP/TLS) media (MRCP, MSRP etc).
@@ -1867,21 +1889,19 @@ Draft:
     - If the media is already present, copy the pointer from call->media to media->neg (the search should be done igonoring specifics like port number, we just need to search for the same type).
     - else create a media endpoint anew and add it to media->neg
   - always use call->media_nego to create local_sdp to be sent to the peer
-  - the MediaEndpoint should include a computed tag "MEDIA:TRANSPORT:ADDRESS:PORT". Ex: "mrcp:TCP/MRCPv2:127.0.0.1:1000"
-  - at on_media_update (negotiation was successful):
-    - get the active local pjmedia_sdp_session
-    - create an array with the computed tags "MEDIA:TRANSPORT:ADDRESS:PORT" for each pjmedia_sdp_session that is present (non-zero m->desc.port)
-    - for each m in call->media_neg:
-      - if (m tag is present in the array of tags) and m is not present in call->media, move the m to call->media (which is the array with active media).
-      - else remove m from call->media_neg (destroy media components if necessary)
-      - after this operation, call->media_neg should be empty
-    - for each m in call->media:
-      - if m tag not is present in the array of tags then remove m from call->media (destroy media components if necessary) 
+  - at on_media_update:
+    - if status==PJ_SUCCESS (negotiation successful)
+      - then
+        - get the local active_sdp
+        - for each m in call->media_neg:
+          - if (m matches a media at active_sdp) and m is not present in call->media, move the m to call->media (which is the array with active media).
+          - else remove m from call->media_neg (destroy media components if necessary)
+          - after this operation, call->media_neg should be empty
+        - for each m in call->media:
+          - if (m doesn't match a media at active_sdp) then remove m from call->media (destroy media components if necessary) 
+      - else remove all m from call->media_neg (destroy media components if necessary)
 
-Also:
-  - the negotiated codec for an existing media stream could change. So we must preserve this info and in case it changed, to restart the component with the new codec. 
-  - if the codec didn't change then we should not stop the media stream.
+UPDATE: the above was implemented but not tested yet.
 
-
-
+After it confirms to be working then we should add code to check the media streams and create/destroy as needed.
 
