@@ -2392,6 +2392,7 @@ int call_create(Transport *t, unsigned flags, pjsip_dialog *dlg, const char *pro
 	pj_bzero(call, sizeof(Call));
 
 	call->transport = t;
+    call->outgoing = true;
 
     pjmedia_sdp_session *sdp = 0;
 
@@ -2475,8 +2476,6 @@ int call_create(Transport *t, unsigned flags, pjsip_dialog *dlg, const char *pro
 		return  -1;
 	}
 	//addon_log(LOG_LEVEL_DEBUG, "pjsip_dlg_add_usage OK\n");
-
-	call->outgoing = true;
 
 	return call_id;
 }
