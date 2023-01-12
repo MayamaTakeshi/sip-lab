@@ -1861,10 +1861,12 @@ int pjw_call_respond(long call_id, const char *json)
 	}
 	call = (Call*)val;
 
+    /*
 	if(call->outgoing) {
 		set_error("You cannot respond an outgoing call");
 		goto out;
 	}
+    */
 
     if(!parse_json(document, json, buffer, MAX_JSON_INPUT)) {
         goto out;
@@ -3683,26 +3685,33 @@ static void on_media_update( pjsip_inv_session *inv, pj_status_t status){
         printf("DEBUG media: %.*s port: %d transport: %.*s fmt_count: %d fmt[0]: %.*s\n", m->desc.media.slen, m->desc.media.ptr, m->desc.port, m->desc.transport.slen, m->desc.transport.ptr, m->desc.fmt_count, m->desc.fmt[0].slen, m->desc.fmt[0].ptr);
     }
 
+#define ACTION_NULL     0
+#define ACTION_ACTIVATE 1
+#define ACTION_CLOSE    2 
+
     printf("Processing call->media_neg\n");
-    bool activate_chart[PJMEDIA_MAX_SDP_MEDIA] = {false};
+    int action_chart[PJMEDIA_MAX_SDP_MEDIA] = {ACTION_NULL};
 
     for(int i=0 ; i<call->media_neg_count ; i++) {
         MediaEndpoint *med_endpt = call->media_neg[i];
         if(media_endpoint_present_in_session_media(med_endpt, local_sdp)) {
             if(!is_media_active(call, med_endpt)) {
-                activate_chart[i] = true;
-                printf("activate_chart[%d] set to %d\n", i, activate_chart[i]);
+                action_chart[i] = ACTION_ACTIVATE;
+                printf("action_chart[%d] set to ACTION_ACTIVATE\n", i);
             } else {
-                printf("media %d already active\n", i);
+                printf("action_chart[%d] set to ACTION_NULL\n", i);
             }
+        } else {
+            action_chart[i] = ACTION_CLOSE;
+            printf("action_chart[%d] set to ACTION_REMOVE\n", i);
         }
     }
 
     for(int i=0 ; i<call->media_neg_count ; i++) {
-        if(activate_chart[i]) {
+        if(action_chart[i] == ACTION_ACTIVATE) {
             printf("activating media_neg[%d]\n", i);
             call->media[call->media_count++] = call->media_neg[i];
-        } else {
+        } else if(action_chart[i] == ACTION_CLOSE) {
             printf("closing media_neg[%d]\n", i);
             close_media_endpoint(call->media_neg[i]); 
         }
