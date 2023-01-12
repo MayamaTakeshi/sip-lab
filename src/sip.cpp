@@ -2635,7 +2635,7 @@ int pjw_call_reinvite(long call_id, const char *json) {
 	clear_error();
 
     bool hold = false;
-    unsigned flags;
+    unsigned flags = 0;
 
 	long val;
     Call *call;
@@ -4098,6 +4098,47 @@ out:
 	}
 }
 
+pj_status_t process_invite(Call *call, pjsip_inv_session *inv, pjsip_rx_data *rdata) {
+    pj_status_t status;
+	pj_str_t reason;
+    pjsip_rx_data *cloned_rdata = 0;
+
+	if(!(g_flags & FLAG_NO_AUTO_100_TRYING)) {
+		pjsip_tx_data *tdata;
+		//First response to an INVITE must be created with pjsip_inv_initial_answer(). Subsequent responses to the same transaction MUST use pjsip_inv_answer().
+		//Create 100 response
+		status = pjsip_inv_initial_answer(inv, rdata,
+						100,
+						NULL, NULL, &tdata);
+		if(status != PJ_SUCCESS) {
+			reason = pj_str((char*)"Internal Server Error (pjsip_inv_initial_answer failed)");
+			pjsip_endpt_respond_stateless(g_sip_endpt, rdata, 500, &reason, NULL, NULL);
+			return -1;
+		}
+
+		//Send 100 response
+		status = pjsip_inv_send_msg(inv, tdata);
+		if(status != PJ_SUCCESS) {
+			reason = pj_str((char*)"Internal Server Error (pjsip_inv_send_msg failed)");
+			pjsip_endpt_respond_stateless(g_sip_endpt, rdata, 500, &reason, NULL, NULL);
+			return -1;
+		}
+	} else {
+		status = pjsip_rx_data_clone(rdata, 0, &cloned_rdata);
+
+		if(status != PJ_SUCCESS) {
+			reason = pj_str((char*)"Internal Server Error (pjsip_rx_data_clone failed)");
+			pjsip_endpt_respond_stateless(g_sip_endpt, rdata, 500, &reason, NULL, NULL);
+			return -1;
+		}
+	}
+
+	call->initial_invite_rdata = cloned_rdata;
+
+    return PJ_SUCCESS;
+}
+
+
 static pj_bool_t on_rx_request( pjsip_rx_data *rdata ){
 	char evt[2048];
 
@@ -4236,45 +4277,10 @@ static pj_bool_t on_rx_request( pjsip_rx_data *rdata ){
 		return PJ_TRUE;
 	}
 
-	pjsip_rx_data *cloned_rdata	= 0;
-
-	if(!(g_flags & FLAG_NO_AUTO_100_TRYING)) {
-		pjsip_tx_data *tdata;
-		//First response to an INVITE must be created with pjsip_inv_initial_answer(). Subsequent responses to the same transaction MUST use pjsip_inv_answer().
-		//Create 100 response
-		status = pjsip_inv_initial_answer(inv, rdata,
-						100,
-						NULL, NULL, &tdata);
-		if(status != PJ_SUCCESS) {
-			reason = pj_str((char*)"Internal Server Error (pjsip_inv_initial_answer failed)");
-			pjsip_endpt_respond_stateless(g_sip_endpt, rdata, 500, &reason, NULL, NULL);
-			return PJ_TRUE;
-		}
-
-		//Send 100 response
-		status = pjsip_inv_send_msg(inv, tdata);
-		if(status != PJ_SUCCESS) {
-			reason = pj_str((char*)"Internal Server Error (pjsip_inv_send_msg failed)");
-			pjsip_endpt_respond_stateless(g_sip_endpt, rdata, 500, &reason, NULL, NULL);
-			return PJ_TRUE;
-		}
-	} else {
-		status = pjsip_rx_data_clone(rdata, 0, &cloned_rdata);
-
-		if(status != PJ_SUCCESS) {
-			reason = pj_str((char*)"Internal Server Error (pjsip_rx_data_clone failed)");
-			pjsip_endpt_respond_stateless(g_sip_endpt, rdata, 500, &reason, NULL, NULL);
-			return PJ_TRUE;
-		}
-	}
-
-	call->initial_invite_rdata = cloned_rdata;
-
-	if(status != PJ_SUCCESS) {
-		reason = pj_str((char*)"Internal Server Error (pjsip_rx_data_clone failed)");
-		pjsip_endpt_respond_stateless(g_sip_endpt, rdata, 500, &reason, NULL, NULL);
-		return PJ_TRUE;
-	}
+    status = process_invite(call, inv, rdata);
+    if(status != PJ_SUCCESS) {
+        return PJ_TRUE;
+    }
 
 	call->inv = inv;
 
@@ -4593,6 +4599,11 @@ static pj_status_t on_rx_reinvite(pjsip_inv_session *inv, const pjmedia_sdp_sess
 
 	Call *call = (Call*)inv->dlg->mod_data[mod_tester.id];
     printf("on_rx_reinvite call_id=%d\n", call->id);
+
+    pj_status_t status = process_invite(call, inv, rdata);
+    if(status != PJ_SUCCESS) {
+        return PJ_SUCCESS;
+    }
 
     make_evt_reinvite(evt, sizeof(evt), call->id, rdata->msg_info.len, rdata->msg_info.msg_buf);
     dispatch_event(evt);

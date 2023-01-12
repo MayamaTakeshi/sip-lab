@@ -1906,7 +1906,5 @@ UPDATE: the above was implemented but not tested yet.
 After it confirms to be working then we should add code to check the media streams and create/destroy as needed.
 
 -----------------------------------------------------
-2023/01/09 takeshi:
-
-There is a bad behavior: using the same test d.js, sometimes the same call to pjw_call_reinvite causes the REINVITE to go out with SDP and other times without SDP.
+2023/01/12 takeshi:
 
