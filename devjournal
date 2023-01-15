@@ -1908,3 +1908,96 @@ After it confirms to be working then we should add code to check the media strea
 -----------------------------------------------------
 2023/01/12 takeshi:
 
+Working on #42.
+
+Regarding event 'media_status':
+        {
+            event: 'media_status',
+            call_id: oc.id,
+            status: 'setup_ok',
+            local_mode: 'sendrecv',
+            remote_mode: 'sendrecv',
+        },
+it would need to be modified to report a list of media instead of a single media.
+
+But I am thinking in eliminating this event as now that we report both REINVITEs and their replies, if we want to check the status, we could just check the SDP.
+
+This could be done either by a string-match for the whole body with data capture and with irrelevant and variable data being ignored by using !{_}.
+However, it would be good to have sdp-parsing and sdp-matching modules to permit to easily match specific elements in the SDP.
+
+Maybe we could get inspiration from XML xpath or jq.
+So we would convert the SDP to a JSON object and use queries to indicate the elements we are interested in.
+
+Here is a sample SDP:
+
+v=0
+o=- 3882513420 3882513420 IN IP4 0.0.0.0
+s=pjmedia
+t=0 0
+m=application 9 TCP/MRCPv2 1
+c=IN IP4 127.0.0.1
+m=audio 10000 RTP/AVP 0 8 3
+c=IN IP4 127.0.0.1
+b=TIAS:64000
+a=rtcp:10001 IN IP4 127.0.0.1
+a=sendrecv
+a=rtpmap:0 PCMU/8000
+a=rtpmap:8 PCMA/8000
+a=rtpmap:3 GSM/8000
+a=sendrecv
+
+
+Notice that we have keys before the m= lines.
+These are session parameters and could be specified just like:
+    {
+        v: '0',
+        o: '- 3882513420 3882513420 IN IP4 0.0.0.0',
+        s: 'pjmedia',
+        t: '0 0',
+    }
+
+Then for the media elements we could do it like this:
+    {
+        m0m: 'application 9 TCP/MRCPv2 1',
+        m0c: 'IN IP4 127.0.0.1',
+        m1m: 'audio 10000 RTP/AVP 0 8 3',
+        m1c: 'IN IP4 127.0.0.1',
+        m1b: 'TIAS:64000',
+        m1a0: 'rtcp:10001 IN IP4 127.0.0.1',
+        m1a1: 'sendrecv',
+    }
+
+So m1a1 means: media 1, attribute 1.
+
+Also we could use some wildcards like:
+    {
+        m_m: 'audio 10000 RTP/AVP 0 8 3',
+    }
+
+which would match any m0m, m1m, m2m etc.
+And:
+    {
+        m_a_: 'rtcp:10001 IN IP4 127.0.0.1',
+    }
+would match any m0a0, m0a1, m0a2, m1a0, m1a1, m1a2 etc.
+
+Obs: if media setup fails we would raise an error event for the channel.
+This would make scripts easier to write.
+
+-----------------------------------------------------
+2023/01/12 takeshi:
+
+TODO: 
+
+1) set default media inside sip.cpp instead of depending on index.js (if(!params.media) ...)
+
+2) if 'media: []' or 'media: null' it means there is no media, so do not generate a body (content-length: 0)
+
+3) need to permit to reply to non-INVITE methods (INFO, OPTIONS, NOTIFY, REFER, BYE) in a dialog/session.
+Currently, these methods are automatically answered with '200 OK' but some tests might want to send something else.
+So we will need to preserve the transaction (clone it) and leave it to be acted upon by pjw_call_respond, then release the cloned transaction.
+
+Then if we want to simplify scripts we can prepare filter for these events and automatically reply to them.
+
+
+
