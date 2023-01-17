@@ -390,8 +390,6 @@ struct Call {
 
 	pjsip_rx_data *pending_rdata;
 
-    bool response_ready;
-
     bool pending_invite;  
 };
 
@@ -1885,32 +1883,35 @@ int pjw_call_respond(long call_id, const char *json)
 	r = pj_str((char*)reason);
 
     if(!call->pending_invite) {
-        call->response_ready = true;
+        pjsip_transaction *tsx = pjsip_rdata_get_tsx(call->pending_rdata);
+        assert(tsx);
 
-        pj_bool_t handled;
+        pjsip_tx_data *tdata;
 
-        addon_log(LOG_LEVEL_DEBUG, "calling pjsip_endpt_process_rx_data");
+        status = pjsip_dlg_create_response(call->inv->dlg,
+            call->pending_rdata,
+            202,
+            NULL,
+            &tdata 
+        );
 
-        pjsip_process_rdata_param param = {
-            .start_mod = &mod_tester,
-            .idx_after_start = 0,
-        };
+        assert(status == PJ_SUCCESS);
 
-        pjsip_endpt_process_rx_data(g_sip_endpt, call->pending_rdata, &param, &handled);
-        if (!handled) {
-            set_error("pjsip_endpt_process_rx_data failed");
-            goto out;
-        } else {
-            printf("pjsip_endpt_process_rx_data success\n");
-        }
+        status = pjsip_dlg_send_response (call->inv->dlg,
+            tsx,
+            tdata
+        );
 
+        assert(status == PJ_SUCCESS); 
+    
     	status = pjsip_rx_data_free_cloned(call->pending_rdata);
 		if(status != PJ_SUCCESS) {
 			set_error("pjsip_rx_data_free_cloned failed with status=%i", status);
             goto out;
 		}
-
+    
 		call->pending_rdata = 0;
+
         goto out;
     }
 
@@ -4193,8 +4194,8 @@ static pj_bool_t on_rx_request( pjsip_rx_data *rdata ){
 	pj_status_t status;
 	pj_str_t reason;
 
-	//pjsip_dialog *dlg = pjsip_rdata_get_dlg(rdata);
-    pjsip_dialog *dlg = pjsip_ua_find_dialog(&rdata->msg_info.cid->id, &rdata->msg_info.to->tag, &rdata->msg_info.from->tag, PJ_FALSE);
+	pjsip_dialog *dlg = pjsip_rdata_get_dlg(rdata);
+    //pjsip_dialog *dlg = pjsip_ua_find_dialog(&rdata->msg_info.cid->id, &rdata->msg_info.to->tag, &rdata->msg_info.from->tag, PJ_FALSE);
 
 	addon_log(LOG_LEVEL_DEBUG, "dlg=%x\n", dlg);
     for(int i=0 ; i<PJSIP_MAX_MODULE ; i++) {
@@ -4208,43 +4209,6 @@ static pj_bool_t on_rx_request( pjsip_rx_data *rdata ){
         }
 
         Call *call = (Call*)dlg->mod_data[mod_tester.id];
-        printf("on_rx_request call_id=%d response_ready=%d\n", call->id, call->response_ready);
-
-        if(call->response_ready) {
-            assert(rdata == call->pending_rdata);
-
-            pjsip_transaction *tsx = pjsip_rdata_get_tsx(rdata);
-            assert(tsx);
-
-            pjsip_tx_data *tdata;
-
-            status = pjsip_dlg_create_response(dlg,
-                rdata,
-                202,
-                NULL,
-                &tdata 
-            );
-
-            assert(status == PJ_SUCCESS);
-
-            status = pjsip_dlg_send_response (dlg,
-                tsx,
-                tdata
-            );
-
-            assert(status == PJ_SUCCESS); 
-            call->response_ready = false;
-            
-            return PJ_TRUE;
-
-            pjsip_dlg_respond(dlg,
-                            rdata,
-                            202,
-                            NULL,
-                            NULL,
-                            NULL);
-            return PJ_TRUE;
-        }
 
         if(rdata->msg_info.msg->line.req.method.id != PJSIP_INVITE_METHOD) {
             pjsip_rx_data *cloned_rdata = 0;
@@ -4258,8 +4222,6 @@ static pj_bool_t on_rx_request( pjsip_rx_data *rdata ){
             for(int i=0 ; i<PJSIP_MAX_MODULE ; i++) {
                 cloned_rdata->endpt_info.mod_data[i] = rdata->endpt_info.mod_data[i];
             }
-
-
 
             make_evt_request(evt, sizeof(evt), "call", call->id, rdata->msg_info.len, rdata->msg_info.msg_buf);
             dispatch_event(evt);  
