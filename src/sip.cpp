@@ -388,9 +388,10 @@ struct Call {
 
 	pjsip_evsub *xfer_sub; // Xfer server subscription, if this call was triggered by xfer.
 
+    int pending_request;
 	pjsip_rx_data *pending_rdata;
 
-    bool pending_invite;  
+    //bool pending_invite;  
 };
 
 bool init_media_ports(Call *c, AudioEndpoint *ae, unsigned sampling_rate, unsigned channel_count, unsigned samples_per_frame, unsigned bits_per_sample); 
@@ -1862,7 +1863,12 @@ int pjw_call_respond(long call_id, const char *json)
         goto out;
 	}
 	call = (Call*)val;
-	addon_log(LOG_LEVEL_DEBUG, "pending_invite=%d\n", call->pending_invite);
+	//addon_log(LOG_LEVEL_DEBUG, "pending_invite=%d\n", call->pending_invite);
+
+    if(call->pending_request == -1) {
+        set_error("no pending request to be answered");
+        goto out;
+    }
 
     if(!parse_json(document, json, buffer, MAX_JSON_INPUT)) {
         goto out;
@@ -1882,7 +1888,7 @@ int pjw_call_respond(long call_id, const char *json)
 
 	r = pj_str((char*)reason);
 
-    if(!call->pending_invite) {
+    if(call->pending_request != PJSIP_INVITE_METHOD) {
         pjsip_transaction *tsx = pjsip_rdata_get_tsx(call->pending_rdata);
         assert(tsx);
 
@@ -1890,27 +1896,30 @@ int pjw_call_respond(long call_id, const char *json)
 
         status = pjsip_dlg_create_response(call->inv->dlg,
             call->pending_rdata,
-            202,
+            code,
             NULL,
             &tdata 
         );
 
         assert(status == PJ_SUCCESS);
 
-        status = pjsip_dlg_send_response (call->inv->dlg,
+        status = pjsip_dlg_send_response(call->inv->dlg,
             tsx,
             tdata
         );
 
         assert(status == PJ_SUCCESS); 
-    
-    	status = pjsip_rx_data_free_cloned(call->pending_rdata);
-		if(status != PJ_SUCCESS) {
-			set_error("pjsip_rx_data_free_cloned failed with status=%i", status);
-            goto out;
-		}
-    
-		call->pending_rdata = 0;
+
+        if(code >= 200) {
+            status = pjsip_rx_data_free_cloned(call->pending_rdata);
+            if(status != PJ_SUCCESS) {
+                set_error("pjsip_rx_data_free_cloned failed with status=%i", status);
+                goto out;
+            }
+        
+            call->pending_request = -1;
+            call->pending_rdata = 0;
+        }
 
         goto out;
     }
@@ -1959,13 +1968,16 @@ int pjw_call_respond(long call_id, const char *json)
             goto out;
 		}
 
-		status = pjsip_rx_data_free_cloned(call->pending_rdata);
-		if(status != PJ_SUCCESS) {
-			set_error("pjsip_rx_data_free_cloned failed with status=%i", status);
-            goto out;
-		}
+        if(code >= 200) {
+            status = pjsip_rx_data_free_cloned(call->pending_rdata);
+            if(status != PJ_SUCCESS) {
+                set_error("pjsip_rx_data_free_cloned failed with status=%i", status);
+                goto out;
+            }
 
-		call->pending_rdata = 0;
+            call->pending_request = -1;
+            call->pending_rdata = 0;
+        }
 	} else {
         pjmedia_sdp_neg_state state = pjmedia_sdp_neg_get_state(call->inv->neg);
         printf("neg_state=%d\n", state);
@@ -1980,6 +1992,8 @@ int pjw_call_respond(long call_id, const char *json)
             goto out;
 		}
 
+        call->pending_request = -1;
+
 		if(!add_headers(call->inv->dlg->pool, tdata, document)) {
 			goto out;
 		}
@@ -1990,10 +2004,6 @@ int pjw_call_respond(long call_id, const char *json)
 		set_error("pjsip_inv_send_msg failed with status=%i", status);
         goto out;
 	}
-
-    if(call->pending_invite && (code >= 200 && code < 300)) {
-        call->pending_invite = false;
-    }
 out:
 	PJW_UNLOCK();
 	if(pjw_errorstring[0]) {
@@ -2464,6 +2474,7 @@ int call_create(Transport *t, unsigned flags, pjsip_dialog *dlg, const char *pro
 		return -1;
 	}
 	call->id = call_id;
+    call->pending_request = -1;
 	pjsip_tx_data *tdata;
 	status = pjsip_inv_invite(inv, &tdata);
 	if(status != PJ_SUCCESS) {
@@ -4225,6 +4236,8 @@ static pj_bool_t on_rx_request( pjsip_rx_data *rdata ){
 
             make_evt_request(evt, sizeof(evt), "call", call->id, rdata->msg_info.len, rdata->msg_info.msg_buf);
             dispatch_event(evt);  
+
+            call->pending_request = rdata->msg_info.msg->line.req.method.id;
             /*
             if(pj_strcmp2(&rdata->msg_info.msg->line.req.method.name, "REFER") != 0){
                 return PJ_TRUE;
@@ -4408,7 +4421,7 @@ static pj_bool_t on_rx_request( pjsip_rx_data *rdata ){
 
 	make_evt_incoming_call(evt, sizeof(evt), transport_id, call_id, rdata->msg_info.len, rdata->msg_info.msg_buf);
 	dispatch_event(evt);
-    call->pending_invite = true;
+    call->pending_request = PJSIP_INVITE_METHOD;
 	
 	return PJ_TRUE;
 }
@@ -4683,7 +4696,7 @@ static pj_status_t on_rx_reinvite(pjsip_inv_session *inv, const pjmedia_sdp_sess
 
     make_evt_reinvite(evt, sizeof(evt), call->id, rdata->msg_info.len, rdata->msg_info.msg_buf);
     dispatch_event(evt);
-    call->pending_invite = true;
+    call->pending_request = PJSIP_INVITE_METHOD;
 
     return PJ_SUCCESS;
 }
