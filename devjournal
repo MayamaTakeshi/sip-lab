@@ -1991,13 +1991,10 @@ TODO:
 
 1) set default media inside sip.cpp instead of depending on index.js (if(!params.media) ...)
 
-2) if 'media: []' or 'media: null' it means there is no media, so do not generate a body (content-length: 0)
+2) update code that creates/starts/stops/destroy media streams
 
-3) need to permit to reply to non-INVITE methods (INFO, OPTIONS, NOTIFY, REFER, BYE) in a dialog/session.
-Currently, these methods are automatically answered with '200 OK' but some tests might want to send something else.
-So we will need to preserve the transaction (clone it) and leave it to be acted upon by pjw_call_respond, then release the cloned transaction.
+3) if 'media: []' or 'media: null' it means there is no media, so do not generate a body (content-length: 0)
 
-Then if we want to simplify scripts we can prepare filter for these events and automatically reply to them.
-
+4) create a sample script with automatic reply for INFO, OPTIONS etc.
 
 

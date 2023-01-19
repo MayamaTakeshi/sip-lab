@@ -391,6 +391,8 @@ struct Call {
     int pending_request;
 	pjsip_rx_data *pending_rdata;
 
+    bool inv_initial_answer_required;
+
     //bool pending_invite;  
 };
 
@@ -1936,10 +1938,11 @@ int pjw_call_respond(long call_id, const char *json)
             close_media(call);
             goto out;
         }
+        if(call->pending_rdata && call->pending_rdata->msg_info.msg->body && call->pending_rdata->msg_info.msg->body->len) {
+            status = pjsip_inv_set_sdp_answer(call->inv, sdp);
 
-        if(!call->inv->neg) {
-            // this could mean this is delayed media. So we didn't geta an offer.
-            // So we must create the negotiator with our SDP
+            local_sdp = NULL;
+        } else {
             status = pjmedia_sdp_neg_create_w_local_offer(call->inv->dlg->pool,
                 sdp,
                 &call->inv->neg
@@ -1950,14 +1953,10 @@ int pjw_call_respond(long call_id, const char *json)
                 goto out;
             }
             local_sdp = sdp;
-        } else {
-            status = pjsip_inv_set_sdp_answer(call->inv, sdp);
-
-            local_sdp = NULL;
         }
     }
 
-	if(call->pending_rdata) {
+	if(call->inv_initial_answer_required) {
 		status = pjsip_inv_initial_answer(call->inv, call->pending_rdata,
 						code,
 						&r,
@@ -1967,6 +1966,8 @@ int pjw_call_respond(long call_id, const char *json)
 			set_error("pjsip_inv_initial_answer failed with status=%i", status);
             goto out;
 		}
+
+        call->inv_initial_answer_required = false;
 
         if(code >= 200) {
             status = pjsip_rx_data_free_cloned(call->pending_rdata);
@@ -1979,8 +1980,10 @@ int pjw_call_respond(long call_id, const char *json)
             call->pending_rdata = 0;
         }
 	} else {
+        /*
         pjmedia_sdp_neg_state state = pjmedia_sdp_neg_get_state(call->inv->neg);
         printf("neg_state=%d\n", state);
+        */
 
 		status = pjsip_inv_answer(call->inv,
 					  code,
@@ -4154,6 +4157,14 @@ pj_status_t process_invite(Call *call, pjsip_inv_session *inv, pjsip_rx_data *rd
 	pj_str_t reason;
     pjsip_rx_data *cloned_rdata = 0;
 
+    status = pjsip_rx_data_clone(rdata, 0, &cloned_rdata);
+
+    if(status != PJ_SUCCESS) {
+        reason = pj_str((char*)"Internal Server Error (pjsip_rx_data_clone failed)");
+        pjsip_endpt_respond_stateless(g_sip_endpt, rdata, 500, &reason, NULL, NULL);
+        return -1;
+    }
+
 	if(!(g_flags & FLAG_NO_AUTO_100_TRYING)) {
 		pjsip_tx_data *tdata;
 		//First response to an INVITE must be created with pjsip_inv_initial_answer(). Subsequent responses to the same transaction MUST use pjsip_inv_answer().
@@ -4174,18 +4185,16 @@ pj_status_t process_invite(Call *call, pjsip_inv_session *inv, pjsip_rx_data *rd
 			pjsip_endpt_respond_stateless(g_sip_endpt, rdata, 500, &reason, NULL, NULL);
 			return -1;
 		}
+
+        call->inv_initial_answer_required = false;
 	} else {
-		status = pjsip_rx_data_clone(rdata, 0, &cloned_rdata);
-
-		if(status != PJ_SUCCESS) {
-			reason = pj_str((char*)"Internal Server Error (pjsip_rx_data_clone failed)");
-			pjsip_endpt_respond_stateless(g_sip_endpt, rdata, 500, &reason, NULL, NULL);
-			return -1;
-		}
-
+        /*
         pjsip_dialog *dlg = pjsip_rdata_get_dlg(rdata);
         addon_log(LOG_LEVEL_DEBUG, "rdata        dlg->ua->id: %d\n", pjsip_rdata_get_tsx(rdata)->mod_data[dlg->ua->id]);
         addon_log(LOG_LEVEL_DEBUG, "cloned_rdata dlg->ua->id: %d\n", pjsip_rdata_get_tsx(cloned_rdata)->mod_data[dlg->ua->id]);
+        */
+
+        call->inv_initial_answer_required = true;
 	}
 
 	call->pending_rdata = cloned_rdata;
