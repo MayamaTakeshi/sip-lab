@@ -5280,6 +5280,17 @@ bool create_media_neg(Call *call, pjsip_dialog *dlg, Document &document) {
 
     Transport *t = call->transport;
 
+    if(!document.HasMember("media")) {
+        Document::AllocatorType& allocator = document.GetAllocator();
+
+        Value audio(kObjectType);
+        audio.AddMember("type", Value().SetString("audio"), allocator);
+
+        Value media(kArrayType);
+        media.PushBack(audio, allocator);
+        document.AddMember("media", media, allocator);
+    }
+
     Value media = document["media"].GetArray();
     assert(media.Size() <= PJMEDIA_MAX_SDP_MEDIA);
 
