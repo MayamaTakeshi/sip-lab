@@ -1937,6 +1937,7 @@ int pjw_call_respond(long call_id, const char *json)
             close_media(call);
             goto out;
         }
+
         if(call->pending_rdata && call->pending_rdata->msg_info.msg->body && call->pending_rdata->msg_info.msg->body->len) {
             status = pjsip_inv_set_sdp_answer(call->inv, sdp);
 
