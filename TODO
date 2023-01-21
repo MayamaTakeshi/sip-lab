@@ -7,3 +7,9 @@ TODO:
 3) create a sample script with automatic reply for INFO, OPTIONS etc.
 
 4) review processing of SUBSCRIBE (SUBSCRIBE is a dialog-creating method, so we should be able to keep the subscription object and be able to send requests (INFO) for it.
+
+5) set proper call to PJW_LOCK/PJW_UNLOCK in on_dtmf and on_inband_dtmf
+
+6) if digit buffers have no more space generate an error for the channel so that it doesn't get unnoticed.
+
+7) on_media_update: when doing "Processing call->media", I forgot that we need to rearrange the array to remove blank spots in the middle of it (it is not enough to remove elements)

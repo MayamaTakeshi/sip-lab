@@ -284,7 +284,6 @@ pjsip_route_hdr *route;
 const pj_str_t hname = pj_str((char*)"Route");
 
 #define MAXDIGITS 256 
-#define INITIAL_DIGITBUFFERLENGTH 1
 
 #define DTMF_MODE_RFC2833 0
 #define DTMF_MODE_INBAND 1
@@ -447,7 +446,7 @@ void handle_events(){
 /*
 static int worker_thread(void *arg)
 {
-	//addon_log(LOG_LEVEL_DEBUG, "Starting worker_thread\n");
+	//addon_log(LL_DBG, "Starting worker_thread\n");
 
 	pj_thread_set_prio(pj_thread_this(),
 			pj_thread_get_prio_min(pj_thread_this()));
@@ -458,7 +457,7 @@ static int worker_thread(void *arg)
 
 	while(!g_thread_quit_flag){
 		PJW_LOCK();
-		//addon_log(LOG_LEVEL_DEBUG, ".");
+		//addon_log(LL_DBG, ".");
 		handle_events();
 		PJW_UNLOCK();
 
@@ -582,7 +581,7 @@ static void build_stream_stat(ostringstream &oss, pjmedia_rtcp_stat *stat, pjmed
 
 bool prepare_wire(pj_pool_t *pool, chainlink **link, unsigned sampling_rate, unsigned channel_count, unsigned samples_per_frame, unsigned bits_per_sample);
 
-bool prepare_tonegen(AudioEndpoint *ae); 
+bool prepare_tonegen(Call *call, AudioEndpoint *ae); 
 bool prepare_wav_player(Call *c, AudioEndpoint *ae, const char *file);
 bool prepare_wav_writer(Call *c, AudioEndpoint *ae, const char *file); 
 
@@ -681,7 +680,7 @@ static void on_inband_dtmf(pjmedia_port *port, void *user_data, char digit){
 
 	long call_id;
 	if( !g_call_ids.get_id((long)user_data, call_id) ){
-		addon_log(LOG_LEVEL_DEBUG, "on_inband_dtmf: Failed to get call_id. Event will not be notified.\n");	
+		addon_log(LL_DBG, "on_inband_dtmf: Failed to get call_id. Event will not be notified.\n");	
 		return;
 	}
 
@@ -694,7 +693,8 @@ static void on_inband_dtmf(pjmedia_port *port, void *user_data, char digit){
     int media_id = find_endpoint_by_inband_dtmf_media_port(call, port);
     assert(media_id >= 0);
 
-    AudioEndpoint *ae = (AudioEndpoint*)call->media[media_id];
+    MediaEndpoint *me = (MediaEndpoint*)call->media[media_id];
+    AudioEndpoint *ae = (AudioEndpoint*)me->endpoint.audio;
 
 	int mode = DTMF_MODE_INBAND;
 
@@ -705,7 +705,7 @@ static void on_inband_dtmf(pjmedia_port *port, void *user_data, char digit){
 
 		if(*pLen > MAXDIGITS) {
 			PJW_UNLOCK();
-			addon_log(LOG_LEVEL_DEBUG, "No more space for digits in inband buffer\n");
+			addon_log(LL_DBG, "No more space for digits in inband buffer\n");
 			return;
 		}
 
@@ -744,7 +744,7 @@ static void on_fax_result(pjmedia_port *port, void *user_data, int result){
 
 void dispatch_event(const char * evt)
 {
-	//addon_log(LOG_LEVEL_DEBUG, "dispach_event called\n");
+	//addon_log(LL_DBG, "dispach_event called\n");
 	//g_event_sink(evt);
 
 	g_events.push_back(evt);
@@ -915,7 +915,7 @@ on_error:
 
 int __pjw_init()
 {
-	addon_log(LOG_LEVEL_DEBUG, "pjw_init thread_id=%i\n", syscall(SYS_gettid));
+	addon_log(LL_DBG, "pjw_init thread_id=%i\n", syscall(SYS_gettid));
 
 	g_shutting_down = false;
 
@@ -924,14 +924,14 @@ int __pjw_init()
 	status = pj_init();
 	if(status != PJ_SUCCESS)
 	{
-		addon_log(LOG_LEVEL_DEBUG, "pj_init failed\n");
+		addon_log(LL_DBG, "pj_init failed\n");
 		return 1; 
 	}
 
 	status = pjlib_util_init();
 	if(status != PJ_SUCCESS)
 	{
-		addon_log(LOG_LEVEL_DEBUG, "pj_lib_util_init failed\n");
+		addon_log(LL_DBG, "pj_lib_util_init failed\n");
 		return 1;
 	}
 
@@ -946,7 +946,7 @@ int __pjw_init()
 	status = pjsip_endpt_create(&cp.factory, sip_endpt_name, &g_sip_endpt);
 	if(status != PJ_SUCCESS)
 	{
-		addon_log(LOG_LEVEL_DEBUG, "pjsip_endpt_create failed\n");
+		addon_log(LL_DBG, "pjsip_endpt_create failed\n");
 		return 1;
 	}
 
@@ -956,7 +956,7 @@ int __pjw_init()
     status = pjmedia_event_mgr_create(g_pool, 0, NULL);
     if(status != PJ_SUCCESS)
     {
-        addon_log(LOG_LEVEL_DEBUG, "pjmedia_event_mgr_create  failed\n");
+        addon_log(LL_DBG, "pjmedia_event_mgr_create  failed\n");
         return 1;
     }
 
@@ -969,7 +969,7 @@ int __pjw_init()
 		NULL, 1, &msg_tag);
 	if(status != PJ_SUCCESS)
 	{
-		addon_log(LOG_LEVEL_DEBUG, "pjsip_endpt_add_capability PJSIP_H_ALLOW failed\n");
+		addon_log(LL_DBG, "pjsip_endpt_add_capability PJSIP_H_ALLOW failed\n");
 		return 1;
 	}
 
@@ -978,7 +978,7 @@ int __pjw_init()
 		NULL, 1, &STR_MIME_APP_ISCOMPOSING);
 	if(status != PJ_SUCCESS)
 	{
-		addon_log(LOG_LEVEL_DEBUG, "pjsip_endpt_add_capability PJSIP_H_ACCEPT for MIME_APP_ISCOMPOSING failed\n");
+		addon_log(LL_DBG, "pjsip_endpt_add_capability PJSIP_H_ACCEPT for MIME_APP_ISCOMPOSING failed\n");
 		return 1;
 	}
 
@@ -987,42 +987,42 @@ int __pjw_init()
 		NULL, 1, &STR_MIME_TEXT_PLAIN);
 	if(status != PJ_SUCCESS)
 	{
-		addon_log(LOG_LEVEL_DEBUG, "pjsip_endpt_add_capability PJSIP_H_ACCEPT for MIME_TEXT_PLAIN failed\n");
+		addon_log(LL_DBG, "pjsip_endpt_add_capability PJSIP_H_ACCEPT for MIME_TEXT_PLAIN failed\n");
 		return 1;
 	}
 
 	status = pjsip_tsx_layer_init_module(g_sip_endpt);
 	if(status != PJ_SUCCESS)
 	{
-		addon_log(LOG_LEVEL_DEBUG, "pjsip_tsx_layer_init_module failed\n");
+		addon_log(LL_DBG, "pjsip_tsx_layer_init_module failed\n");
 		return 1;
 	}
 
 	status = pjsip_ua_init_module(g_sip_endpt, NULL);
 	if(status != PJ_SUCCESS)
 	{
-		addon_log(LOG_LEVEL_DEBUG, "pjsip_ua_init_module failed\n");
+		addon_log(LL_DBG, "pjsip_ua_init_module failed\n");
 		return 1;
 	}
 
 	status = pjsip_evsub_init_module(g_sip_endpt);
 	if(status != PJ_SUCCESS)
 	{
-		addon_log(LOG_LEVEL_DEBUG, "pjsip_evsub_init_module failed\n");
+		addon_log(LL_DBG, "pjsip_evsub_init_module failed\n");
 		return 1;
 	}
 
 	status = pjsip_xfer_init_module(g_sip_endpt);
 	if(status != PJ_SUCCESS)
 	{
-		addon_log(LOG_LEVEL_DEBUG, "pjsip_xfer_init_module failed\n");
+		addon_log(LL_DBG, "pjsip_xfer_init_module failed\n");
 		return 1;
 	}
 
 	status = pjsip_replaces_init_module(g_sip_endpt);
 	if(status != PJ_SUCCESS)
 	{
-		addon_log(LOG_LEVEL_DEBUG, "pjsip_replaces_init_module failed\n");
+		addon_log(LL_DBG, "pjsip_replaces_init_module failed\n");
 		return 1;
 	}
 
@@ -1039,21 +1039,21 @@ int __pjw_init()
 	status = pjsip_inv_usage_init(g_sip_endpt, &inv_cb);
 	if(status != PJ_SUCCESS)
 	{
-		addon_log(LOG_LEVEL_DEBUG, "pjsip_inv_usage_init failed\n");
+		addon_log(LL_DBG, "pjsip_inv_usage_init failed\n");
 		return 1;
 	}
 
 	status = pjsip_100rel_init_module(g_sip_endpt);
 	if(status != PJ_SUCCESS)
 	{
-		addon_log(LOG_LEVEL_DEBUG, "pjsip_100rel_init_module failed\n");
+		addon_log(LL_DBG, "pjsip_100rel_init_module failed\n");
 		return 1;
 	}
 	
 	status = pjsip_endpt_register_module(g_sip_endpt, &mod_tester);
 	if(status != PJ_SUCCESS)
 	{
-		addon_log(LOG_LEVEL_DEBUG, "pjsip_endpt_register_module failed\n");
+		addon_log(LL_DBG, "pjsip_endpt_register_module failed\n");
 		return 1;
 	}
 #if PJ_HAS_THREADS
@@ -1065,7 +1065,7 @@ int __pjw_init()
 #endif
 	if(status != PJ_SUCCESS)
 	{
-		addon_log(LOG_LEVEL_DEBUG, "pjmedia_endpt_create failed\n");
+		addon_log(LL_DBG, "pjmedia_endpt_create failed\n");
 		return 1;
 	}
 
@@ -1073,7 +1073,7 @@ int __pjw_init()
 	status = pjmedia_codec_g711_init(g_med_endpt);
 	if(status != PJ_SUCCESS)
 	{
-		addon_log(LOG_LEVEL_DEBUG, "pjmedia_codec_g711_init failed\n");
+		addon_log(LL_DBG, "pjmedia_codec_g711_init failed\n");
 		return 1;
 	}
 #endif
@@ -1082,7 +1082,7 @@ int __pjw_init()
 	status = pjmedia_codec_gsm_init(g_med_endpt);
 	if(status != PJ_SUCCESS)
 	{
-		addon_log(LOG_LEVEL_DEBUG, "pjmedia_codec_gsm_init failed\n");
+		addon_log(LL_DBG, "pjmedia_codec_gsm_init failed\n");
 		return 1;
 	}
 #endif
@@ -1091,7 +1091,7 @@ int __pjw_init()
 	status = pjmedia_codec_l16_init(g_med_endpt, 0);
 	if(status != PJ_SUCCESS)
 	{
-		addon_log(LOG_LEVEL_DEBUG, "pjmedia_codec_l16_init failed\n");
+		addon_log(LL_DBG, "pjmedia_codec_l16_init failed\n");
 		return 1;
 	}
 #endif
@@ -1100,7 +1100,7 @@ int __pjw_init()
 	status = pjmedia_codec_ilbc_init(g_med_endpt, DEFAULT_ILBC_MODE);
 	if(status != PJ_SUCCESS)
 	{
-		addon_log(LOG_LEVEL_DEBUG, "pjmedia_codec_ilbc_init failed\n");
+		addon_log(LL_DBG, "pjmedia_codec_ilbc_init failed\n");
 		return 1;
 	}
 #endif
@@ -1112,7 +1112,7 @@ int __pjw_init()
 				-1);
 	if(status != PJ_SUCCESS)
 	{
-		addon_log(LOG_LEVEL_DEBUG, "pjmedia_codec_speex_init failed\n");
+		addon_log(LL_DBG, "pjmedia_codec_speex_init failed\n");
 		return 1;
 	}
 #endif
@@ -1121,7 +1121,7 @@ int __pjw_init()
 	status = pjmedia_codec_g722_init(g_med_endpt);
 	if(status != PJ_SUCCESS)
 	{
-		addon_log(LOG_LEVEL_DEBUG, "pjmedia_codec_g722_init failed\n");
+		addon_log(LL_DBG, "pjmedia_codec_g722_init failed\n");
 		return 1;
 	}
 #endif
@@ -1130,7 +1130,7 @@ int __pjw_init()
     status = pjmedia_codec_opus_init(g_med_endpt);
     if(status != PJ_SUCCESS)
     {
-        addon_log(LOG_LEVEL_DEBUG, "pjmedia_codec_opus_init failed\n");
+        addon_log(LL_DBG, "pjmedia_codec_opus_init failed\n");
         return 1;
     }
 #endif
@@ -1145,15 +1145,15 @@ int __pjw_init()
 	status = pj_thread_register("main_thread", g_main_thread_descriptor, &g_main_thread);
 	if(status != PJ_SUCCESS)
 	{
-		addon_log(LOG_LEVEL_DEBUG, "pj_thread_register(main_thread) failed\n");
+		addon_log(LL_DBG, "pj_thread_register(main_thread) failed\n");
 		exit(1);
 	} else {
-		//addon_log(LOG_LEVEL_DEBUG, "pj_thread_register(main_thread) success\n");
+		//addon_log(LL_DBG, "pj_thread_register(main_thread) success\n");
 		;
 	}
 
 	if(!start_digit_buffer_thread()) {
-		addon_log(LOG_LEVEL_DEBUG, "start_digit_buffer_thread() failed\n");
+		addon_log(LL_DBG, "start_digit_buffer_thread() failed\n");
 		return 1;
 	}
 
@@ -1168,10 +1168,10 @@ int __pjw_poll(char *out_evt){
 		status = pj_thread_register("poll_thread", g_poll_thread_descriptor, &g_poll_thread);
 		if(status != PJ_SUCCESS)
 		{
-			addon_log(LOG_LEVEL_DEBUG, "pj_thread_register(poll_thread) failed\n");
+			addon_log(LL_DBG, "pj_thread_register(poll_thread) failed\n");
 			exit(1);
 		} else {
-			//addon_log(LOG_LEVEL_DEBUG, "pj_thread_register(poll_thread) success\n");
+			//addon_log(LL_DBG, "pj_thread_register(poll_thread) success\n");
 			;
 		}
 	}
@@ -1284,7 +1284,7 @@ pjsip_tpfactory *create_tcp_tpfactory(pjsip_endpoint* sip_endpt, pj_str_t *ipadd
 }
 
 pjsip_tpfactory *allocate_tls_tpfactory(pjsip_endpoint* sip_endpt, pj_str_t *ipaddr, int port) {
-	addon_log(LOG_LEVEL_DEBUG, "allocate_tls_tpfactory ipaddr=%.*s port=%i\n", ipaddr->slen, ipaddr->ptr, port);
+	addon_log(LL_DBG, "allocate_tls_tpfactory ipaddr=%.*s port=%i\n", ipaddr->slen, ipaddr->ptr, port);
 	pj_status_t status;
 	pjsip_tpfactory *tpfactory;
 	pj_sockaddr local_addr;
@@ -1306,7 +1306,7 @@ pjsip_tpfactory *allocate_tls_tpfactory(pjsip_endpoint* sip_endpt, pj_str_t *ipa
 		
         status = pjsip_tls_transport_start2(sip_endpt, &tls_opt, &local_addr, NULL, 1, &tpfactory);
         if (status != PJ_SUCCESS) {
-		addon_log(LOG_LEVEL_DEBUG, "status=%i\n", status);
+		addon_log(LL_DBG, "status=%i\n", status);
 		return NULL;
         }
 
@@ -1834,7 +1834,7 @@ out:
 
 int pjw_call_respond(long call_id, const char *json)
 {
-	addon_log(LOG_LEVEL_DEBUG, "pjw_call_respond: call_id=%lu json=%s\n", call_id, json);
+	addon_log(LL_DBG, "pjw_call_respond: call_id=%lu json=%s\n", call_id, json);
 	PJW_LOCK();
 	clear_error();
 
@@ -1864,7 +1864,7 @@ int pjw_call_respond(long call_id, const char *json)
         goto out;
 	}
 	call = (Call*)val;
-	//addon_log(LOG_LEVEL_DEBUG, "pending_invite=%d\n", call->pending_invite);
+	//addon_log(LL_DBG, "pending_invite=%d\n", call->pending_invite);
 
     if(call->pending_request == -1) {
         set_error("no pending request to be answered");
@@ -2354,7 +2354,7 @@ bool set_proxy(pjsip_dialog *dlg, const char *proxy_uri) {
 	if(!strstr(proxy_uri,";lr")){
 		strcat(buf,";lr");
 	}	
-	//addon_log(LOG_LEVEL_DEBUG, ">>%s<<\n",buf);
+	//addon_log(LL_DBG, ">>%s<<\n",buf);
 
 //	pjsip_route_hdr route_set;
 //	pjsip_route_hdr *route;
@@ -2497,10 +2497,10 @@ int call_create(Transport *t, unsigned flags, pjsip_dialog *dlg, const char *pro
 	if(!dlg_set_transport_by_t(t, dlg)){
 		return -1;
 	}
-	addon_log(LOG_LEVEL_DEBUG, "inv=%x tdata=%x\n",inv,tdata);
+	addon_log(LL_DBG, "inv=%x tdata=%x\n",inv,tdata);
 
 	status = pjsip_inv_send_msg(inv, tdata);
-	addon_log(LOG_LEVEL_DEBUG, "status=%d\n",status);
+	addon_log(LL_DBG, "status=%d\n",status);
 	pj_perror(0, "", status, "");
 	if(status != PJ_SUCCESS) {
 		g_call_ids.remove(call_id, (long &)call);
@@ -2520,18 +2520,19 @@ int call_create(Transport *t, unsigned flags, pjsip_dialog *dlg, const char *pro
 		set_error("pjsip_dlg_add_usage failed");
 		return  -1;
 	}
-	//addon_log(LOG_LEVEL_DEBUG, "pjsip_dlg_add_usage OK\n");
+	//addon_log(LL_DBG, "pjsip_dlg_add_usage OK\n");
 
 	return call_id;
 }
 
-pj_status_t audio_endpoint_send_dtmf(AudioEndpoint *ae, const char *digits, const int mode) {
+pj_status_t audio_endpoint_send_dtmf(Call *call, AudioEndpoint *ae, const char *digits, const int mode) {
 #define ON_DURATION 200
 #define OFF_DURATION 50
 
     pj_status_t status;
 
 	if(DTMF_MODE_RFC2833 == mode) {
+        printf("rfc2833\n");
         if(!ae->med_stream) {
             set_error("Unable to send DTMF: Media not ready");
             return -1;
@@ -2543,8 +2544,11 @@ pj_status_t audio_endpoint_send_dtmf(AudioEndpoint *ae, const char *digits, cons
 			set_error("pjmedia_stream_dial_dtmf failed.");
             return status;
 		}
+
+        return PJ_SUCCESS;
 	} else {
-		if(!prepare_tonegen(ae)) {
+        printf("inband\n");
+		if(!prepare_tonegen(call, ae)) {
 			set_error("prepare_tonegen failed.");
             return -1;
 		}
@@ -2563,6 +2567,8 @@ pj_status_t audio_endpoint_send_dtmf(AudioEndpoint *ae, const char *digits, cons
                 return status;
 			}
 		}
+
+        return PJ_SUCCESS;
 	}
 }
 
@@ -2573,7 +2579,7 @@ pj_status_t send_dtmf(Call *call, const char *digits, int mode) {
 
         AudioEndpoint *ae = (AudioEndpoint*)me->endpoint.audio;
           
-        pj_status_t status = audio_endpoint_send_dtmf(ae, digits, mode);
+        pj_status_t status = audio_endpoint_send_dtmf(call, ae, digits, mode);
         if(status != PJ_SUCCESS) return status;
     }
 
@@ -2661,7 +2667,7 @@ int pjw_call_send_dtmf(long call_id, const char *json)
 		}
 	}
 	adjusted_digits[len] = 0;
-	//addon_log(LOG_LEVEL_DEBUG, "adjusted_digits >>%s<<\n", adjusted_digits);
+	//addon_log(LL_DBG, "adjusted_digits >>%s<<\n", adjusted_digits);
 
     send_dtmf(call, adjusted_digits, mode);
 
@@ -2675,7 +2681,7 @@ out:
 }		
 
 int pjw_call_reinvite(long call_id, const char *json) {
-	addon_log(LOG_LEVEL_DEBUG, "pjw_call_reinvite call_id=%d\n", call_id);
+	addon_log(LL_DBG, "pjw_call_reinvite call_id=%d\n", call_id);
     
 	PJW_LOCK();
 	clear_error();
@@ -3674,9 +3680,43 @@ bool media_endpoint_present_in_session_media(MediaEndpoint *me, const pjmedia_sd
     return false;
 }
 
+void gen_media_json(char *dest, int len, Call *call, const pjmedia_sdp_session *local_sdp, const pjmedia_sdp_session *remote_sdp){
+    char *p = dest;
+
+    int media_stream_idx = 0;
+
+    p += sprintf(p, "[");
+
+    for(int i=0 ; i<call->media_count ; i++) {
+        MediaEndpoint *me = (MediaEndpoint*)call->media[i];
+        if(me->type != ENDPOINT_TYPE_AUDIO) continue;
+
+        AudioEndpoint *ae = (AudioEndpoint*)me->endpoint.audio;
+
+        int local_media_mode = get_media_mode(local_sdp->media[media_stream_idx]->attr, local_sdp->media[media_stream_idx]->attr_count); 
+        int remote_media_mode = get_media_mode(remote_sdp->media[media_stream_idx]->attr, remote_sdp->media[media_stream_idx]->attr_count); 
+
+        char *local_mode = get_media_mode_str(local_media_mode);
+        char *remote_mode = get_media_mode_str(remote_media_mode);
+
+        if(media_stream_idx > 0) p += sprintf(p, ",");
+
+        p += sprintf(p, "{\"type\": \"audio\", \"local\": {\"port\": %d, \"mode\": \"%s\"}, \"remote\": {\"port\": %d, \"mode\": \"%s\"}}",
+            local_sdp->media[media_stream_idx]->desc.port,
+            local_mode,
+            remote_sdp->media[media_stream_idx]->desc.port,
+            remote_mode);
+
+        media_stream_idx++;
+    }
+
+    p += sprintf(p, "]");
+}
+
+
 static void on_media_update( pjsip_inv_session *inv, pj_status_t status){
-	addon_log(LOG_LEVEL_DEBUG, "on_media_update\n");
-	char evt[256];
+	addon_log(LL_DBG, "on_media_update\n");
+	char evt[4096];
 
 	if(g_shutting_down) return;
 
@@ -3684,7 +3724,7 @@ static void on_media_update( pjsip_inv_session *inv, pj_status_t status){
 
 	long call_id;
 	if( !g_call_ids.get_id((long)call, call_id) ){
-		addon_log(LOG_LEVEL_DEBUG, "on_media_update: Failed to get call_id. Event will not be notified.\n");	
+		addon_log(LL_DBG, "on_media_update: Failed to get call_id. Event will not be notified.\n");	
 		return;
 	}
     printf("call_id=%d\n", call_id);
@@ -3698,19 +3738,19 @@ static void on_media_update( pjsip_inv_session *inv, pj_status_t status){
 	if(status != PJ_SUCCESS){
         // negotiation failed
         close_media_neg(call);
-		make_evt_media_status(evt, sizeof(evt), call_id, "negotiation_failed", "", "");
+		make_evt_media_update(evt, sizeof(evt), call_id, "negotiation_failed", "");
 		dispatch_event(evt);
 		return;
 	}
 
     if(!stop_master_ports(call)) {
-         make_evt_media_status(evt, sizeof(evt), call->id, "setup_failed (stop_master_port error)", "", "");
+         make_evt_media_update(evt, sizeof(evt), call->id, "setup_failed (stop_master_port error)", "");
          dispatch_event(evt);
     }
 
 	status = pjmedia_sdp_neg_get_active_local(inv->neg, &local_sdp);
 	if(status != PJ_SUCCESS){
-		make_evt_media_status(evt, sizeof(evt), call_id, "setup_failed (pjmedia_sdp_neg_get_active_local failed)", "", "");
+		make_evt_media_update(evt, sizeof(evt), call_id, "setup_failed (pjmedia_sdp_neg_get_active_local failed)", "");
 		dispatch_event(evt);
 		return;
 	}		
@@ -3771,14 +3811,14 @@ static void on_media_update( pjsip_inv_session *inv, pj_status_t status){
 
     status = pjmedia_sdp_neg_get_active_local(inv->neg, &local_sdp);
     if(status != PJ_SUCCESS){
-        make_evt_media_status(evt, sizeof(evt), call_id, "setup_failed", "", "");
+        make_evt_media_update(evt, sizeof(evt), call_id, "setup_failed (pjmedia_sdp_neg_get_active_local failed)", "");
         dispatch_event(evt);
         return;
     }       
 
     status = pjmedia_sdp_neg_get_active_remote(inv->neg, &remote_sdp);
     if(status != PJ_SUCCESS){
-        make_evt_media_status(evt, sizeof(evt), call_id, "setup_failed", "", "");
+        make_evt_media_update(evt, sizeof(evt), call_id, "setup_failed (pjmedia_sdp_neg_get_active_remote failed)", "");
         dispatch_event(evt);
         return;
     }
@@ -3788,11 +3828,12 @@ static void on_media_update( pjsip_inv_session *inv, pj_status_t status){
         if(me->type != ENDPOINT_TYPE_AUDIO) continue;
 
         AudioEndpoint *ae = (AudioEndpoint*)me->endpoint.audio;
+        printf("processing ae: %x\n", ae);
 
         if(ae->master_port){
             status = pjmedia_master_port_stop(ae->master_port);
             if(status != PJ_SUCCESS){
-                make_evt_media_status(evt, sizeof(evt), call_id, "setup_failed", "", "");
+                make_evt_media_update(evt, sizeof(evt), call_id, "setup_failed (pjmedia_master_port_stop failed)", "");
                 dispatch_event(evt);
                 return;
             }
@@ -3806,7 +3847,9 @@ static void on_media_update( pjsip_inv_session *inv, pj_status_t status){
                         remote_sdp,
                         i);
         if(status != PJ_SUCCESS){
-            make_evt_media_status(evt, sizeof(evt), call_id, "setup_failed", "", "");
+            printf("local  media_count=%d\n", local_sdp->media_count);
+            printf("remote media_count=%d\n", remote_sdp->media_count);
+            make_evt_media_update(evt, sizeof(evt), call_id, "setup_failed (pjmedia_stream_info_from_sdp failed)", "");
             dispatch_event(evt);
             return;
         }
@@ -3814,7 +3857,7 @@ static void on_media_update( pjsip_inv_session *inv, pj_status_t status){
         if(ae->med_stream){
             status = pjmedia_stream_destroy(ae->med_stream);
             if(status != PJ_SUCCESS){
-                make_evt_media_status(evt, sizeof(evt), call_id, "setup_failed", "", "");
+                make_evt_media_update(evt, sizeof(evt), call_id, "setup_failed (pjmedia_destroy failed)", "");
                 dispatch_event(evt);
                 return;
             }
@@ -3828,14 +3871,14 @@ static void on_media_update( pjsip_inv_session *inv, pj_status_t status){
                     NULL,
                     &ae->med_stream);
         if(status != PJ_SUCCESS){
-            make_evt_media_status(evt, sizeof(evt), call_id, "setup_failed", "", "");
+            make_evt_media_update(evt, sizeof(evt), call_id, "setup_failed (pjmedia_stream_create failed)", "");
             dispatch_event(evt);
             return;
         }
 
         status = pjmedia_stream_start(ae->med_stream);
         if(status != PJ_SUCCESS){
-            make_evt_media_status(evt, sizeof(evt), call_id, "setup_failed", "", "");
+            make_evt_media_update(evt, sizeof(evt), call_id, "setup_failed (pjmedia_stream_start failed)", "");
             dispatch_event(evt);
             return;
         }
@@ -3844,7 +3887,7 @@ static void on_media_update( pjsip_inv_session *inv, pj_status_t status){
                             &on_dtmf,
                             call);
         if(status != PJ_SUCCESS){
-            make_evt_media_status(evt, sizeof(evt), call_id, "setup_failed", "", "");
+            make_evt_media_update(evt, sizeof(evt), call_id, "setup_failed (pjmedi_stream_set_dtmf_callback)", "");
             dispatch_event(evt);
             return;
         }
@@ -3855,7 +3898,7 @@ static void on_media_update( pjsip_inv_session *inv, pj_status_t status){
         pjmedia_port *stream_port;
         status = pjmedia_stream_get_port(ae->med_stream, &stream_port);
         if(status != PJ_SUCCESS){
-            make_evt_media_status(evt, sizeof(evt), call_id, "setup_failed", "", "");
+            make_evt_media_update(evt, sizeof(evt), call_id, "setup_failed (pjmedia_stream_get_port failed)", "");
             dispatch_event(evt);
             return;
         }
@@ -3866,29 +3909,23 @@ static void on_media_update( pjsip_inv_session *inv, pj_status_t status){
                     PJMEDIA_PIA_CCNT(&stream_port->info),
                     PJMEDIA_PIA_SPF(&stream_port->info),
                     PJMEDIA_PIA_BITS(&stream_port->info))) {
-            make_evt_media_status(evt, sizeof(evt), call_id, "setup_failed", "", "");
+            make_evt_media_update(evt, sizeof(evt), call_id, "setup_failed (init_media_ports failed)", "");
             dispatch_event(evt);
             return;
         }
 
         if(!set_ports(call, ae, stream_port, (pjmedia_port*)ae->dtmfdet))
         {
-            make_evt_media_status(evt, sizeof(evt), call_id, "setup_failed", "", "");
+            make_evt_media_update(evt, sizeof(evt), call_id, "setup_failed (set_ports failed)", "");
             dispatch_event(evt);
             return;
         }
-
-        int local_media_mode = get_media_mode(local_sdp->media[i]->attr, local_sdp->media[i]->attr_count); 
-        int remote_media_mode = get_media_mode(remote_sdp->media[i]->attr, remote_sdp->media[i]->attr_count); 
-
-        char *local_mode = get_media_mode_str(local_media_mode);
-        char *remote_mode = get_media_mode_str(remote_media_mode);
     }
 
-    char local_mode[] = "TODO";
-    char remote_mode[] = "TODO";
+    char media[4096];
+    gen_media_json(media, sizeof(media), call, local_sdp, remote_sdp);
 
-    make_evt_media_status(evt, sizeof(evt), call_id, "setup_ok", local_mode, remote_mode);
+    make_evt_media_update(evt, sizeof(evt), call_id, "ok", media);
     dispatch_event(evt);
 }
 
@@ -3956,14 +3993,14 @@ static pj_bool_t set_ports(Call *call, AudioEndpoint *ae, pjmedia_port *stream_p
 
 static void on_state_changed( pjsip_inv_session *inv, 
 				   pjsip_event *e){
-	addon_log(LOG_LEVEL_DEBUG, "on_state_changed\n");
+	addon_log(LL_DBG, "on_state_changed\n");
 
 	// The below is just to document know-how for future improvements
 	/*
-	addon_log(LOG_LEVEL_DEBUG, "on_state_changed e->type=%i\n", e->type);
+	addon_log(LL_DBG, "on_state_changed e->type=%i\n", e->type);
 	if(e->type == PJSIP_EVENT_TSX_STATE && e->body.tsx_state.type == PJSIP_EVENT_RX_MSG) {
 		// Read http://trac.pjsip.org/repos/wiki/SIP_Message_Buffer_Event
-		addon_log(LOG_LEVEL_DEBUG, "Msg=%s\n", e->body.tsx_state.src.rdata->msg_info.msg_buf);
+		addon_log(LL_DBG, "Msg=%s\n", e->body.tsx_state.src.rdata->msg_info.msg_buf);
 	}
 	*/
 
@@ -3971,12 +4008,12 @@ static void on_state_changed( pjsip_inv_session *inv,
 
 	if(PJSIP_INV_STATE_DISCONNECTED == inv->state) {
 		Call *call = (Call*)inv->dlg->mod_data[mod_tester.id];
-		//addon_log(LOG_LEVEL_DEBUG, "call will terminate call=%x\n",call);
+		//addon_log(LL_DBG, "call will terminate call=%x\n",call);
 		pj_status_t status;
 
 		long call_id;
 		if( !g_call_ids.get_id((long)call, call_id) ){
-			addon_log(LOG_LEVEL_DEBUG, "on_state_changed: Failed to get call_id. Event will not be notified.\n");	
+			addon_log(LL_DBG, "on_state_changed: Failed to get call_id. Event will not be notified.\n");	
 			return;
 		}
 
@@ -3989,13 +4026,13 @@ static void on_state_changed( pjsip_inv_session *inv,
                     status = pjmedia_master_port_stop(ae->master_port);
                     if(status != PJ_SUCCESS)
                     {
-                        addon_log(LOG_LEVEL_DEBUG, "pjmedia_master_port_stop failed\n");
+                        addon_log(LL_DBG, "pjmedia_master_port_stop failed\n");
                     }
 
                     status = pjmedia_master_port_destroy(ae->master_port, PJ_FALSE);
                     if(status != PJ_SUCCESS)
                     {
-                        addon_log(LOG_LEVEL_DEBUG, "pjmedia_master_port_destroy failed\n");
+                        addon_log(LL_DBG, "pjmedia_master_port_destroy failed\n");
                     }
                 }
 
@@ -4004,7 +4041,7 @@ static void on_state_changed( pjsip_inv_session *inv,
                     status = pjmedia_port_destroy(ae->media_port);
                     if(status != PJ_SUCCESS)
                     {
-                        addon_log(LOG_LEVEL_DEBUG, "pjmedia_port_destroy failed\n");
+                        addon_log(LL_DBG, "pjmedia_port_destroy failed\n");
                     }
                 }
 
@@ -4013,7 +4050,7 @@ static void on_state_changed( pjsip_inv_session *inv,
                     status = pjmedia_stream_destroy(ae->med_stream);
                     if(status != PJ_SUCCESS)
                     {
-                        addon_log(LOG_LEVEL_DEBUG, "pjmedia_stream_destroy failed\n");
+                        addon_log(LL_DBG, "pjmedia_stream_destroy failed\n");
                     }
                 }
             }
@@ -4023,7 +4060,7 @@ static void on_state_changed( pjsip_inv_session *inv,
             long val;
             if(!g_call_ids.remove(call_id, val))
             {
-                addon_log(LOG_LEVEL_DEBUG, "g_call_ids.remove failed\n");
+                addon_log(LL_DBG, "g_call_ids.remove failed\n");
             }
             
             Pair_Call_CallId pcc;
@@ -4216,8 +4253,8 @@ pj_status_t process_invite(Call *call, pjsip_inv_session *inv, pjsip_rx_data *rd
 	} else {
         /*
         pjsip_dialog *dlg = pjsip_rdata_get_dlg(rdata);
-        addon_log(LOG_LEVEL_DEBUG, "rdata        dlg->ua->id: %d\n", pjsip_rdata_get_tsx(rdata)->mod_data[dlg->ua->id]);
-        addon_log(LOG_LEVEL_DEBUG, "cloned_rdata dlg->ua->id: %d\n", pjsip_rdata_get_tsx(cloned_rdata)->mod_data[dlg->ua->id]);
+        addon_log(LL_DBG, "rdata        dlg->ua->id: %d\n", pjsip_rdata_get_tsx(rdata)->mod_data[dlg->ua->id]);
+        addon_log(LL_DBG, "cloned_rdata dlg->ua->id: %d\n", pjsip_rdata_get_tsx(cloned_rdata)->mod_data[dlg->ua->id]);
         */
 
         call->inv_initial_answer_required = true;
@@ -4234,7 +4271,7 @@ static pj_bool_t on_rx_request( pjsip_rx_data *rdata ){
 	char evt[2048];
 
 	pj_str_t *method_name = &rdata->msg_info.msg->line.req.method.name;
-	addon_log(LOG_LEVEL_DEBUG, "on_rx_request %.*s\n", method_name->slen, method_name->ptr);
+	addon_log(LL_DBG, "on_rx_request %.*s\n", method_name->slen, method_name->ptr);
 	if(g_shutting_down) return PJ_TRUE;
 
 	pj_status_t status;
@@ -4243,7 +4280,7 @@ static pj_bool_t on_rx_request( pjsip_rx_data *rdata ){
 	pjsip_dialog *dlg = pjsip_rdata_get_dlg(rdata);
     //pjsip_dialog *dlg = pjsip_ua_find_dialog(&rdata->msg_info.cid->id, &rdata->msg_info.to->tag, &rdata->msg_info.from->tag, PJ_FALSE);
 
-	addon_log(LOG_LEVEL_DEBUG, "dlg=%x\n", dlg);
+	addon_log(LL_DBG, "dlg=%x\n", dlg);
     for(int i=0 ; i<PJSIP_MAX_MODULE ; i++) {
         printf("%d %d\n", i, rdata->endpt_info.mod_data[i]);
     }
@@ -4291,7 +4328,7 @@ static pj_bool_t on_rx_request( pjsip_rx_data *rdata ){
 		char buf[1000];
 		int len = pjsip_hdr_print_on(hdr, buf, sizeof(buf));
 		buf[len] = 0;
-		addon_log(LOG_LEVEL_DEBUG, "Header: %s\n", buf);
+		addon_log(LL_DBG, "Header: %s\n", buf);
 	}
 	*/
 
@@ -4299,7 +4336,7 @@ static pj_bool_t on_rx_request( pjsip_rx_data *rdata ){
 		//Refer within dialog
 		//We cannot call process_in_dialog_refer from this callback (so we copied the way it is done by pjsua, using on_tsx_state_changed)
 		//process_in_dialog_refer(&oss, dlg, rdata);
-		//addon_log(LOG_LEVEL_DEBUG, "received REFER on_rx_request\n");
+		//addon_log(LL_DBG, "received REFER on_rx_request\n");
 		return PJ_TRUE;
 	}
 
@@ -4423,7 +4460,7 @@ static pj_bool_t on_rx_request( pjsip_rx_data *rdata ){
 
 	long call_id;
 	if(!g_call_ids.add((long)call, call_id)){
-		addon_log(LOG_LEVEL_DEBUG, "Failed to allocate call_id. Event will not be notifield\n");
+		addon_log(LL_DBG, "Failed to allocate call_id. Event will not be notifield\n");
 		return PJ_TRUE;
 	}
 
@@ -4462,7 +4499,7 @@ static pj_bool_t on_rx_request( pjsip_rx_data *rdata ){
 }
 
 static pj_bool_t on_rx_response( pjsip_rx_data *rdata ){
-	//addon_log(LOG_LEVEL_DEBUG, "on_rx_response\n");
+	//addon_log(LL_DBG, "on_rx_response\n");
 	//Very important: this callback notifies reception of any SIP response
 	//received by the endpoint, no matter if the endpoint was the one
 	//that sent the request or not (for example, if the app is running
@@ -4484,7 +4521,7 @@ static pj_bool_t on_rx_response( pjsip_rx_data *rdata ){
 
 	pjsip_dialog *dlg = pjsip_rdata_get_dlg(rdata);
 	if(!dlg){
-		//addon_log(LOG_LEVEL_DEBUG, "No dialog associated with rdata\n");
+		//addon_log(LL_DBG, "No dialog associated with rdata\n");
 		return PJ_TRUE;
 	}
 
@@ -4512,7 +4549,7 @@ static pj_bool_t on_rx_response( pjsip_rx_data *rdata ){
 				return true; 
 			}
 		} else {
-			addon_log(LOG_LEVEL_DEBUG, "Ignoring response for mod_data not set to a subscription\n");
+			addon_log(LL_DBG, "Ignoring response for mod_data not set to a subscription\n");
 			return PJ_TRUE;
 		}
 
@@ -4528,9 +4565,9 @@ static pj_bool_t on_rx_response( pjsip_rx_data *rdata ){
 	long call_id;
 
 	if(call) {
-		//addon_log(LOG_LEVEL_DEBUG, "call:%x\n",call);
+		//addon_log(LL_DBG, "call:%x\n",call);
 		if( !g_call_ids.get_id((long)call, call_id) ){
-			//addon_log(LOG_LEVEL_DEBUG, "The call is not present in g_call_ids.\n");
+			//addon_log(LL_DBG, "The call is not present in g_call_ids.\n");
 			// It means the call terminated and was removed from g_call_ids\n");
 			//So let's try to find it at g_LastCalls
 
@@ -4542,13 +4579,13 @@ static pj_bool_t on_rx_response( pjsip_rx_data *rdata ){
 			{
 				oss.seekp(0);
 				oss << "event=internal_error" << EVT_DATA_SEP << "details=Failed to get call_id";
-				addon_log(LOG_LEVEL_DEBUG, "on_rx_response failed to resolve call_id\n");
+				addon_log(LL_DBG, "on_rx_response failed to resolve call_id\n");
 				return true; 
 			}
 			call_id = iter->id;
 		}
 	} else {
-		addon_log(LOG_LEVEL_DEBUG, "Ignoring response for mod_data not set to a call\n");
+		addon_log(LL_DBG, "Ignoring response for mod_data not set to a call\n");
 		return PJ_TRUE;
 	}
 
@@ -4565,7 +4602,7 @@ static pjsip_redirect_op on_redirected(pjsip_inv_session *inv, const pjsip_uri *
 }
 
 static void on_rx_offer2(pjsip_inv_session *inv, struct pjsip_inv_on_rx_offer_cb_param *param) {
-	addon_log(LOG_LEVEL_DEBUG, "on_rx_offer2\n");
+	addon_log(LL_DBG, "on_rx_offer2\n");
 	if(g_shutting_down) return;
 
     /*
@@ -4737,13 +4774,14 @@ static pj_status_t on_rx_reinvite(pjsip_inv_session *inv, const pjmedia_sdp_sess
 }
 
 static void on_dtmf(pjmedia_stream *stream, void *user_data, int digit){
+    printf("on_dtmf %d\n", digit);
 	if(g_shutting_down) return;
 
 	char evt[256];
 
 	long call_id;
 	if( !g_call_ids.get_id((long)user_data, call_id) ){
-		addon_log(LOG_LEVEL_DEBUG, "on_dtmf: Failed to get call_id. Event will not be notified.\n");	
+		addon_log(LL_DBG, "on_dtmf: Failed to get call_id. Event will not be notified.\n");	
 		return;
 	}
 
@@ -4756,7 +4794,8 @@ static void on_dtmf(pjmedia_stream *stream, void *user_data, int digit){
     int media_id = find_endpoint_by_inband_dtmf_media_stream(call, stream);
     assert(media_id >= 0);
 
-    AudioEndpoint *ae = (AudioEndpoint*)call->media[media_id];
+    MediaEndpoint *me = (MediaEndpoint*)call->media[media_id];
+    AudioEndpoint *ae = (AudioEndpoint*)me->endpoint.audio;
 
 	int mode = DTMF_MODE_RFC2833;
 
@@ -4767,7 +4806,7 @@ static void on_dtmf(pjmedia_stream *stream, void *user_data, int digit){
 
 		if(*pLen > MAXDIGITS) {
 			PJW_UNLOCK();
-			addon_log(LOG_LEVEL_DEBUG, "No more space for digits in rfc2833 buffer\n");
+			addon_log(LL_DBG, "No more space for digits in rfc2833 buffer\n");
 			return;
 		}
 
@@ -4782,14 +4821,14 @@ static void on_dtmf(pjmedia_stream *stream, void *user_data, int digit){
 }
 
 static void on_registration_status(pjsip_regc_cbparam *param){
-	//addon_log(LOG_LEVEL_DEBUG, "on_registration_status\n");
+	//addon_log(LL_DBG, "on_registration_status\n");
 	if(g_shutting_down) return;
 
 	char evt[1024];
 
 	long acc_id;
 	if( !g_account_ids.get_id((long)param->regc, acc_id) ){
-		addon_log(LOG_LEVEL_DEBUG, "on_registration_status: Failed to get account_id. Event will not be notified.\n");	
+		addon_log(LL_DBG, "on_registration_status: Failed to get account_id. Event will not be notified.\n");	
 		return;
 	}
 
@@ -4943,7 +4982,7 @@ out:
 
 int __pjw_shutdown()
 {
-	//addon_log(LOG_LEVEL_DEBUG, "pjw_shutdown thread_id=%i\n", syscall(SYS_gettid));
+	//addon_log(LL_DBG, "pjw_shutdown thread_id=%i\n", syscall(SYS_gettid));
 	PJW_LOCK();
 
 	g_shutting_down = true;
@@ -4956,7 +4995,7 @@ int __pjw_shutdown()
 	while(iter != g_call_ids.id_map.end()){
 		Call *call = (Call*)iter->second;
 
-		addon_log(LOG_LEVEL_DEBUG, "Terminating call %d\n", iter->first);
+		addon_log(LL_DBG, "Terminating call %d\n", iter->first);
 
 		pjsip_tx_data *tdata;
 		pj_status_t status;
@@ -4968,7 +5007,7 @@ int __pjw_shutdown()
 			//ignore 
 			char err[256];
 			pj_strerror(status, err, sizeof(err));
-			addon_log(LOG_LEVEL_DEBUG, "pjsip_inv_end_session failed statut=%i (%s)\n", status, err);
+			addon_log(LL_DBG, "pjsip_inv_end_session failed statut=%i (%s)\n", status, err);
 			++iter;
 			continue;
 		}
@@ -4977,13 +5016,13 @@ int __pjw_shutdown()
 		{
 			//if tdata was not set by pjsip_inv_end_session, it means we didn't receive any response yet (100 Trying) and we cannot send CANCEL in this situation. So we just can return here without calling pjsip_inv_send_msg.
 			++iter;
-			addon_log(LOG_LEVEL_DEBUG, "no tdata\n");
+			addon_log(LL_DBG, "no tdata\n");
 			continue;
 		}
 
 		status = pjsip_inv_send_msg(call->inv, tdata);
 		if(status != PJ_SUCCESS){
-			addon_log(LOG_LEVEL_DEBUG, "pjsip_inv_send_msg failed\n");
+			addon_log(LL_DBG, "pjsip_inv_send_msg failed\n");
 		}
 		++iter;
 	}
@@ -4992,7 +5031,7 @@ int __pjw_shutdown()
 	while(iter != g_account_ids.id_map.end()){
 		pjsip_regc *regc = (pjsip_regc*)iter->second;
 
-		addon_log(LOG_LEVEL_DEBUG, "Unregistering account %d\n", iter->first);
+		addon_log(LL_DBG, "Unregistering account %d\n", iter->first);
 
 		pjsip_tx_data *tdata;
 		pj_status_t status;
@@ -5000,13 +5039,13 @@ int __pjw_shutdown()
 		status = pjsip_regc_unregister(regc, &tdata);
 		if(status != PJ_SUCCESS)
 		{
-			addon_log(LOG_LEVEL_DEBUG, "pjsip_regc_unregister failed\n");
+			addon_log(LL_DBG, "pjsip_regc_unregister failed\n");
 		}
 
 		status = pjsip_regc_send(regc, tdata);
 		if(status != PJ_SUCCESS)
 		{
-			addon_log(LOG_LEVEL_DEBUG, "pjsip_regc_send failed\n");
+			addon_log(LL_DBG, "pjsip_regc_send failed\n");
 		}
 		++iter;
 	}
@@ -5014,11 +5053,11 @@ int __pjw_shutdown()
 	Subscription *subscription;
 	iter = g_subscription_ids.id_map.begin();
 	while(iter != g_subscription_ids.id_map.end()){
-		addon_log(LOG_LEVEL_DEBUG, "Unsubscribing subscription %d\n", iter->first);
+		addon_log(LL_DBG, "Unsubscribing subscription %d\n", iter->first);
 
 		subscription = (Subscription*)iter->second;	
 		if(!subscription_subscribe(subscription, 0, NULL)) {
-			addon_log(LOG_LEVEL_DEBUG, "Unsubscription failed failed\n");
+			addon_log(LL_DBG, "Unsubscription failed failed\n");
 		}
 		++iter;
 	}
@@ -5199,12 +5238,12 @@ void close_media_transport(pjmedia_transport *med_transport) {
 
     status = pjmedia_transport_media_stop(med_transport);
     if( status != PJ_SUCCESS ) {
-        addon_log(LOG_LEVEL_DEBUG, "Critical Error: pjmedia_transport_media_stop failed. status=%d\n", status);
+        addon_log(LL_DBG, "Critical Error: pjmedia_transport_media_stop failed. status=%d\n", status);
     }
 
 	status = pjmedia_transport_close(med_transport);
 	if( status != PJ_SUCCESS ) {
-		addon_log(LOG_LEVEL_DEBUG, "Critical Error: pjmedia_transport_close failed. status=%d\n", status);
+		addon_log(LL_DBG, "Critical Error: pjmedia_transport_close failed. status=%d\n", status);
 	}
 }
 
@@ -5259,7 +5298,7 @@ bool create_media_endpoint(Call *call, Value &descr, pjsip_dialog *dlg, char *ad
     }
 
     *out = med_endpt;
-    printf("create_media_endpoint call_id=%d %d\n", call->id, med_endpt); 
+    printf("create_media_endpoint call_id=%d %d\n", call->id, med_endpt->type); 
 
     return true;
 }
@@ -5553,6 +5592,7 @@ void connect_media_ports(AudioEndpoint *ae) {
 }
 
 bool prepare_tonegen(Call *c, AudioEndpoint *ae) {
+    printf("prepare_tonegen\n");
 	pj_status_t status;
 
 	chainlink *link = (chainlink*)ae->tonegen;
@@ -5671,7 +5711,7 @@ bool prepare_wire(pj_pool_t *pool, chainlink **link, unsigned sampling_rate, uns
 	pj_status_t status;
 
 	if(*link) {
-		//addon_log(LOG_LEVEL_DEBUG, "prepare_wire: link is set. It will be destroyed\n");
+		//addon_log(LL_DBG, "prepare_wire: link is set. It will be destroyed\n");
 		pjmedia_port *port = (pjmedia_port*)*link;
 		status = pjmedia_port_destroy(port);		
 		*link = NULL;
@@ -5690,7 +5730,7 @@ bool prepare_wire(pj_pool_t *pool, chainlink **link, unsigned sampling_rate, uns
 }
 
 void on_rx_notify(pjsip_evsub *sub, pjsip_rx_data *rdata, int *p_st_code, pj_str_t **p_st_text, pjsip_hdr *res_hdr, pjsip_msg_body **p_body) {
-	//addon_log(LOG_LEVEL_DEBUG, "on_rx_notify\n");
+	//addon_log(LL_DBG, "on_rx_notify\n");
 
 	char evt[2048];
 	
@@ -5701,7 +5741,7 @@ void on_rx_notify(pjsip_evsub *sub, pjsip_rx_data *rdata, int *p_st_code, pj_str
 
 	s = (Subscription*)pjsip_evsub_get_mod_data(sub, mod_tester.id);
 	if(!s) {
-		addon_log(LOG_LEVEL_DEBUG, "Subscription not set at mod_data. Ignoring\n");
+		addon_log(LL_DBG, "Subscription not set at mod_data. Ignoring\n");
 		return;
 	}	
 
@@ -5724,7 +5764,7 @@ static void on_client_refresh( pjsip_evsub *sub ) {
 		goto out;
 	}
 
-	//addon_log(LOG_LEVEL_DEBUG, "on_client_refresh: SUBSCRIBE dispatched\n");
+	//addon_log(LL_DBG, "on_client_refresh: SUBSCRIBE dispatched\n");
 
 out:
 	if(pjw_errorstring[0]) {
@@ -5738,15 +5778,15 @@ static void client_on_evsub_state( pjsip_evsub *sub, pjsip_event *event) {
 	char evt[2048];
 	pj_str_t mname;
 
-	//addon_log(LOG_LEVEL_DEBUG, "client_on_evsub_state: %s\n", pjsip_evsub_get_state_name(sub));
+	//addon_log(LL_DBG, "client_on_evsub_state: %s\n", pjsip_evsub_get_state_name(sub));
 
 	PJ_UNUSED_ARG(event);
 
 	pjsip_rx_data *rdata;
 	Subscription *subscription = (Subscription*)pjsip_evsub_get_mod_data(sub, mod_tester.id);
 	if(!subscription) {
-		//addon_log(LOG_LEVEL_DEBUG, "mod_data set to NULL (it means subscription doesn't exist anymore). Ignoring\n");
-		addon_log(LOG_LEVEL_DEBUG, "mod_data set to NULL (we don't know what this means yet. Ignoring\n");
+		//addon_log(LL_DBG, "mod_data set to NULL (it means subscription doesn't exist anymore). Ignoring\n");
+		addon_log(LL_DBG, "mod_data set to NULL (we don't know what this means yet. Ignoring\n");
 		return;
 	}
 
@@ -5782,7 +5822,7 @@ static void client_on_evsub_state( pjsip_evsub *sub, pjsip_event *event) {
 		pjsip_evsub_get_state(sub) == PJSIP_EVSUB_STATE_TERMINATED) {
 		//Here we catch incoming NOTIFY 
 
-		//addon_log(LOG_LEVEL_DEBUG, "NOTIFY\n");
+		//addon_log(LL_DBG, "NOTIFY\n");
 	
 		//When subscription is terminated
 		if(pjsip_evsub_get_state(sub) == PJSIP_EVSUB_STATE_TERMINATED) {
@@ -5799,7 +5839,7 @@ static void client_on_evsub_state( pjsip_evsub *sub, pjsip_event *event) {
 		long subscription_id;
 		if( !g_subscription_ids.get_id((long)subscription, subscription_id) ){
 			/*
-			addon_log(LOG_LEVEL_DEBUG, "FAILURE\n");
+			addon_log(LL_DBG, "FAILURE\n");
 			oss.seekp(0);
 			oss << "event=internal_error" << EVT_DATA_SEP << "details=Failed to get call_id";	
 			dispatch_event(oss.str().c_str());
@@ -5811,7 +5851,7 @@ static void client_on_evsub_state( pjsip_evsub *sub, pjsip_event *event) {
 			return;
 		} 
 
-		//addon_log(LOG_LEVEL_DEBUG, "dispatching NOTIFY event\n");
+		//addon_log(LL_DBG, "dispatching NOTIFY event\n");
 		//dispatch_event(oss.str().c_str());
 
 		make_evt_request(evt, sizeof(evt), "subscription", subscription_id, rdata->msg_info.len, rdata->msg_info.msg_buf);
@@ -5833,13 +5873,13 @@ static void server_on_evsub_state( pjsip_evsub *sub, pjsip_event *event)
 	//pj_status_t status;
 	//pjsip_tx_data *tdata;
 	
-	//addon_log(LOG_LEVEL_DEBUG, "server_on_evsub_state\n");
+	//addon_log(LL_DBG, "server_on_evsub_state\n");
 	if(!sub) {
-		addon_log(LOG_LEVEL_DEBUG, "server_on_evesub_state: sub not set. Ignoring\n");
+		addon_log(LL_DBG, "server_on_evesub_state: sub not set. Ignoring\n");
 		return;
 	}
-	//addon_log(LOG_LEVEL_DEBUG, "state= %d\n", pjsip_evsub_get_state(sub));
-	//addon_log(LOG_LEVEL_DEBUG, "server_on_evsub_state %s\n", pjsip_evsub_get_state_name(sub));
+	//addon_log(LL_DBG, "state= %d\n", pjsip_evsub_get_state(sub));
+	//addon_log(LL_DBG, "server_on_evsub_state %s\n", pjsip_evsub_get_state_name(sub));
 
 	if(g_shutting_down) return; 
 
@@ -5847,7 +5887,7 @@ static void server_on_evsub_state( pjsip_evsub *sub, pjsip_event *event)
 
         s = (Subscriber*)pjsip_evsub_get_mod_data(sub, mod_tester.id);
         if (!s) {
-		addon_log(LOG_LEVEL_DEBUG, "server_on_evsub_state: Subscriber not set as mod_data. Ignoring\n");
+		addon_log(LL_DBG, "server_on_evsub_state: Subscriber not set as mod_data. Ignoring\n");
 		return;
 	}
 
@@ -5876,7 +5916,7 @@ static void server_on_evsub_rx_refresh(pjsip_evsub *sub, pjsip_rx_data *rdata, i
 	//Transport *t;
 
 	if(g_shutting_down) return;
-	addon_log(LOG_LEVEL_DEBUG, "server_on_evsub_rx_refresh\n");
+	addon_log(LL_DBG, "server_on_evsub_rx_refresh\n");
 
 	s = (Subscriber*)pjsip_evsub_get_mod_data(sub, mod_tester.id);
 	if(!s) {
@@ -5911,7 +5951,7 @@ static void server_on_evsub_rx_refresh(pjsip_evsub *sub, pjsip_rx_data *rdata, i
 		set_error("pjsip_send_request failed");
 		goto out;
 	}
-	addon_log(LOG_LEVEL_DEBUG, "server_on_evsub_rx_refresh: NOTIFY containing subscription state should have been sent\n");
+	addon_log(LL_DBG, "server_on_evsub_rx_refresh: NOTIFY containing subscription state should have been sent\n");
 
 out:
 	if(pjw_errorstring[0]) {
@@ -5924,7 +5964,7 @@ out:
 //Adapted (mostly copied) from pjsua function on_call_transfered
 void process_in_dialog_refer(pjsip_dialog *dlg, pjsip_rx_data *rdata)
 {
-    addon_log(LOG_LEVEL_DEBUG, "process_in_dialog_refer\n");
+    addon_log(LL_DBG, "process_in_dialog_refer\n");
 
     char evt[2048];
 
@@ -5946,7 +5986,7 @@ void process_in_dialog_refer(pjsip_dialog *dlg, pjsip_rx_data *rdata)
     Call *call = (Call*)dlg->mod_data[mod_tester.id]; 
     long call_id;
     if( !g_call_ids.get_id((long)call, call_id) ){
-	addon_log(LOG_LEVEL_DEBUG, "process_in_dialog_refer: Failed to get call_id. Event will not be notified.\n");	
+	addon_log(LL_DBG, "process_in_dialog_refer: Failed to get call_id. Event will not be notified.\n");	
 	return;
     }
 
@@ -6090,7 +6130,7 @@ static void on_tsx_state_changed(pjsip_inv_session *inv,
 					    pjsip_transaction *tsx,
 					    pjsip_event *e)
 {
-    addon_log(LOG_LEVEL_DEBUG, "on_tsx_state change method=%.*s.\n", tsx->method.name.slen, tsx->method.name.ptr);	
+    addon_log(LL_DBG, "on_tsx_state change method=%.*s.\n", tsx->method.name.slen, tsx->method.name.ptr);	
     if(g_shutting_down) return;	
 
     char evt[2048];
@@ -6125,8 +6165,8 @@ static void on_tsx_state_changed(pjsip_inv_session *inv,
             process_in_dialog_refer(call->inv->dlg, e->body.tsx_state.src.rdata);
         } else {
             assert(call->inv == inv);
-            addon_log(LOG_LEVEL_DEBUG, "call->inv->dlg=%d\n", call->inv->dlg);
-            addon_log(LOG_LEVEL_DEBUG, "call->inv->dlg->ua-id=%d\n", pjsip_rdata_get_tsx(e->body.tsx_state.src.rdata)->mod_data[call->inv->dlg->ua->id]);
+            addon_log(LL_DBG, "call->inv->dlg=%d\n", call->inv->dlg);
+            addon_log(LL_DBG, "call->inv->dlg->ua-id=%d\n", pjsip_rdata_get_tsx(e->body.tsx_state.src.rdata)->mod_data[call->inv->dlg->ua->id]);
 
             pjsip_rx_data *cloned_rdata = 0;
             if(pjsip_rx_data_clone(e->body.tsx_state.src.rdata, 0, &cloned_rdata) != PJ_SUCCESS) {
@@ -6136,14 +6176,14 @@ static void on_tsx_state_changed(pjsip_inv_session *inv,
             }
             call->pending_rdata = cloned_rdata;
 
-            addon_log(LOG_LEVEL_DEBUG, "call->inv->dlg=%d\n", call->inv->dlg);
-            addon_log(LOG_LEVEL_DEBUG, "call->inv->dlg->ua-id=%d\n", pjsip_rdata_get_tsx(cloned_rdata)->mod_data[call->inv->dlg->ua->id]);
+            addon_log(LL_DBG, "call->inv->dlg=%d\n", call->inv->dlg);
+            addon_log(LL_DBG, "call->inv->dlg->ua-id=%d\n", pjsip_rdata_get_tsx(cloned_rdata)->mod_data[call->inv->dlg->ua->id]);
 
             make_evt_request(evt, sizeof(evt), "call", call->id, e->body.tsx_state.src.rdata->msg_info.len, e->body.tsx_state.src.rdata->msg_info.msg_buf);
             dispatch_event(evt);    
         }
     } else {
-        addon_log(LOG_LEVEL_DEBUG, "doing nothiing");
+        addon_log(LL_DBG, "doing nothiing");
     }
 }
 
@@ -6509,7 +6549,7 @@ pj_bool_t add_additional_headers(pj_pool_t *pool, pjsip_tx_data *tdata, const ch
 		while(token){
 			char *name = strtok(token, ":");
 			char *value = strtok(NULL, "\n"); 
-			//addon_log(LOG_LEVEL_DEBUG, "Adding %s: %s\n", name, value);
+			//addon_log(LL_DBG, "Adding %s: %s\n", name, value);
 
 			if(!name || !value) {
 				set_error("Invalid additional_header");
@@ -6660,7 +6700,7 @@ pj_bool_t get_content_type_and_subtype_from_headers(Document &document, char *ty
 
     strncpy(type, content_type, index-1);
     strcpy(subtype, content_type+index);
-    addon_log(LOG_LEVEL_DEBUG, "Checking parsing of Content-Type. type=%s: subtype=%s\n", type, subtype);
+    addon_log(LL_DBG, "Checking parsing of Content-Type. type=%s: subtype=%s\n", type, subtype);
     return PJ_TRUE;
 }
 
@@ -7076,8 +7116,8 @@ static int g_now;
 
 
 void check_digit_buffer(Call *call, int mode) {
-	//addon_log(LOG_LEVEL_DEBUG, "check_digit_buffer g_now=%i for call_id=%i and mode=%i timestamp=%i len=%i\n", g_now, c->id, mode, c->last_digit_timestamp[mode], c->DigitBufferLength[mode]);
-	char evt[256];
+	//addon_log(LL_DBG, "check_digit_buffer g_now=%i for call_id=%i and mode=%i timestamp=%i len=%i\n", g_now, c->id, mode, c->last_digit_timestamp[mode], c->DigitBufferLength[mode]);
+	char evt[1024];
 
     for(int i=0 ; i<call->media_count ; i++) {
         MediaEndpoint *me = (MediaEndpoint*)call->media[i];
@@ -7105,7 +7145,7 @@ void check_digit_buffers(long id, long val) {
 
 static int digit_buffer_thread(void *arg)
 {
-	//addon_log(LOG_LEVEL_DEBUG, "Starting digit_buffer_thread\n");
+	//addon_log(LL_DBG, "Starting digit_buffer_thread\n");
 
 	pj_thread_set_prio(pj_thread_this(),
 			pj_thread_get_prio_min(pj_thread_this()));
@@ -7133,7 +7173,7 @@ bool start_digit_buffer_thread(){
 	status = pj_thread_create(pool, "digit_buffer_checker", &digit_buffer_thread, NULL, 0, 0, &t);
 	if(status != PJ_SUCCESS)
 	{
-		addon_log(LOG_LEVEL_DEBUG, "start_digit_buffer_thread failed\n");
+		addon_log(LL_DBG, "start_digit_buffer_thread failed\n");
 		return false;
 	}
 

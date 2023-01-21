@@ -13,16 +13,16 @@ int make_evt_response(char *dest, int size, const char *entity_type, long id, in
 	return snprintf(dest, size, "{\"event\": \"response\", \"%s_id\": %ld, \"method\": \"%.*s\"}\n%.*s", entity_type, id, mname_len, mname, sip_msg_len, sip_msg);
 }
 
-int make_evt_media_status(char *dest, int size, long call_id, const char *status, const char *local_mode, const char *remote_mode) {
-	if(strcmp(status, "setup_ok") == 0) {
-		return snprintf(dest, size, "{\"event\": \"media_status\", \"call_id\": %ld, \"status\": \"%s\", \"local_mode\": \"%s\", \"remote_mode\": \"%s\"}", call_id, status, local_mode, remote_mode);
+int make_evt_media_update(char *dest, int size, long call_id, const char *status, const char *media) {
+	if(strcmp(status, "ok") == 0) {
+		return snprintf(dest, size, "{\"event\": \"media_update\", \"call_id\": %ld, \"status\": \"%s\", \"media\": %s}", call_id, status, media);
 	} else {
-		return snprintf(dest, size, "{\"event\": \"media_status\", \"call_id\": %ld, \"status\": \"%s\"}", call_id, status);
+		return snprintf(dest, size, "{\"event\": \"media_update\", \"call_id\": %ld, \"status\": \"%s\"}", call_id, status);
 	}
 }
 
-int make_evt_dtmf(char *dest, int size, long call_id, int digits_len, const char *digits, int mode, int media_endpoint_id) {
-	return snprintf(dest, size, "{\"event\": \"dtmf\", \"call_id\": %ld, \"digits\": \"%.*s\", \"mode\": %i, \"media_endpoint_id\": %i}", call_id, digits_len, digits, mode, media_endpoint_id);
+int make_evt_dtmf(char *dest, int size, long call_id, int digits_len, const char *digits, int mode, int media_id) {
+	return snprintf(dest, size, "{\"event\": \"dtmf\", \"call_id\": %ld, \"digits\": \"%.*s\", \"mode\": %i, \"media_id\": %i}", call_id, digits_len, digits, mode, media_id);
 }
 
 int make_evt_call_ended(char *dest, int size, long call_id, int sip_msg_len, const char *sip_msg) {
