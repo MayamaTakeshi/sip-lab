@@ -3683,31 +3683,42 @@ bool media_endpoint_present_in_session_media(MediaEndpoint *me, const pjmedia_sd
 void gen_media_json(char *dest, int len, Call *call, const pjmedia_sdp_session *local_sdp, const pjmedia_sdp_session *remote_sdp){
     char *p = dest;
 
-    int media_stream_idx = 0;
-
     p += sprintf(p, "[");
 
     for(int i=0 ; i<call->media_count ; i++) {
+        if(i > 0) p += sprintf(p, ",");
+
         MediaEndpoint *me = (MediaEndpoint*)call->media[i];
-        if(me->type != ENDPOINT_TYPE_AUDIO) continue;
+        switch(me->type) {
+        case ENDPOINT_TYPE_AUDIO: {
+            AudioEndpoint *ae = (AudioEndpoint*)me->endpoint.audio;
 
-        AudioEndpoint *ae = (AudioEndpoint*)me->endpoint.audio;
+            int local_media_mode = get_media_mode(local_sdp->media[i]->attr, local_sdp->media[i]->attr_count); 
+            int remote_media_mode = get_media_mode(remote_sdp->media[i]->attr, remote_sdp->media[i]->attr_count); 
 
-        int local_media_mode = get_media_mode(local_sdp->media[media_stream_idx]->attr, local_sdp->media[media_stream_idx]->attr_count); 
-        int remote_media_mode = get_media_mode(remote_sdp->media[media_stream_idx]->attr, remote_sdp->media[media_stream_idx]->attr_count); 
+            char *local_mode = get_media_mode_str(local_media_mode);
+            char *remote_mode = get_media_mode_str(remote_media_mode);
 
-        char *local_mode = get_media_mode_str(local_media_mode);
-        char *remote_mode = get_media_mode_str(remote_media_mode);
 
-        if(media_stream_idx > 0) p += sprintf(p, ",");
+            p += sprintf(p, "{\"type\": \"audio\", \"local\": {\"port\": %d, \"mode\": \"%s\"}, \"remote\": {\"port\": %d, \"mode\": \"%s\"}}",
+                local_sdp->media[i]->desc.port,
+                local_mode,
+                remote_sdp->media[i]->desc.port,
+                remote_mode);
+            break;
+        }
+        case ENDPOINT_TYPE_MRCP: {
+            p += sprintf(p, "{\"type\": \"mrcp\", \"local\": {\"port\": %d}, \"remote\": {\"port\": %d}}",
+                local_sdp->media[i]->desc.port,
+                remote_sdp->media[i]->desc.port);
+            break;
+        }
+        default: {
+            p += sprintf(p, "{\"type\": \"unknown\"}");
 
-        p += sprintf(p, "{\"type\": \"audio\", \"local\": {\"port\": %d, \"mode\": \"%s\"}, \"remote\": {\"port\": %d, \"mode\": \"%s\"}}",
-            local_sdp->media[media_stream_idx]->desc.port,
-            local_mode,
-            remote_sdp->media[media_stream_idx]->desc.port,
-            remote_mode);
-
-        media_stream_idx++;
+            break;
+        }
+        }
     }
 
     p += sprintf(p, "]");
