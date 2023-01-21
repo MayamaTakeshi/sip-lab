@@ -1,0 +1,9 @@
+TODO: 
+
+1) update code that creates/starts/stops/destroy media streams
+
+2) if 'media: []' or 'media: null' it means there is no media, so do not generate a body (content-length: 0)
+
+3) create a sample script with automatic reply for INFO, OPTIONS etc.
+
+4) review processing of SUBSCRIBE (SUBSCRIBE is a dialog-creating method, so we should be able to keep the subscription object and be able to send requests (INFO) for it.

@@ -576,7 +576,7 @@ void process_in_dialog_refer(pjsip_dialog *dlg, pjsip_rx_data *rdata);
 
 void process_in_dialog_subscribe(pjsip_dialog *dlg, pjsip_rx_data *rdata);
 
-static pj_bool_t set_ports(Call *call, pjmedia_port *stream_port, pjmedia_port *media_port);
+static pj_bool_t set_ports(Call *call, AudioEndpoint *ae, pjmedia_port *stream_port, pjmedia_port *media_port);
 //static pj_bool_t stop_media_operation(Call *call);
 static void build_stream_stat(ostringstream &oss, pjmedia_rtcp_stat *stat, pjmedia_stream_info *stream_info);
 
@@ -1031,7 +1031,6 @@ int __pjw_init()
 	inv_cb.on_state_changed = &on_state_changed;
 	inv_cb.on_new_session = &on_forked;
 	inv_cb.on_media_update = &on_media_update;
-	inv_cb.on_rx_offer = NULL;
     inv_cb.on_rx_offer2 = &on_rx_offer2;
 	inv_cb.on_rx_reinvite = &on_rx_reinvite;
 	//inv_cb.on_tsx_state_changed = &on_tsx_state_changed;
@@ -3716,15 +3715,6 @@ static void on_media_update( pjsip_inv_session *inv, pj_status_t status){
 		return;
 	}		
 
-    /*
-	status = pjmedia_sdp_neg_get_active_remote(inv->neg, &remote_sdp);
-	if(status != PJ_SUCCESS){
-		make_evt_media_status(evt, sizeof(evt), call_id, "setup_failed", "", "");
-		dispatch_event(evt);
-		return;
-	}
-    */
-
     for(int i=0 ; i<local_sdp->media_count ; i++) {
         pjmedia_sdp_media *m = local_sdp->media[i];
         printf("DEBUG media: %.*s port: %d transport: %.*s fmt_count: %d fmt[0]: %.*s\n", m->desc.media.slen, m->desc.media.ptr, m->desc.port, m->desc.transport.slen, m->desc.transport.ptr, m->desc.fmt_count, m->desc.fmt[0].slen, m->desc.fmt[0].ptr);
@@ -3774,7 +3764,40 @@ static void on_media_update( pjsip_inv_session *inv, pj_status_t status){
         }
     }
 
-    /*
+
+
+
+    // Now start/restart media streams
+
+    status = pjmedia_sdp_neg_get_active_local(inv->neg, &local_sdp);
+    if(status != PJ_SUCCESS){
+        make_evt_media_status(evt, sizeof(evt), call_id, "setup_failed", "", "");
+        dispatch_event(evt);
+        return;
+    }       
+
+    status = pjmedia_sdp_neg_get_active_remote(inv->neg, &remote_sdp);
+    if(status != PJ_SUCCESS){
+        make_evt_media_status(evt, sizeof(evt), call_id, "setup_failed", "", "");
+        dispatch_event(evt);
+        return;
+    }
+
+    for(int i=0 ; i<call->media_count ; i++) {
+        MediaEndpoint *me = (MediaEndpoint*)call->media[i];
+        if(me->type != ENDPOINT_TYPE_AUDIO) continue;
+
+        AudioEndpoint *ae = (AudioEndpoint*)me->endpoint.audio;
+
+        if(ae->master_port){
+            status = pjmedia_master_port_stop(ae->master_port);
+            if(status != PJ_SUCCESS){
+                make_evt_media_status(evt, sizeof(evt), call_id, "setup_failed", "", "");
+                dispatch_event(evt);
+                return;
+            }
+        }
+
         status = pjmedia_stream_info_from_sdp(
                         &stream_info,
                         inv->dlg->pool,
@@ -3788,35 +3811,36 @@ static void on_media_update( pjsip_inv_session *inv, pj_status_t status){
             return;
         }
 
-        if(call->med_stream){
-            status = pjmedia_stream_destroy(call->med_stream);
+        if(ae->med_stream){
+            status = pjmedia_stream_destroy(ae->med_stream);
             if(status != PJ_SUCCESS){
                 make_evt_media_status(evt, sizeof(evt), call_id, "setup_failed", "", "");
                 dispatch_event(evt);
                 return;
             }
         }
+
         status = pjmedia_stream_create(
                     g_med_endpt,
                     inv->dlg->pool,
                     &stream_info,
-                    ((AudioEndpoint*)(MediaEndpoint*)call->media[i]).endpoint.audio)->med_transport, 
+                    ae->med_transport, 
                     NULL,
-                    &call->med_stream);
+                    &ae->med_stream);
         if(status != PJ_SUCCESS){
             make_evt_media_status(evt, sizeof(evt), call_id, "setup_failed", "", "");
             dispatch_event(evt);
             return;
         }
 
-        status = pjmedia_stream_start(call->med_stream);
+        status = pjmedia_stream_start(ae->med_stream);
         if(status != PJ_SUCCESS){
             make_evt_media_status(evt, sizeof(evt), call_id, "setup_failed", "", "");
             dispatch_event(evt);
             return;
         }
 
-        status = pjmedia_stream_set_dtmf_callback(call->med_stream,
+        status = pjmedia_stream_set_dtmf_callback(ae->med_stream,
                             &on_dtmf,
                             call);
         if(status != PJ_SUCCESS){
@@ -3825,10 +3849,11 @@ static void on_media_update( pjsip_inv_session *inv, pj_status_t status){
             return;
         }
 
-        pjmedia_transport_media_start(call->med_transport, 0, 0, 0, 0);
+        /* Start the UDP media transport */
+        pjmedia_transport_media_start(ae->med_transport, 0, 0, 0, 0);
 
         pjmedia_port *stream_port;
-        status = pjmedia_stream_get_port(call->med_stream, &stream_port);
+        status = pjmedia_stream_get_port(ae->med_stream, &stream_port);
         if(status != PJ_SUCCESS){
             make_evt_media_status(evt, sizeof(evt), call_id, "setup_failed", "", "");
             dispatch_event(evt);
@@ -3836,6 +3861,7 @@ static void on_media_update( pjsip_inv_session *inv, pj_status_t status){
         }
 
         if(!init_media_ports(call,
+                    ae,
                     PJMEDIA_PIA_SRATE(&stream_port->info),
                     PJMEDIA_PIA_CCNT(&stream_port->info),
                     PJMEDIA_PIA_SPF(&stream_port->info),
@@ -3845,88 +3871,88 @@ static void on_media_update( pjsip_inv_session *inv, pj_status_t status){
             return;
         }
 
-        if(!set_ports(call, stream_port, (pjmedia_port*)call->dtmfdet))
+        if(!set_ports(call, ae, stream_port, (pjmedia_port*)ae->dtmfdet))
         {
             make_evt_media_status(evt, sizeof(evt), call_id, "setup_failed", "", "");
             dispatch_event(evt);
             return;
         }
 
-        int local_media_mode = get_media_mode(local_sdp->media[0]->attr, local_sdp->media[0]->attr_count); 
-        int remote_media_mode = get_media_mode(remote_sdp->media[0]->attr, remote_sdp->media[0]->attr_count); 
+        int local_media_mode = get_media_mode(local_sdp->media[i]->attr, local_sdp->media[i]->attr_count); 
+        int remote_media_mode = get_media_mode(remote_sdp->media[i]->attr, remote_sdp->media[i]->attr_count); 
 
         char *local_mode = get_media_mode_str(local_media_mode);
         char *remote_mode = get_media_mode_str(remote_media_mode);
-
-        make_evt_media_status(evt, sizeof(evt), call_id, "setup_ok", local_mode, remote_mode);
-        dispatch_event(evt);
     }
-    */
+
+    char local_mode[] = "TODO";
+    char remote_mode[] = "TODO";
+
+    make_evt_media_status(evt, sizeof(evt), call_id, "setup_ok", local_mode, remote_mode);
+    dispatch_event(evt);
 }
 
-/*
-static pj_bool_t set_ports(Call *call, pjmedia_port *stream_port, pjmedia_port *media_port)
+static pj_bool_t set_ports(Call *call, AudioEndpoint *ae, pjmedia_port *stream_port, pjmedia_port *media_port)
 {
 	pj_status_t status;
 
-	if(!call->master_port)
+	if(!ae->master_port)
 	{
 		status = pjmedia_master_port_create(call->inv->pool,
 						stream_port,
 						media_port,
 						0,
-						&call->master_port);
+						&ae->master_port);
 		if(status != PJ_SUCCESS){
 			return PJ_FALSE;
 		}
 
-		status = pjmedia_master_port_start(call->master_port);
+		status = pjmedia_master_port_start(ae->master_port);
 		if(status != PJ_SUCCESS){
 			return PJ_FALSE;
 		}
 
-		call->media_port = media_port;
+		ae->media_port = media_port;
 		return PJ_TRUE;
 	}
 
-	status = pjmedia_master_port_stop(call->master_port);
+	status = pjmedia_master_port_stop(ae->master_port);
 	if(status != PJ_SUCCESS){
 		return PJ_FALSE;
 	}
 
-	status = pjmedia_master_port_set_uport(call->master_port,
+	status = pjmedia_master_port_set_uport(ae->master_port,
 					stream_port);
 	if(status != PJ_SUCCESS){
 		return PJ_FALSE;
 	}
 
-	if(call->media_port)
+	if(ae->media_port)
 	{
-		if(call->media_port != media_port){
-			status = pjmedia_port_destroy(call->media_port);
+		if(ae->media_port != media_port){
+			status = pjmedia_port_destroy(ae->media_port);
 			if(status != PJ_SUCCESS){
 				return PJ_FALSE;
 			}
 		}
-		call->media_port = NULL;
+		ae->media_port = NULL;
 	}
 
-	status = pjmedia_master_port_set_dport(call->master_port,
+	status = pjmedia_master_port_set_dport(ae->master_port,
 					media_port);
 	if(status != PJ_SUCCESS){
 		return PJ_FALSE;
 	}
 
-	call->media_port = media_port;
+	ae->media_port = media_port;
 	
-	status = pjmedia_master_port_start(call->master_port);
+	status = pjmedia_master_port_start(ae->master_port);
 	if(status != PJ_SUCCESS){
 		return PJ_FALSE;
 	}
 
 	return PJ_TRUE;
 }
-*/
 
 static void on_state_changed( pjsip_inv_session *inv, 
 				   pjsip_event *e){

@@ -1985,14 +1985,4 @@ Obs: if media setup fails we would raise an error event for the channel.
 This would make scripts easier to write.
 
 -----------------------------------------------------
-2023/01/12 takeshi:
-
-TODO: 
-
-1) update code that creates/starts/stops/destroy media streams
-
-2) if 'media: []' or 'media: null' it means there is no media, so do not generate a body (content-length: 0)
-
-3) create a sample script with automatic reply for INFO, OPTIONS etc.
-
 
