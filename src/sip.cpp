@@ -3704,9 +3704,26 @@ void gen_media_json(char *dest, int len, Call *call, const pjmedia_sdp_session *
             char *local_mode = get_media_mode_str(local_media_mode);
             char *remote_mode = get_media_mode_str(remote_media_mode);
 
-            p += sprintf(p, "{\"type\": \"audio\", \"local\": {\"port\": %d, \"mode\": \"%s\"}, \"remote\": {\"port\": %d, \"mode\": \"%s\"}, \"fmt\": [",
+            
+            pjmedia_sdp_conn *local_conn = local_sdp->conn;
+            pjmedia_sdp_conn *remote_conn = remote_sdp->conn;
+
+            if(local_media->conn) {
+                local_conn = local_media->conn;
+            }
+
+            if(remote_media->conn) {
+                remote_conn = remote_media->conn;
+            }
+
+            pj_str_t *local_addr = &local_conn->addr;
+            pj_str_t *remote_addr = &remote_conn->addr;
+
+            p += sprintf(p, "{\"type\": \"audio\", \"local\": {\"addr\": \"%.*s\", \"port\": %d, \"mode\": \"%s\"}, \"remote\": {\"addr\": \"%.*s\", \"port\": %d, \"mode\": \"%s\"}, \"fmt\": [",
+                local_addr->slen, local_addr->ptr,
                 local_media->desc.port,
                 local_mode,
+                remote_addr->slen, remote_addr->ptr,
                 remote_media->desc.port,
                 remote_mode);
 
