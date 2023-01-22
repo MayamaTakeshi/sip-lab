@@ -87,11 +87,6 @@ async function test() {
                 $rr: 'OK',
             }),
         },
-    ], 1000)
-
-    sip.call.respond(ic.id, {code: 487, reason: 'Request Terminated'})
-
-    await z.wait([
         {
             event: 'response',
             call_id: oc.id,

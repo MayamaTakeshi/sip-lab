@@ -76,18 +76,14 @@ async function test() {
 
     await z.wait([
         {
-            event: 'media_status',
+            event: 'media_update',
             call_id: oc.id,
-            status: 'setup_ok',
-            local_mode: 'sendrecv',
-            remote_mode: 'sendrecv',
+            status: 'ok',
         },
         {
-            event: 'media_status',
+            event: 'media_update',
             call_id: ic.id,
-            status: 'setup_ok',
-            local_mode: 'sendrecv',
-            remote_mode: 'sendrecv',
+            status: 'ok',
         },
         {
             event: 'response',
@@ -134,6 +130,23 @@ async function test() {
 
     await z.wait([
         {
+            event: 'reinvite',
+            call_id: ic.id
+        },
+    ], 1000)
+
+    sip.call.respond(ic.id, {code: 200, reason: 'OK'})
+
+    await z.wait([
+        {
+            event: 'response',
+            call_id: oc.id,
+            method: 'INVITE',
+            msg: sip_msg({
+                $rs: '100',
+            }),
+        },
+        {
             event: 'response',
             call_id: oc.id,
             method: 'INVITE',
@@ -144,18 +157,14 @@ async function test() {
             }),
         },
         {
-            event: 'media_status',
+            event: 'media_update',
             call_id: oc.id,
-            status: 'setup_ok',
-            local_mode: 'sendonly',
-            remote_mode: 'recvonly',
+            status: 'ok',
         },
         {
-            event: 'media_status',
+            event: 'media_update',
             call_id: ic.id,
-            status: 'setup_ok',
-            local_mode: 'recvonly',
-            remote_mode: 'sendonly',
+            status: 'ok',
         },
     ], 500)
 
@@ -175,6 +184,23 @@ async function test() {
 
     await z.wait([
         {
+            event: 'reinvite',
+            call_id: oc.id
+        },
+    ], 1000)
+
+    sip.call.respond(oc.id, {code: 200, reason: 'OK'})
+
+    await z.wait([
+        {
+            event: 'response',
+            call_id: ic.id,
+            method: 'INVITE',
+            msg: sip_msg({
+                $rs: '100',
+            }),
+        },
+        {
             event: 'response',
             call_id: ic.id,
             method: 'INVITE',
@@ -185,18 +211,14 @@ async function test() {
             }),
         },
         {
-            event: 'media_status',
+            event: 'media_update',
             call_id: oc.id,
-            status: 'setup_ok',
-            local_mode: 'sendonly',
-            remote_mode: 'recvonly',
+            status: 'ok',
         },
         {
-            event: 'media_status',
+            event: 'media_update',
             call_id: ic.id,
-            status: 'setup_ok',
-            local_mode: 'recvonly',
-            remote_mode: 'sendonly',
+            status: 'ok',
         },
     ], 500)
 
@@ -222,6 +244,11 @@ async function test() {
                 $rm: 'INFO',
             }),
         },
+    ], 500)
+
+    sip.call.respond(ic.id, {code: 200, reason: 'OK'})
+
+    await z.wait([
         {
             event: 'response',
             call_id: oc.id,
@@ -237,6 +264,23 @@ async function test() {
 
     await z.wait([
         {
+            event: 'reinvite',
+            call_id: ic.id
+        },
+    ], 1000)
+
+    sip.call.respond(ic.id, {code: 200, reason: 'OK'})
+
+    await z.wait([
+        {
+            event: 'response',
+            call_id: oc.id,
+            method: 'INVITE',
+            msg: sip_msg({
+                $rs: '100',
+            }),
+        },
+        {
             event: 'response',
             call_id: oc.id,
             method: 'INVITE',
@@ -247,18 +291,14 @@ async function test() {
             }),
         },
         {
-            event: 'media_status',
+            event: 'media_update',
             call_id: oc.id,
-            status: 'setup_ok',
-            local_mode: 'sendrecv',
-            remote_mode: 'sendrecv',
+            status: 'ok',
         },
         {
-            event: 'media_status',
+            event: 'media_update',
             call_id: ic.id,
-            status: 'setup_ok',
-            local_mode: 'sendrecv',
-            remote_mode: 'sendrecv',
+            status: 'ok',
         },
     ], 500)
 

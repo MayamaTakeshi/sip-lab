@@ -88,7 +88,7 @@ async function test() {
     sip.call.respond(ic.id, {code: 200, reason: 'OK'})
 
     // Then we wait for the '200 OK' at the t1 side
-    // We will also get event 'media_status' for both sides indicating media streams (RTP) were set up successfully
+    // We will also get event 'media_update' for both sides indicating media streams (RTP) were set up successfully
     await z.wait([
         {
             event: 'response',
@@ -106,18 +106,14 @@ async function test() {
             }),
         },
         {
-            event: 'media_status',
+            event: 'media_update',
             call_id: oc.id,
-            status: 'setup_ok',
-            local_mode: 'sendrecv',
-            remote_mode: 'sendrecv',
+            status: 'ok',
         },
         {
-            event: 'media_status',
+            event: 'media_update',
             call_id: ic.id,
-            status: 'setup_ok',
-            local_mode: 'sendrecv',
-            remote_mode: 'sendrecv',
+            status: 'ok',
         },
     ], 1000)
 
