@@ -4,9 +4,9 @@
 #include <stdarg.h>
 
 #define LL_INFO 0
-#define LL_DBG 1
+#define L_DBG 1
 
-static int _log_level = LL_DBG;
+static int _log_level = L_DBG;
 
 void _addon_log(int level, const char *fmt, ...);
 
