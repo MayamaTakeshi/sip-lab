@@ -1031,7 +1031,7 @@ int __pjw_init()
 	inv_cb.on_state_changed = &on_state_changed;
 	inv_cb.on_new_session = &on_forked;
 	inv_cb.on_media_update = &on_media_update;
-    inv_cb.on_rx_offer2 = &on_rx_offer2;
+    inv_cb.on_rx_offer2 = &on_rx_offer2; // we need this for delayed_media scenarios.
 	inv_cb.on_rx_reinvite = &on_rx_reinvite;
 	//inv_cb.on_tsx_state_changed = &on_tsx_state_changed;
 	inv_cb.on_redirected = &on_redirected;
@@ -4646,14 +4646,6 @@ static void on_rx_offer2(pjsip_inv_session *inv, struct pjsip_inv_on_rx_offer_cb
 	addon_log(L_DBG, "on_rx_offer2\n");
 	if(g_shutting_down) return;
 
-    /*
-	bool is_reinvite = false;
-
-	if(inv->state == PJSIP_INV_STATE_CONFIRMED) {
-		is_reinvite = true;
-	}
-    */
-
 	char evt[2048];
 
 	Call *call = (Call*)inv->dlg->mod_data[mod_tester.id];
@@ -4663,129 +4655,38 @@ static void on_rx_offer2(pjsip_inv_session *inv, struct pjsip_inv_on_rx_offer_cb
 
     const pjsip_rx_data *rdata = param->rdata;
 
-    if (inv->neg == NULL) {
-        status = pjmedia_sdp_neg_create_w_remote_offer(inv->dlg->pool,
-            NULL, // local remote not set
-            param->offer,
-            &inv->neg);
+    pjmedia_sdp_neg_state state = pjmedia_sdp_neg_get_state(inv->neg);
+    printf("neg state: %d\n", state);
+    if(PJMEDIA_SDP_NEG_STATE_NULL == state || PJMEDIA_SDP_NEG_STATE_DONE == state ) {
+        status = pjmedia_sdp_neg_set_remote_offer(inv->dlg->pool,
+            inv->neg,
+            param->offer
+        );   
         if (status != PJ_SUCCESS) {
-            printf("error: pjmedia_sdp_neg_create_w_remote_offer failed\n");
+            printf("error: pjmedia_sdp_neg_set_remote_offer failed\n");
             exit(1);
             return;
         }
     } else {
-        pjmedia_sdp_neg_state state = pjmedia_sdp_neg_get_state(inv->neg);
-        printf("neg state: %d\n", state);
-        if(PJMEDIA_SDP_NEG_STATE_NULL == state || PJMEDIA_SDP_NEG_STATE_DONE == state ) {
-            status = pjmedia_sdp_neg_set_remote_offer(inv->dlg->pool,
-                inv->neg,
-                param->offer
-            );   
-            if (status != PJ_SUCCESS) {
-                printf("error: pjmedia_sdp_neg_set_remote_offer failed\n");
-                exit(1);
-                return;
-            }
-        } else {
-            // this is delayed media scenario
-            // So we must generate SDP answer based on media set when call was created.
+        // this is delayed media scenario
+        // So we must generate SDP answer based on media set when call was created.
 
-            pjmedia_sdp_session *sdp = 0;
-            if(!create_local_sdp(call, call->inv->dlg, &sdp, false, false)) {
-                close_media(call);
-                return; 
-            }
+        pjmedia_sdp_session *sdp = 0;
+        if(!create_local_sdp(call, call->inv->dlg, &sdp, false, false)) {
+            close_media(call);
+            return; 
+        }
 
-            status = pjsip_inv_set_sdp_answer(call->inv, sdp);
-            if(status != PJ_SUCCESS) {
-                set_error("pjsip_inv_set_sdp_answer failed");
-                close_media(call);
-                return; 
-            }
+        status = pjsip_inv_set_sdp_answer(call->inv, sdp);
+        if(status != PJ_SUCCESS) {
+            set_error("pjsip_inv_set_sdp_answer failed");
+            close_media(call);
+            return; 
         }
     }
 
-	
-    // TODO: reenable this code after adjustments to handle multiple media
-    /*
-
-	pjmedia_sdp_conn *conn;
-	conn = offer->media[0]->conn;
-	if(!conn) conn = offer->conn;	
-
-
-	pjmedia_transport_info tpinfo;
-	pjmedia_transport_info_init(&tpinfo);
-	pjmedia_transport_get_info(call->med_transport,&tpinfo);
-
-	pjmedia_sdp_session *answer;
-	status = pjmedia_endpt_create_sdp(g_med_endpt,
-					inv->pool,
-					1,
-					&tpinfo.sock_info,
-					&answer);
-	if(status != PJ_SUCCESS){
-		make_evt_internal_error(evt, sizeof(evt), "on_rx_offer: pjmedia_endpt_create_sdp failed");
-		dispatch_event(evt); 
-		return; 
-	}
-
-	int remote_mode = get_media_mode(offer->media[0]->attr, offer->media[0]->attr_count);
-	if(remote_mode == SENDONLY) {
-		call->remote_hold = 1;
-	} else if(remote_mode == INACTIVE) {
-		call->remote_hold = 1;
-	} else if(remote_mode == SENDRECV) {
-		call->remote_hold = 0;
-	} else if(remote_mode == RECVONLY) {
-		call->remote_hold = 0;
-	} else {
-		call->remote_hold = 0;
-	}
-
-	//char *mode = get_media_mode_str(remote_mode);
-	
-	pjmedia_sdp_attr *attr;
-
-	// Remove existing directions attributes
-	pjmedia_sdp_media_remove_all_attr(answer->media[0], "sendrecv");
-	pjmedia_sdp_media_remove_all_attr(answer->media[0], "sendonly");
-	pjmedia_sdp_media_remove_all_attr(answer->media[0], "recvonly");
-	pjmedia_sdp_media_remove_all_attr(answer->media[0], "inactive");
-
-	if(call->local_hold) {
-		// Keep call on-hold by setting 'sendonly' attribute.
-		// (See RFC 3264 Section 8.4 and RFC 4317 Section 3.1)
-		if(call->remote_hold) {
-			attr = pjmedia_sdp_attr_create(inv->pool, "inactive", NULL);
-		} else {
-			attr = pjmedia_sdp_attr_create(inv->pool, "sendonly", NULL);
-		}
-	} else if(call->remote_hold) {
-		attr = pjmedia_sdp_attr_create(inv->pool, "recvonly", NULL);
-	} else {
-		attr = pjmedia_sdp_attr_create(inv->pool, "sendrecv", NULL);
-	}
-	pjmedia_sdp_media_add_attr(answer->media[0], attr);
-
-	status = pjsip_inv_set_sdp_answer(inv, answer);
-	if(status != PJ_SUCCESS){
-		make_evt_internal_error(evt, sizeof(evt), "on_rx_offer: pjsip_inv_set_sdp_answer failed");
-		dispatch_event(evt); 
-		return;
-	}
-
-	long call_id;
-	if( !g_call_ids.get_id((long)call, call_id) ){
-		make_evt_internal_error(evt, sizeof(evt), "on_rx_offer: Failed to get call_id.\n");
-		dispatch_event(evt); 
-		return;
-	}
-    */
-
-
     // The below cannot be used: in case of delayed media scenarios, on_rx_offer and on_rx_offer2 will be called when the '200 OK'
-    // is received for an INVITE without SDP.
+    // is received for an INVITE without SDP. So we will send this event from on_rx_reinvite
     /*
     make_evt_reinvite(evt, sizeof(evt), call_id, rdata->msg_info.len, rdata->msg_info.msg_buf);
     dispatch_event(evt);
