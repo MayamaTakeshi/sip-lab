@@ -3695,18 +3695,32 @@ void gen_media_json(char *dest, int len, Call *call, const pjmedia_sdp_session *
         case ENDPOINT_TYPE_AUDIO: {
             AudioEndpoint *ae = (AudioEndpoint*)me->endpoint.audio;
 
-            int local_media_mode = get_media_mode(local_sdp->media[i]->attr, local_sdp->media[i]->attr_count); 
-            int remote_media_mode = get_media_mode(remote_sdp->media[i]->attr, remote_sdp->media[i]->attr_count); 
+            pjmedia_sdp_media *local_media = local_sdp->media[i];
+            pjmedia_sdp_media *remote_media = remote_sdp->media[i];
+
+            int local_media_mode = get_media_mode(local_media->attr, local_media->attr_count); 
+            int remote_media_mode = get_media_mode(remote_media->attr, remote_media->attr_count); 
 
             char *local_mode = get_media_mode_str(local_media_mode);
             char *remote_mode = get_media_mode_str(remote_media_mode);
 
-
-            p += sprintf(p, "{\"type\": \"audio\", \"local\": {\"port\": %d, \"mode\": \"%s\"}, \"remote\": {\"port\": %d, \"mode\": \"%s\"}}",
-                local_sdp->media[i]->desc.port,
+            p += sprintf(p, "{\"type\": \"audio\", \"local\": {\"port\": %d, \"mode\": \"%s\"}, \"remote\": {\"port\": %d, \"mode\": \"%s\"}, \"fmt\": [",
+                local_media->desc.port,
                 local_mode,
-                remote_sdp->media[i]->desc.port,
+                remote_media->desc.port,
                 remote_mode);
+
+            for(int i=0 ; i<local_media->desc.fmt_count ; i++) {
+                if(i > 0) p += sprintf(p, ",");
+                pj_str_t *fmt = &local_media->desc.fmt[i];
+                pjmedia_sdp_attr *attr = pjmedia_sdp_attr_find2(local_media->attr_count, local_media->attr, "rtpmap", fmt);
+                if(attr) {
+                    p += sprintf(p, "\"%.*s\"", attr->value.slen, attr->value.ptr);
+                } else {
+                    p += sprintf(p, "\"%.*s\"", fmt->slen, fmt->ptr);
+                }
+            }
+            p += sprintf(p, "]}");
             break;
         }
         case ENDPOINT_TYPE_MRCP: {
