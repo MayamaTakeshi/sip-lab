@@ -12,10 +12,11 @@ Draft:
 
 Draft2:
 struct Call:
-    pjmedia_sdp_session *local_sdp;
+  - Add:
+     pjmedia_sdp_session *local_sdp;
 
-    pjmedia_sdp_session *active_local_sdp;
-    pjmedia_sdp_session *active_remote_sdp;
+     pjmedia_sdp_session *active_local_sdp;
+     pjmedia_sdp_session *active_remote_sdp;
 
 call_create:
   - update_media_from_json
@@ -36,8 +37,31 @@ on_media_update:
   - update_media_from_active_local_sdp
   - iterate active_local_sdp and restart/remove each media if necessary
 
+obs: create_local_sdp must be changed to require the json document (media) and must generate the sdp based on what is specified there. So it must search call->media[] and use existing endpoints as from it (it is ensured that the endpoint will exist as call->media[] was previously updated based on it). It doesn't matter that the document might contain less items than call->media[] as we cannot remove elements from call->media[] till negotiation is done. We will remove elements (if necessary) from call->media upon on_media_update.
+TODO: probably we can merge update_media_from_json with create_local_sdp as they are always called one after the other (we could replace them with function process_media(.., Document &d).
+
+Draft for process_media:
+  - create base_sdp
+  - for each media in json media:
+    - search if the media is present in call->media 
+    - if no, generate pjmedia_sdp_media, add it to call->medi
+    - add pjmedia_sdp_media do base_sdp
+    - set in_use
+
+
+IMPORTANT: I forgot one thing: port=0 in the m= line means the media was not accepted. So call-media[i] must be removed.
+So we must review as I am not sure if the port=0 will be in the active remote_media or in the local_media too (if it is in the local media, the code will be simpler).
+    
 
 1b) after changes are done and confirmed to work, we should update the code to use pjmedia_sdp_session_cmp to check the active_local_sdp and active_remote_sdp (new fields in struct Call) to first check if there were media changes. if not, we can return from on_media_update without generating a media_update event as there were no changes. If there were changes we should check with pjmedia_sdp_media_cmp and only restart media endpoints for the ones that changed.
+
+1c) write tests for:
+  - media position change. Ex:
+      INVITE: [{type: 'mcrp'},{type: 'audio'}]
+      200 OK: [{type: 'audio'},{type: 'mrcp'}]
+  - removal of media
+      INVITE: [{type: 'mcrp'},{type: 'audio'}]
+      200 OK: [{type: 'audio'}]
 
 2) if 'media: []' or 'media: null' it means there is no media, so do not generate a body (content-length: 0)
 
