@@ -591,7 +591,6 @@ void prepare_error_event(ostringstream *oss, char *scope, char *details);
 //void prepare_pjsipcall_error_event(ostringstream *oss, char *scope, char *function, pj_status_t s);
 void append_status(ostringstream *oss, pj_status_t s);
 
-//bool update_media_from_json(Call *c, pjsip_dialog *dlg, Document &document);
 bool is_media_active(Call *c, MediaEndpoint *me);
 void close_media_endpoint(MediaEndpoint *me);
 
@@ -3746,21 +3745,7 @@ int find_sdp_media_by_media_endpt(const pjmedia_sdp_session *sdp, pjmedia_sdp_me
     return -1;
 }
 
-bool update_media_from_active_local_sdp(Call *call, const pjmedia_sdp_session *local_sdp) {
-    for(int i=call->media_count-1 ; i>=0 ; i--) {
-        MediaEndpoint *me = call->media[i];
-        pjmedia_sdp_media *media;
-        int idx = find_sdp_media_by_media_endpt(local_sdp, &media, me);
-        if(idx < 0) {
-            close_media_endpoint(me); 
-            pj_array_erase(call->media, sizeof(MediaEndpoint*), call->media_count--, i);
-        }
-    }
-    return true;
-} 
-
-
-bool restart_media_stream(Call *call, MediaEndpoint *me, const pjmedia_sdp_session *local_sdp, const pjmedia_sdp_session *remote_sdp) {
+bool restart_media_stream(Call *call, MediaEndpoint *me, const pjmedia_sdp_session *local_sdp, const pjmedia_sdp_session *remote_sdp, int idx) {
 	char evt[4096];
 	pjmedia_stream_info stream_info;
 
@@ -3777,8 +3762,10 @@ bool restart_media_stream(Call *call, MediaEndpoint *me, const pjmedia_sdp_sessi
         }
     }
 
+    /*
     pjmedia_sdp_media *media;
     int idx = find_sdp_media_by_media_endpt(local_sdp, &media, me);
+    */
 
     status = pjmedia_stream_info_from_sdp(
                     &stream_info,
@@ -3922,15 +3909,32 @@ static void on_media_update( pjsip_inv_session *inv, pj_status_t status){
     pjmedia_sdp_print(remote_sdp, b, sizeof(b));
     addon_log(L_DBG, "on_media_update call_id=%d active remote_sdp: %s\n", call->id, b); 
 
-    if(!update_media_from_active_local_sdp(call, local_sdp)) {
-        make_evt_media_update(evt, sizeof(evt), call->id, "setup_failed (update_media_from_active_local_sdp failed)", "");
-        dispatch_event(evt);
-        return;
+    // update media endpoint based on sdp media
+    for(int i=call->media_count-1 ; i>=0 ; i--) {
+        MediaEndpoint *me = call->media[i];
+        pjmedia_sdp_media *media;
+        int idx = find_sdp_media_by_media_endpt(local_sdp, &media, me);
+        if(idx < 0) {
+            close_media_endpoint(me); 
+            pj_array_erase(call->media, sizeof(MediaEndpoint*), call->media_count--, i);
+        } else {
+            if(me->type != ENDPOINT_TYPE_AUDIO) {
+                printf("not audio. skipping\n");
+                continue;
+            } else {
+                printf("type=%d\n", me->type);
+            }
+
+            if(!restart_media_stream(call, me, local_sdp, remote_sdp, idx)) {
+                return;
+            }
+        }
     }
 
 
     // Now start/restart media streams
 
+    /*
     for(int i=0 ; i<call->media_count ; i++) {
         printf("starting/restarting media streams i=%d\n", i);
 
@@ -3946,6 +3950,7 @@ static void on_media_update( pjsip_inv_session *inv, pj_status_t status){
             return; 
         }
     }
+    */
 
     char media[4096];
     gen_media_json(media, sizeof(media), call, local_sdp, remote_sdp);

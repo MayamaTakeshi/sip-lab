@@ -56,9 +56,12 @@ However, since this will change the original port, the processing must be to sea
 So we don't need to actually check for port=0.
 
 
-1b) after changes are done and confirmed to work, we should update the code to use pjmedia_sdp_session_cmp to check the active_local_sdp and active_remote_sdp (new fields in struct Call) to first check if there were media changes. if not, we can return from on_media_update without generating a media_update event as there were no changes. If there were changes we should check with pjmedia_sdp_media_cmp and only restart media endpoints for the ones that changed.
+1b) need to allow hold parameter to each media independently (if parameter hold is absent on a media, the value of the parameter hold in the json options will be used (default is false).
 
-1c) write tests for:
+
+1c) after changes are done and confirmed to work, we should update the code to use pjmedia_sdp_session_cmp to check the active_local_sdp and active_remote_sdp (new fields in struct Call) to first check if there were media changes. if not, we can return from on_media_update without generating a media_update event as there were no changes. If there were changes we should check with pjmedia_sdp_media_cmp and only restart media endpoints for the ones that changed.
+
+1d) write tests for:
   - media position change. Ex:
       INVITE: [{type: 'mcrp'},{type: 'audio'}]
       200 OK: [{type: 'audio'},{type: 'mrcp'}]
