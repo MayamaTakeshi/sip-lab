@@ -3931,27 +3931,6 @@ static void on_media_update( pjsip_inv_session *inv, pj_status_t status){
         }
     }
 
-
-    // Now start/restart media streams
-
-    /*
-    for(int i=0 ; i<call->media_count ; i++) {
-        printf("starting/restarting media streams i=%d\n", i);
-
-        MediaEndpoint *me = (MediaEndpoint*)call->media[i];
-        if(me->type != ENDPOINT_TYPE_AUDIO) {
-            printf("not audio. skipping\n");
-            continue;
-        } else {
-            printf("type=%d\n", me->type);
-        }
-
-        if(!restart_media_stream(call, me, local_sdp, remote_sdp)) {
-            return; 
-        }
-    }
-    */
-
     char media[4096];
     gen_media_json(media, sizeof(media), call, local_sdp, remote_sdp);
 

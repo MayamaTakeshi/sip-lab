@@ -55,13 +55,16 @@ So call->media[idx] must be removed.
 However, since this will change the original port, the processing must be to search for each me in call->media and if not found then remove it.
 So we don't need to actually check for port=0.
 
+1b) we need clone the active local/remote media for each MediaEndpoint of type audio/video using inv->pool_prov.
+Then when on_media_update happens, we should compare them with the new active local/remote media and if they differ, we should restart the media endpoint.
 
-1b) need to allow hold parameter to each media independently (if parameter hold is absent on a media, the value of the parameter hold in the json options will be used (default is false).
+
+1c) need to allow hold parameter to each media independently (if parameter hold is absent on a media, the value of the parameter hold in the json options will be used (default is false).
 
 
-1c) after changes are done and confirmed to work, we should update the code to use pjmedia_sdp_session_cmp to check the active_local_sdp and active_remote_sdp (new fields in struct Call) to first check if there were media changes. if not, we can return from on_media_update without generating a media_update event as there were no changes. If there were changes we should check with pjmedia_sdp_media_cmp and only restart media endpoints for the ones that changed.
+1d) after changes are done and confirmed to work, we should update the code to use pjmedia_sdp_session_cmp to check the active_local_sdp and active_remote_sdp (new fields in struct Call) to first check if there were media changes. if not, we can return from on_media_update without generating a media_update event as there were no changes. If there were changes we should check with pjmedia_sdp_media_cmp and only restart media endpoints for the ones that changed.
 
-1d) write tests for:
+1e) write tests for:
   - media position change. Ex:
       INVITE: [{type: 'mcrp'},{type: 'audio'}]
       200 OK: [{type: 'audio'},{type: 'mrcp'}]
@@ -80,3 +83,5 @@ So we don't need to actually check for port=0.
 6) if digit buffers have no more space generate an error for the channel so that it doesn't get unnoticed.
 
 7) on_media_update: when doing "Processing call->media", I forgot that we need to rearrange the array to remove blank spots in the middle of it (it is not enough to remove elements)
+
+8) update to use invite session's pools (https://docs.pjsip.org/en/latest/api/generated/pjsip/group/group__PJSIP__INV.html)
