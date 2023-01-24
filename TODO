@@ -49,9 +49,12 @@ Draft for process_media:
     - set in_use
 
 
-IMPORTANT: I forgot one thing: port=0 in the m= line means the media was not accepted. So call-media[i] must be removed.
-So we must review as I am not sure if the port=0 will be in the active remote_media or in the local_media too (if it is in the local media, the code will be simpler).
-    
+IMPORTANT: 
+The active local_sdp will have port=0 for the medias that were not accepted in the negotiation (no matter which side did the offer or answered).
+So call->media[idx] must be removed.
+However, since this will change the original port, the processing must be to search for each me in call->media and if not found then remove it.
+So we don't need to actually check for port=0.
+
 
 1b) after changes are done and confirmed to work, we should update the code to use pjmedia_sdp_session_cmp to check the active_local_sdp and active_remote_sdp (new fields in struct Call) to first check if there were media changes. if not, we can return from on_media_update without generating a media_update event as there were no changes. If there were changes we should check with pjmedia_sdp_media_cmp and only restart media endpoints for the ones that changed.
 
