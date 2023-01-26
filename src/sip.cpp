@@ -3657,6 +3657,19 @@ bool media_endpoint_present_in_session_media(MediaEndpoint *me, const pjmedia_sd
     return false;
 }
 
+int find_sdp_media_by_media_endpt(const pjmedia_sdp_session *sdp, pjmedia_sdp_media **media_out, MediaEndpoint *me) {
+    for(int i=0 ; i<sdp->media_count ; i++) {
+        pjmedia_sdp_media *media = sdp->media[i];
+
+        if((me->port == media->desc.port) &&
+           (pj_strcmp(&me->media, &media->desc.media) == 0)) {
+            *media_out = media;
+            return i;
+        }
+    }
+    return -1;
+}
+
 void gen_media_json(char *dest, int len, Call *call, const pjmedia_sdp_session *local_sdp, const pjmedia_sdp_session *remote_sdp){
     char *p = dest;
 
@@ -3666,19 +3679,22 @@ void gen_media_json(char *dest, int len, Call *call, const pjmedia_sdp_session *
         if(i > 0) p += sprintf(p, ",");
 
         MediaEndpoint *me = (MediaEndpoint*)call->media[i];
+
+        pjmedia_sdp_media *dummy;
+        int idx = find_sdp_media_by_media_endpt(local_sdp, &dummy, me);
+
+        pjmedia_sdp_media *local_media = local_sdp->media[idx];
+        pjmedia_sdp_media *remote_media = remote_sdp->media[idx];
+
         switch(me->type) {
         case ENDPOINT_TYPE_AUDIO: {
             AudioEndpoint *ae = (AudioEndpoint*)me->endpoint.audio;
-
-            pjmedia_sdp_media *local_media = local_sdp->media[i];
-            pjmedia_sdp_media *remote_media = remote_sdp->media[i];
 
             int local_media_mode = get_media_mode(local_media->attr, local_media->attr_count); 
             int remote_media_mode = get_media_mode(remote_media->attr, remote_media->attr_count); 
 
             char *local_mode = get_media_mode_str(local_media_mode);
             char *remote_mode = get_media_mode_str(remote_media_mode);
-
             
             pjmedia_sdp_conn *local_conn = local_sdp->conn;
             pjmedia_sdp_conn *remote_conn = remote_sdp->conn;
@@ -3717,8 +3733,8 @@ void gen_media_json(char *dest, int len, Call *call, const pjmedia_sdp_session *
         }
         case ENDPOINT_TYPE_MRCP: {
             p += sprintf(p, "{\"type\": \"mrcp\", \"local\": {\"port\": %d}, \"remote\": {\"port\": %d}}",
-                local_sdp->media[i]->desc.port,
-                remote_sdp->media[i]->desc.port);
+                local_sdp->media[idx]->desc.port,
+                remote_sdp->media[idx]->desc.port);
             break;
         }
         default: {
@@ -3730,19 +3746,6 @@ void gen_media_json(char *dest, int len, Call *call, const pjmedia_sdp_session *
     }
 
     p += sprintf(p, "]");
-}
-
-int find_sdp_media_by_media_endpt(const pjmedia_sdp_session *sdp, pjmedia_sdp_media **media_out, MediaEndpoint *me) {
-    for(int i=0 ; i<sdp->media_count ; i++) {
-        pjmedia_sdp_media *media = sdp->media[i];
-
-        if((me->port == media->desc.port) &&
-           (pj_strcmp(&me->media, &media->desc.media) == 0)) {
-            *media_out = media;
-            return i;
-        }
-    }
-    return -1;
 }
 
 bool restart_media_stream(Call *call, MediaEndpoint *me, const pjmedia_sdp_session *local_sdp, const pjmedia_sdp_session *remote_sdp, int idx) {
