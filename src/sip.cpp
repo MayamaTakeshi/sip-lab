@@ -5210,6 +5210,41 @@ bool create_media_endpoint(Call *call, Value &descr, pjsip_dialog *dlg, char *ad
     return true;
 }
 
+MediaEndpoint *find_media_by_json_descr(Call *call, Value &descr, bool in_use_chart[]) {
+    // TODO
+    return NULL;
+}
+
+//This function is not in use yet.
+MediaEndpoint *find_media_endpt_by_sdp_media(Call *call, pjmedia_sdp_media *local_media, bool in_use_chart[]) {
+    for(int i=0 ; i<call->media_count ; i++) {
+        MediaEndpoint *me = call->media[i];
+        if(in_use_chart[i]) continue;
+
+        if(pj_strcmp2(&local_media->desc.media, "audio") == 0) {
+            if(ENDPOINT_TYPE_AUDIO == me->type) {
+                in_use_chart[i] = true;
+                return me;
+            }
+        } else if(pj_strcmp2(&local_media->desc.media, "video") == 0) {
+            if(ENDPOINT_TYPE_VIDEO == me->type) {
+                in_use_chart[i] = true;
+                return me;
+            }
+        } else if(pj_strcmp2(&local_media->desc.media, "mrcp") == 0) {
+            if(ENDPOINT_TYPE_MRCP == me->type) {
+                in_use_chart[i] = true;
+                return me;
+            }
+        } else {
+            assert(0);
+            // missing media type support implementation
+        }
+    }
+
+    return NULL;
+}
+
 MediaEndpoint *find_media_endpt_by_json_descr(Call *call, Value &descr, bool in_use_chart[]) {
     const char *type = (const char*)descr["type"].GetString();
 
@@ -5228,7 +5263,7 @@ MediaEndpoint *find_media_endpt_by_json_descr(Call *call, Value &descr, bool in_
                 return me;
             }
         } else if(strcmp("mrcp", type) == 0) {
-            if(ENDPOINT_TYPE_VIDEO == me->type) {
+            if(ENDPOINT_TYPE_MRCP == me->type) {
                 in_use_chart[i] = true;
                 return me;
             }
@@ -5303,11 +5338,6 @@ pjmedia_sdp_media * create_sdp_media(MediaEndpoint *me, pjsip_dialog *dlg, bool 
     }
 
     return media;
-}
-
-MediaEndpoint *find_media_by_json_descr(Call *call, Value &descr, bool in_use_chart[]) {
-    // TODO
-    return NULL;
 }
 
 bool process_media(Call *call, pjsip_dialog *dlg, Document &document, bool hold) {
