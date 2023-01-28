@@ -3885,8 +3885,9 @@ static void on_media_update( pjsip_inv_session *inv, pj_status_t status){
 	}
 
     if(!stop_master_ports(call)) {
-         make_evt_media_update(evt, sizeof(evt), call->id, "setup_failed (stop_master_port error)", "");
-         dispatch_event(evt);
+        make_evt_media_update(evt, sizeof(evt), call->id, "setup_failed (stop_master_port error)", "");
+        dispatch_event(evt);
+        return;
     }
 
     status = pjmedia_sdp_neg_get_active_local(inv->neg, &local_sdp);

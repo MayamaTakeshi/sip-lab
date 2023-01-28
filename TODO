@@ -58,6 +58,7 @@ So we don't need to actually check for port=0.
 1b) we need clone the active local/remote media for each MediaEndpoint of type audio/video using inv->pool_prov.
 Then when on_media_update happens, we should compare them with the new active local/remote media and if they differ, we should restart the media endpoint.
 
+1b1) when processing the on_media_update, we need to reorder the call-> edia based on the SDP, removing the inactive ones. This order is important because in the next item (1c) it will be possible to use parameter hold individually and we must have the proper order established so that correct element can be acted upon.j
 
 1c) need to allow hold parameter to each media independently (if parameter hold is absent on a media, the value of the parameter hold in the json options will be used (default is false).
 
@@ -70,7 +71,9 @@ Then when on_media_update happens, we should compare them with the new active lo
 
 is not implemented (but it is being called) but this seems to not cause problems. Need to check.
 
-1e) it seems ddd.js and dddd.js frequently crash
+1e) the scripts samples/mrcp_and_audio.js and samples/mrcp_and_audio_switching_order.js were frequently crashing at the same point (on pjmedia when writing RTP).
+This was solved by adding a z.sleep(1000) before call.terminate(). It seems it is caused by call termination being done too soon after reinvite.
+
 
 1f) after changes are done and confirmed to work, we should update the code to use pjmedia_sdp_session_cmp to check the active_local_sdp and active_remote_sdp (new fields in struct Call) to first check if there were media changes. if not, we can return from on_media_update without generating a media_update event as there were no changes. If there were changes we should check with pjmedia_sdp_media_cmp and only restart media endpoints for the ones that changed.
 

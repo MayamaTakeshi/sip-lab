@@ -5,6 +5,8 @@ var m = require('data-matching')
 var sip_msg = require('sip-matching')
 
 async function test() {
+    sip.set_log_level(9)
+
     //sip.set_log_level(6)
     sip.dtmf_aggregation_on(500)
 
@@ -21,7 +23,7 @@ async function test() {
     console.log("t1", t1)
     console.log("t2", t2)
 
-    oc = sip.call.create(t1.id, {from_uri: 'sip:alice@test.com', to_uri: `sip:bob@${t2.address}:${t2.port}`, delayed_media: true})
+    oc = sip.call.create(t1.id, {from_uri: 'sip:alice@test.com', to_uri: `sip:bob@${t2.address}:${t2.port}`, media: [{type: 'audio'}, {type: 'audio'}]})
 
     await z.wait([
         {
@@ -50,7 +52,7 @@ async function test() {
         sip_call_id: z.store.sip_call_id,
     }
 
-    sip.call.respond(ic.id, {code: 200, reason: 'OK'})
+    sip.call.respond(ic.id, {code: 200, reason: 'OK', media: [{type: 'audio'}, {type: 'audio'}]})
 
     await z.wait([
         {
@@ -72,110 +74,64 @@ async function test() {
             event: 'media_update',
             call_id: oc.id,
             status: 'ok',
+            media: [
+              {
+                type: 'audio',
+              },
+              {
+                type: 'audio',
+              }
+            ],
         },
         {
             event: 'media_update',
             call_id: ic.id,
             status: 'ok',
+            media: [
+              {
+                type: 'audio',
+              },
+              {
+                type: 'audio',
+              }
+            ],
         },
-
     ], 1000)
 
-    //await z.sleep(100)
-    sip.call.reinvite(oc.id, {hold: true, delayed_media: true})
+    sip.call.send_dtmf(oc.id, {digits: '1234', mode: 0})
+    sip.call.send_dtmf(ic.id, {digits: '4321', mode: 1})
 
     await z.wait([
         {
-            event: 'reinvite',
+            event: 'dtmf',
             call_id: ic.id,
-            msg: sip_msg({
-                $rb: m.absent,
-            }),
+            digits: '1234',
+            mode: 0,
+            media_id: 0
         },
         {
-            event: 'response',
+            event: 'dtmf',
             call_id: oc.id,
-            method: 'INVITE',
-            msg: sip_msg({
-                $rs: '100',
-            }),
-        },
-    ], 500)
-
-    //await z.sleep(100)
-    sip.call.respond(ic.id, {code: 200, reason: 'OK'})
-
-    await z.wait([
-        {
-            event: 'response',
-            call_id: oc.id,
-            method: 'INVITE',
-            msg: sip_msg({
-                $rs: '200',
-                $rr: 'OK',
-            }),
+            digits: '4321',
+            mode: 1,
+            media_id: 0
         },
         {
-            event: 'media_update',
-            call_id: oc.id,
-            status: 'ok',
-        },
-        {
-            event: 'media_update',
+            event: 'dtmf',
             call_id: ic.id,
-            status: 'ok',
+            digits: '1234',
+            mode: 0,
+            media_id: 1
         },
-
-    ], 500)
-
-    //await z.sleep(100)
-    sip.call.reinvite(ic.id, {hold: false, delayed_media: true})
-
-    await z.wait([
         {
-            event: 'reinvite',
+            event: 'dtmf',
             call_id: oc.id,
-            msg: sip_msg({
-                $rb: m.absent,
-            }),
+            digits: '4321',
+            mode: 1,
+            media_id: 1
         },
-        {
-            event: 'response',
-            call_id: ic.id,
-            method: 'INVITE',
-            msg: sip_msg({
-                $rs: '100',
-            }),
-        },
-    ], 500)
+    ], 1500)
 
-    //await z.sleep(100)
-    sip.call.respond(oc.id, {code: 200, reason: 'OK'})
-
-    await z.wait([
-        {
-            event: 'response',
-            call_id: ic.id,
-            method: 'INVITE',
-            msg: sip_msg({
-                $rs: '200',
-                $rr: 'OK',
-            }),
-        },
-        {
-            event: 'media_update',
-            call_id: oc.id,
-            status: 'ok',
-        },
-        {
-            event: 'media_update',
-            call_id: ic.id,
-            status: 'ok',
-        },
-
-    ], 500)
-
-    //await z.sleep(100)
     sip.call.terminate(oc.id)
 
     await z.wait([
@@ -202,6 +158,7 @@ async function test() {
 
     sip.stop()
 }
+
 
 test()
 .catch(e => {
