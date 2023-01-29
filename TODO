@@ -1,6 +1,8 @@
 TODO: 
 -------------------------
-when processing the on_media_update, we need to reorder the call->media based on the SDP, removing the inactive ones. This order is important because in the next item it will be possible to use parameter hold individually and we must have the proper order established so that the correct element can be acted upon.
+when processing the on_media_update, we need to reorder the call->media based on the SDP, removing the inactive ones. 
+Then we generate the media_update event with that order.
+This order is important because in the next item it will be possible to use parameter hold individually and we must have the proper order established so that the correct element can be acted upon.
 
 -------------------------
 need to allow hold parameter to each media independently (if parameter hold is absent on a media, the value of the parameter hold in the json options will be used (default is false).

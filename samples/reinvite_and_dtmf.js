@@ -5,7 +5,7 @@ var m = require('data-matching')
 var sip_msg = require('sip-matching')
 
 async function test() {
-    sip.set_log_level(9)
+    //sip.set_log_level(9)
 
     //sip.set_log_level(6)
     sip.dtmf_aggregation_on(500)
