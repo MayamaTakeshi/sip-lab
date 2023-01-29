@@ -3689,6 +3689,7 @@ bool is_media_in_active_media(MediaEndpoint *me, MediaEndpoint **active_media, u
 }
 
 void gen_media_json(char *dest, int len, Call *call, const pjmedia_sdp_session *local_sdp, const pjmedia_sdp_session *remote_sdp){
+    printf("gen_media_json call_id=%d media_count=%d\n", call->id, call->media_count);
     char *p = dest;
 
     p += sprintf(p, "[");
@@ -3889,7 +3890,7 @@ MediaEndpoint *find_media_endpt_by_sdp_media(Call *call, pjmedia_sdp_media *loca
                 in_use_chart[i] = true;
                 return me;
             }
-        } else if(pj_strcmp2(&local_media->desc.media, "mrcp") == 0) {
+        } else if(pj_strcmp2(&local_media->desc.media, "application") == 0) {
             if(ENDPOINT_TYPE_MRCP == me->type) {
                 in_use_chart[i] = true;
                 return me;
@@ -5303,7 +5304,9 @@ MediaEndpoint *find_media_by_json_descr(Call *call, Value &descr, bool in_use_ch
     int type_id = media_type_name_to_type_id(type_name);
 
     for(int i=0 ; i<call->media_count ; i++) {
+        if(in_use_chart[i]) continue;
         MediaEndpoint *me = call->media[i];
+
         if(me->type == type_id) {
             in_use_chart[i] = true;
             return me;
@@ -5317,8 +5320,8 @@ MediaEndpoint *find_media_endpt_by_json_descr(Call *call, Value &descr, bool in_
     const char *type = (const char*)descr["type"].GetString();
 
     for(int i=0 ; i<call->media_count ; i++) {
-        MediaEndpoint *me = call->media[i];
         if(in_use_chart[i]) continue;
+        MediaEndpoint *me = call->media[i];
 
         if(strcmp("audio", type) == 0) {
             if(ENDPOINT_TYPE_AUDIO == me->type) {

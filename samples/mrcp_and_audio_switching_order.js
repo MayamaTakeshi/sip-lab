@@ -103,6 +103,15 @@ async function test() {
             status: 'ok',
             media: [
               {
+                type: 'mrcp',
+                local: {
+                  port: 1000
+                },
+                remote: {
+                  port: 9
+                }
+              },
+              {
                 type: 'audio',
                 local: {
                   port: 10002,
@@ -111,15 +120,6 @@ async function test() {
                 remote: {
                   port: 10000,
                   mode: 'sendrecv'
-                }
-              },
-              {
-                type: 'mrcp',
-                local: {
-                  port: 1000
-                },
-                remote: {
-                  port: 9
                 }
               },
             ],
@@ -135,7 +135,7 @@ async function test() {
             call_id: ic.id,
             digits: '1234',
             mode: 0,
-            media_id: 0
+            media_id: 1
         },
         {
             event: 'dtmf',
