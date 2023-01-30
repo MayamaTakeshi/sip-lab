@@ -5,7 +5,7 @@ var m = require('data-matching')
 var sip_msg = require('sip-matching')
 
 async function test() {
-    //sip.set_log_level(6)
+    sip.set_log_level(6)
     sip.dtmf_aggregation_on(500)
 
     z.trap_events(sip.event_source, 'event', (evt) => {
@@ -71,6 +71,7 @@ async function test() {
     sip.call.terminate(oc.id)
 
     await z.wait([
+        /*
         {
             event: 'request',
             call_id: ic.id,
@@ -78,6 +79,8 @@ async function test() {
                 $rm: 'CANCEL',
             }),
         },
+        */
+        // The above is not reported anymore after extensive changes for #42
         {
             event: 'response',
             call_id: oc.id,

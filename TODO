@@ -40,4 +40,5 @@ on_media_update: when doing "Processing call->media", I forgot that we need to r
 update to use invite session's pools (https://docs.pjsip.org/en/latest/api/generated/pjsip/group/group__PJSIP__INV.html)
 
 -------------------------
+Need to add REFER (blind and consultative) samples.
 

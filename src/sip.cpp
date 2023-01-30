@@ -1907,6 +1907,7 @@ int pjw_call_respond(long call_id, const char *json)
 
     if(call->pending_request != PJSIP_INVITE_METHOD) {
         pjsip_transaction *tsx = pjsip_rdata_get_tsx(call->pending_rdata);
+        if(!tsx) goto out;
         assert(tsx);
 
         pjsip_tx_data *tdata;
@@ -2022,6 +2023,7 @@ out:
 //int pjw_call_terminate(long call_id, int code, const char *reason, const char *additional_headers)
 int pjw_call_terminate(long call_id, const char *json)
 {
+    addon_log(L_DBG, "call_terminate call_id=%d\n", call_id);
 	PJW_LOCK();
 	clear_error();
 
@@ -3020,7 +3022,6 @@ pj_status_t audio_endpoint_start_play_wav(Call *call, AudioEndpoint *ae, const c
 	}
 
 	if(!prepare_wav_player(call, ae, file)){
-		set_error("prepare_wav_player failed");
         return -1;
 	}
 }
@@ -4104,12 +4105,22 @@ static void on_state_changed( pjsip_inv_session *inv,
 	}
 	*/
 
+    printf("e->type=%d\n", e->type);
+
+    /*
+	pj_str_t *method_name = &rdata->msg_info.msg->line.req.method.name;
+	addon_log(L_DBG, "on_rx_request %.*s\n", method_name->slen, method_name->ptr);
+    */
+
+
 	if(g_shutting_down) return;
 
     Call *call = (Call*)inv->dlg->mod_data[mod_tester.id];
 
+    printf("inv->state=%d\n", inv->state);
+
 	if(PJSIP_INV_STATE_DISCONNECTED == inv->state) {
-		//addon_log(L_DBG, "call will terminate call=%x\n",call);
+		addon_log(L_DBG, "call will terminate call=%x\n",call);
 		pj_status_t status;
 
 		long call_id;
@@ -4176,17 +4187,18 @@ static void on_state_changed( pjsip_inv_session *inv,
             oss << "event=termination" << EVT_DATA_SEP << "call=" << call_id;
             dispatch_event(oss.str().c_str());
             */
-
-            char evt[2048];
-            int sip_msg_len = 0;
-            char *sip_msg = (char*)"";
-            if(e->type == PJSIP_EVENT_TSX_STATE) {
-                sip_msg_len = e->body.rx_msg.rdata->msg_info.len;
-                sip_msg = e->body.rx_msg.rdata->msg_info.msg_buf;
-            }
-            make_evt_call_ended(evt, sizeof(evt), call_id, sip_msg_len, sip_msg);
-            dispatch_event(evt);
         }
+
+        char evt[2048];
+        int sip_msg_len = 0;
+        char *sip_msg = (char*)"";
+        if(e->type == PJSIP_EVENT_TSX_STATE) {
+            sip_msg_len = e->body.rx_msg.rdata->msg_info.len;
+            sip_msg = e->body.rx_msg.rdata->msg_info.msg_buf;
+        }
+
+        make_evt_call_ended(evt, sizeof(evt), call_id, sip_msg_len, sip_msg);
+        dispatch_event(evt);
 	}
 }
 
@@ -4368,6 +4380,7 @@ pj_status_t process_invite(Call *call, pjsip_inv_session *inv, pjsip_rx_data *rd
 
 
 static pj_bool_t on_rx_request( pjsip_rx_data *rdata ){
+    // This is not called for CANCEL
     printf("on_rx_request\n");
 	char evt[2048];
 
@@ -5612,13 +5625,19 @@ bool prepare_wav_player(Call *c, AudioEndpoint *ae, const char *file) {
 	pjmedia_port *stream_port;
 	status = pjmedia_stream_get_port(ae->med_stream,
 					&stream_port);
-	if(status != PJ_SUCCESS) return false;
+	if(status != PJ_SUCCESS) {
+        set_error("pj_media_stream_get_port failed");    	
+        return false;
+    }
 
 	unsigned wav_ptime;
 	wav_ptime = PJMEDIA_PIA_SPF(&stream_port->info) * 1000 / PJMEDIA_PIA_SRATE(&stream_port->info);
 
 	status = pjmedia_port_destroy((pjmedia_port*)link);
-	if(status != PJ_SUCCESS) return false;
+	if(status != PJ_SUCCESS) {
+            set_error("pjmedia_port_destroy failed");
+            return false;
+    }
 
 	status = chainlink_wav_player_port_create(c->inv->pool,
 						file,
@@ -5626,7 +5645,10 @@ bool prepare_wav_player(Call *c, AudioEndpoint *ae, const char *file) {
 						0,
 						-1,
 						(pjmedia_port**)&ae->wav_player);
-	if(status != PJ_SUCCESS) return false;
+	if(status != PJ_SUCCESS) {
+        set_error("chainllink_wav_player_port_create failed");
+        return false;
+    }
 	
 	connect_media_ports(ae);
 	return true;
@@ -6126,6 +6148,12 @@ static void on_tsx_state_changed(pjsip_inv_session *inv,
 
     Call *call = (Call*)inv->dlg->mod_data[mod_tester.id];
 
+    if (call == NULL) {
+        return;
+    }
+
+    printf("call_id=%d\n", call->id);
+
     if (call->inv == NULL) {
         /* Shouldn't happen. It happens only when we don't terminate the
          * server subscription caused by REFER after the call has been
@@ -6157,8 +6185,10 @@ static void on_tsx_state_changed(pjsip_inv_session *inv,
             }
             call->pending_rdata = cloned_rdata;
 
+            /*
             addon_log(L_DBG, "call->inv->dlg=%d\n", call->inv->dlg);
             addon_log(L_DBG, "call->inv->dlg->ua-id=%d\n", pjsip_rdata_get_tsx(cloned_rdata)->mod_data[call->inv->dlg->ua->id]);
+            */
 
             make_evt_request(evt, sizeof(evt), "call", call->id, e->body.tsx_state.src.rdata->msg_info.len, e->body.tsx_state.src.rdata->msg_info.msg_buf);
             dispatch_event(evt);    

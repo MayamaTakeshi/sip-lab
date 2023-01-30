@@ -104,8 +104,8 @@ async function test() {
         },
     ], 1000)
 
-    sip.call.start_recording(oc.id, {file: './oc.wav'})
-    sip.call.start_recording(ic.id, {file: './ic.wav'})
+    sip.call.start_record_wav(oc.id, {file: './oc.wav'})
+    sip.call.start_record_wav(ic.id, {file: './ic.wav'})
 
     sip.call.send_dtmf(oc.id, {digits: '1234', mode: 0})
     sip.call.send_dtmf(ic.id, {digits: '4321', mode: 1})
@@ -207,7 +207,7 @@ async function test() {
             msg: sip_msg({
                 $rs: '200',
                 $rr: 'OK',
-                $rb: '!{_}a=sendonly',
+                $rb: '!{_}a=sendrecv',
             }),
         },
         {
@@ -223,7 +223,7 @@ async function test() {
     ], 500)
 
     sip.call.send_dtmf(oc.id, {digits: '1234', mode: 0})
-    sip.call.send_dtmf(ic.id, {digits: '4321', mode: 1}) // this will not generate event 'dtmf' as the call is on hold
+    sip.call.send_dtmf(ic.id, {digits: '4321', mode: 1})
 
     await z.wait([
         {
@@ -231,6 +231,12 @@ async function test() {
             call_id: ic.id,
             digits: '1234',
             mode: 0,
+        },
+        {
+            event: 'dtmf',
+            call_id: oc.id,
+            digits: '4321',
+            mode: 1,
         },
     ], 2000)
 
@@ -320,19 +326,19 @@ async function test() {
         },
     ], 2000)
 
-    sip.call.start_playing(oc.id, {file: 'samples/artifacts/yosemitesam.wav'})
-    sip.call.start_playing(ic.id, {file: 'samples/artifacts/yosemitesam.wav'})
+    sip.call.start_play_wav(oc.id, {file: 'samples/artifacts/yosemitesam.wav'})
+    sip.call.start_play_wav(ic.id, {file: 'samples/artifacts/yosemitesam.wav'})
 
     await z.sleep(2000)
 
-    stat1 = sip.call.get_stream_stat(oc.id)
-    stat2 = sip.call.get_stream_stat(ic.id)
+    stat1 = sip.call.get_stream_stat(oc.id, {media_id: 0})
+    stat2 = sip.call.get_stream_stat(ic.id, {media_id: 0})
 
     console.log("stat1", stat1)
     console.log("stat2", stat2)
 
-    sip.call.stop_recording(oc.id)
-    sip.call.stop_recording(ic.id)
+    sip.call.stop_record_wav(oc.id)
+    sip.call.stop_record_wav(ic.id)
 
 
     sip.call.terminate(oc.id)

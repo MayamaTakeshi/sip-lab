@@ -447,7 +447,7 @@ Napi::Value call_stop_record_wav(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
 
   if (info.Length() != 2) {
-    Napi::Error::New(env, "Wrong number of arguments. Expected: call_id").ThrowAsJavaScriptException();
+    Napi::Error::New(env, "Wrong number of arguments. Expected: call_id, params").ThrowAsJavaScriptException();
     return env.Null();
   }
 
@@ -477,7 +477,7 @@ Napi::Value call_stop_play_wav(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
 
   if (info.Length() != 2) {
-    Napi::Error::New(env, "Wrong number of arguments. Expected: call_id").ThrowAsJavaScriptException();
+    Napi::Error::New(env, "Wrong number of arguments. Expected: call_id, params").ThrowAsJavaScriptException();
     return env.Null();
   }
 
