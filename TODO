@@ -1,8 +1,4 @@
 TODO: 
--------------------------
-when processing the on_media_update, we need to reorder the call->media based on the SDP, removing the inactive ones. 
-Then we generate the media_update event with that order.
-This order is important because in the next item it will be possible to use parameter hold individually and we must have the proper order established so that the correct element can be acted upon.
 
 -------------------------
 need to allow hold parameter to each media independently (if parameter hold is absent on a media, the value of the parameter hold in the json options will be used (default is false).
@@ -12,28 +8,12 @@ we need to clone the active local/remote media for each MediaEndpoint of type au
 Then when on_media_update happens, we should compare them with the new active local/remote media and if they differ, we should restart the media endpoint.
 
 -------------------------
-the function:
-    MediaEndpoint *find_media_by_json_descr(Call *call, Value &descr, bool in_use_chart[]) {
-        // TODO
-        return NULL;
-    }
-
-is not implemented (but it is being called) but this seems to not cause problems. Need to check.
-
--------------------------
 the scripts samples/mrcp_and_audio.js and samples/mrcp_and_audio_switching_order.js were frequently crashing at the same point (on pjmedia when writing RTP).
 This was solved by adding a z.sleep(1000) before call.terminate(). It seems it is caused by call termination being done too soon after reinvite.
 We should check if this problem existed before (it might be a problem we added with the new multiple_media implementation).
 
 -------------------------
-
-after changes are done and confirmed to work, we should update the code to use pjmedia_sdp_session_cmp to check the active_local_sdp and active_remote_sdp (new fields in struct Call) to first check if there were media changes. if not, we can return from on_media_update without generating a media_update event as there were no changes. If there were changes we should check with pjmedia_sdp_media_cmp and only restart media endpoints for the ones that changed.
-
--------------------------
 write tests for:
-  - media position change. Ex:
-      INVITE: [{type: 'mcrp'},{type: 'audio'}]
-      200 OK: [{type: 'audio'},{type: 'mrcp'}]
   - removal of media
       INVITE: [{type: 'mcrp'},{type: 'audio'}]
       200 OK: [{type: 'audio'}]

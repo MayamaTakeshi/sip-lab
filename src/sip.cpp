@@ -395,6 +395,22 @@ struct Call {
     pjmedia_sdp_session *active_remote_sdp;
 };
 
+/*
+#define DIALOG_TYPE_CALL 1
+#define DIALOG_TYPE_SUBSCRIPTION 2
+#define DIALOG_TYPE_SUBSCRIBER 3
+
+struct Dialog {
+    int type;
+
+    union {
+        Call *call;
+        Subscription *subscription;
+        //Subscriber *subscriber;
+    } d;
+};
+*/
+
 bool init_media_ports(Call *c, AudioEndpoint *ae, unsigned sampling_rate, unsigned channel_count, unsigned samples_per_frame, unsigned bits_per_sample); 
 void connect_media_ports(AudioEndpoint *ae);
 
@@ -3911,7 +3927,7 @@ static void on_media_update( pjsip_inv_session *inv, pj_status_t status){
 
 	if(g_shutting_down) return;
 
-	Call *call = (Call*)inv->dlg->mod_data[mod_tester.id];
+    Call *call = (Call*)inv->dlg->mod_data[mod_tester.id];
 
 	long call_id;
 	if( !g_call_ids.get_id((long)call, call_id) ){
@@ -4090,8 +4106,9 @@ static void on_state_changed( pjsip_inv_session *inv,
 
 	if(g_shutting_down) return;
 
+    Call *call = (Call*)inv->dlg->mod_data[mod_tester.id];
+
 	if(PJSIP_INV_STATE_DISCONNECTED == inv->state) {
-		Call *call = (Call*)inv->dlg->mod_data[mod_tester.id];
 		//addon_log(L_DBG, "call will terminate call=%x\n",call);
 		pj_status_t status;
 
@@ -4222,7 +4239,7 @@ static void process_subscribe_request(pjsip_rx_data *rdata) {
 	pjsip_tx_data *tdata;
 
 	memset(&user_cb, 0, sizeof(user_cb));
-	user_cb.on_evsub_state = server_on_evsub_state;
+	//user_cb.on_evsub_state = server_on_evsub_state;
 	user_cb.on_rx_refresh = server_on_evsub_rx_refresh;
 
 	build_local_contact(local_contact, rdata->tp_info.transport, "sip-tester");
@@ -4364,18 +4381,21 @@ static pj_bool_t on_rx_request( pjsip_rx_data *rdata ){
 	pjsip_dialog *dlg = pjsip_rdata_get_dlg(rdata);
     //pjsip_dialog *dlg = pjsip_ua_find_dialog(&rdata->msg_info.cid->id, &rdata->msg_info.to->tag, &rdata->msg_info.from->tag, PJ_FALSE);
 
-	addon_log(L_DBG, "dlg=%x\n", dlg);
-    for(int i=0 ; i<PJSIP_MAX_MODULE ; i++) {
-        printf("%d %d\n", i, rdata->endpt_info.mod_data[i]);
-    }
-
-	
 	if(dlg){
+        printf("method inside dlg\n");
         if(rdata->msg_info.msg->line.req.method.id == PJSIP_ACK_METHOD) {
             return PJ_TRUE;
         }
 
-        Call *call = (Call*)dlg->mod_data[mod_tester.id];
+        void *user_data = (Call*)dlg->mod_data[mod_tester.id];
+
+        long call_id;
+        if( !g_call_ids.get_id((long)user_data, call_id) ){
+            // not CAll. It might be subscriptoin
+            return PJ_TRUE;
+        }
+
+        Call *call = (Call*)user_data;
 
         if(rdata->msg_info.msg->line.req.method.id != PJSIP_INVITE_METHOD) {
             pjsip_rx_data *cloned_rdata = 0;
@@ -4384,6 +4404,7 @@ static pj_bool_t on_rx_request( pjsip_rx_data *rdata ){
                 pjsip_endpt_respond_stateless(g_sip_endpt, rdata, 500, &reason, NULL, NULL);
                 return PJ_TRUE;
             }
+
             call->pending_rdata = cloned_rdata;
 
             for(int i=0 ; i<PJSIP_MAX_MODULE ; i++) {
@@ -4391,9 +4412,10 @@ static pj_bool_t on_rx_request( pjsip_rx_data *rdata ){
             }
 
             make_evt_request(evt, sizeof(evt), "call", call->id, rdata->msg_info.len, rdata->msg_info.msg_buf);
+            call->pending_request = rdata->msg_info.msg->line.req.method.id;
+
             dispatch_event(evt);  
 
-            call->pending_request = rdata->msg_info.msg->line.req.method.id;
             /*
             if(pj_strcmp2(&rdata->msg_info.msg->line.req.method.name, "REFER") != 0){
                 return PJ_TRUE;
@@ -4403,18 +4425,6 @@ static pj_bool_t on_rx_request( pjsip_rx_data *rdata ){
             return PJ_TRUE;
         }
 	}
-
-	//Just for future reference. The code below prints all headers in the request
-	/*
-	pjsip_hdr *hdr;
-	pjsip_hdr *hdr_list = &rdata->msg_info.msg->hdr;
-	for(hdr=hdr_list->next; hdr!=hdr_list ; hdr=hdr->next){
-		char buf[1000];
-		int len = pjsip_hdr_print_on(hdr, buf, sizeof(buf));
-		buf[len] = 0;
-		addon_log(L_DBG, "Header: %s\n", buf);
-	}
-	*/
 
 	if(dlg && (pj_strcmp2(&rdata->msg_info.msg->line.req.method.name, "REFER") == 0)) {
 		//Refer within dialog
@@ -4439,7 +4449,6 @@ static pj_bool_t on_rx_request( pjsip_rx_data *rdata ){
 		return PJ_TRUE;
 	}
 
-    /*
 	if(rdata->msg_info.msg->line.req.method.id != PJSIP_INVITE_METHOD)
 	{
 		reason = pj_str((char*)"OK");
@@ -4478,7 +4487,6 @@ static pj_bool_t on_rx_request( pjsip_rx_data *rdata ){
 		dispatch_event(evt);
 		return PJ_TRUE;
 	}
-    */
 
 	unsigned options = 0;
 	status = pjsip_inv_verify_request(rdata, &options, NULL, NULL, g_sip_endpt, NULL);
@@ -4532,7 +4540,8 @@ static pj_bool_t on_rx_request( pjsip_rx_data *rdata ){
 		return PJ_TRUE;
 	}
 
-	inv->dlg->mod_data[mod_tester.id] = call;
+    // TODO: check if this is really necessary as we are calling pjsip_dlg_add_usage subsequently
+	inv->dlg->mod_data[mod_tester.id] = call; 
 
 	//Without this, on_rx_response will not be called
 	status = pjsip_dlg_add_usage(dlg, &mod_tester, call);
@@ -4609,8 +4618,12 @@ static pj_bool_t on_rx_response( pjsip_rx_data *rdata ){
 		return PJ_TRUE;
 	}
 
+    Call *call = (Call*)dlg->mod_data[mod_tester.id];
+
 	if(strcmp(method, "SUBSCRIBE") == 0) { 
-		Subscription *subscription = (Subscription*)dlg->mod_data[mod_tester.id]; 
+        return PJ_TRUE;
+        /*
+		Subscription *subscription = dialog->d.subscription; 
 		int code = rdata->msg_info.msg->line.status.code;
 		if(!subscription->initialized && code >= 200 && code <= 299) {
 			//Status code 2XX will cause pjsip_evsub to be called. 
@@ -4623,10 +4636,6 @@ static pj_bool_t on_rx_response( pjsip_rx_data *rdata ){
 
 		if(subscription) {
 			if( !g_subscription_ids.get_id((long)subscription, subscription_id) ){
-				/*
-				oss.seekp(0);
-				oss << "event=internal_error" << EVT_DATA_SEP << "details=Failed to get subscription_id";
-				*/
 
 				make_evt_internal_error(evt, sizeof(evt), "failed to get subscription_id");
 				dispatch_event(evt); 
@@ -4642,10 +4651,9 @@ static pj_bool_t on_rx_response( pjsip_rx_data *rdata ){
 		dispatch_event(evt);
 
 		return PJ_TRUE;
+        */
 	}
 
-
-	Call *call = (Call*)dlg->mod_data[mod_tester.id]; 
 	long call_id;
 
 	if(call) {
@@ -4691,7 +4699,8 @@ static void on_rx_offer2(pjsip_inv_session *inv, struct pjsip_inv_on_rx_offer_cb
 
 	char evt[2048];
 
-	Call *call = (Call*)inv->dlg->mod_data[mod_tester.id];
+    Call *call = (Call*)inv->dlg->mod_data[mod_tester.id];
+
     printf("on_rx_offer2 call_id=%d\n", call->id);
 
 	pj_status_t status;
@@ -4737,7 +4746,7 @@ static pj_status_t on_rx_reinvite(pjsip_inv_session *inv, const pjmedia_sdp_sess
 
 	char evt[2048];
 
-	Call *call = (Call*)inv->dlg->mod_data[mod_tester.id];
+    Call *call = (Call*)inv->dlg->mod_data[mod_tester.id];
     printf("on_rx_reinvite call_id=%d\n", call->id);
 
     pj_status_t status = process_invite(call, inv, rdata);
@@ -5748,6 +5757,7 @@ out:
 }
 
 static void client_on_evsub_state( pjsip_evsub *sub, pjsip_event *event) {
+    printf("client_on_ev_sub_state\n");
 	if(g_shutting_down) return;
 
 	char evt[2048];
@@ -5801,6 +5811,7 @@ static void client_on_evsub_state( pjsip_evsub *sub, pjsip_event *event) {
 	
 		//When subscription is terminated
 		if(pjsip_evsub_get_state(sub) == PJSIP_EVSUB_STATE_TERMINATED) {
+            printf("PJSIP_EVSUB_STATE_TERMINATED\n");
 			pjsip_evsub_set_mod_data(sub, mod_tester.id, NULL);
 		}		
 
@@ -5833,6 +5844,7 @@ static void client_on_evsub_state( pjsip_evsub *sub, pjsip_event *event) {
 		dispatch_event(evt);
 
 		if(pjsip_evsub_get_state(sub) == PJSIP_EVSUB_STATE_TERMINATED) {
+            printf("PJSIP_EVSUB_STATE_TERMINATED\n");
 			pjsip_evsub_set_mod_data(sub, mod_tester.id, NULL);
 		}
 		
@@ -5844,6 +5856,7 @@ static void client_on_evsub_state( pjsip_evsub *sub, pjsip_event *event) {
 
 static void server_on_evsub_state( pjsip_evsub *sub, pjsip_event *event)
 {
+    printf("server_on_evsub_state\n");
 	Subscriber *s;
 	//pj_status_t status;
 	//pjsip_tx_data *tdata;
@@ -5872,6 +5885,7 @@ static void server_on_evsub_state( pjsip_evsub *sub, pjsip_event *event)
 	*/
 
 	if (pjsip_evsub_get_state(sub) == PJSIP_EVSUB_STATE_TERMINATED) {
+        printf("PJSIP_EVSUB_STATE_TERMINATED\n");
 		pjsip_evsub_set_mod_data(sub, mod_tester.id, NULL);
 	}
 }
@@ -5879,6 +5893,7 @@ static void server_on_evsub_state( pjsip_evsub *sub, pjsip_event *event)
 //Called when incoming SUBSCRIBE (or any method taht establishes a subscription like REFER) is received
 static void server_on_evsub_rx_refresh(pjsip_evsub *sub, pjsip_rx_data *rdata, int *p_st_code, pj_str_t **p_st_text, pjsip_hdr *res_hdr, pjsip_msg_body **p_body)
 {
+	addon_log(L_DBG, "server_on_evsub_rx_refresh\n");
 	char evt[2048];
 
 	pjw_errorstring[0] = 0;
@@ -5891,13 +5906,9 @@ static void server_on_evsub_rx_refresh(pjsip_evsub *sub, pjsip_rx_data *rdata, i
 	//Transport *t;
 
 	if(g_shutting_down) return;
-	addon_log(L_DBG, "server_on_evsub_rx_refresh\n");
 
 	s = (Subscriber*)pjsip_evsub_get_mod_data(sub, mod_tester.id);
-	if(!s) {
-		set_error("pjsip_evsub_get_mod_data failed");	
-		goto out;
-	}
+    assert(s);
 
 	make_evt_request(evt, sizeof(evt), "subscriber", s->id, rdata->msg_info.len, rdata->msg_info.msg_buf);
 	dispatch_event(evt);
@@ -5959,6 +5970,7 @@ void process_in_dialog_refer(pjsip_dialog *dlg, pjsip_rx_data *rdata)
     pjsip_evsub *sub;
 
     Call *call = (Call*)dlg->mod_data[mod_tester.id]; 
+
     long call_id;
     if( !g_call_ids.get_id((long)call, call_id) ){
 	addon_log(L_DBG, "process_in_dialog_refer: Failed to get call_id. Event will not be notified.\n");	
@@ -6082,22 +6094,22 @@ void process_in_dialog_refer(pjsip_dialog *dlg, pjsip_rx_data *rdata)
     }
 
     if (sub) {
-    	//If the REFER caused subscription of the referer...
-	Subscriber *subscriber = (Subscriber*)pj_pool_zalloc(dlg->pool, sizeof(Subscriber));
-	subscriber->evsub = sub;
-	subscriber->created_by_refer = true;
-	
-	long subscriber_id;
-	if(!g_subscriber_ids.add((long)subscriber, subscriber_id)) {
-		make_evt_internal_error(evt, sizeof(evt), "Failed to allocate id for subscriber");
-		dispatch_event(evt);
-		return;
-	}
-	subscriber->id = subscriber_id;
-	pjsip_evsub_set_mod_data(sub, mod_tester.id, subscriber);
+            //If the REFER caused subscription of the referer...
+        Subscriber *subscriber = (Subscriber*)pj_pool_zalloc(dlg->pool, sizeof(Subscriber));
+        subscriber->evsub = sub;
+        subscriber->created_by_refer = true;
 
-	make_evt_request(evt, sizeof(evt), "subscriber", subscriber_id, rdata->msg_info.len, rdata->msg_info.msg_buf);	
-	dispatch_event(evt);    
+        long subscriber_id;
+        if(!g_subscriber_ids.add((long)subscriber, subscriber_id)) {
+            make_evt_internal_error(evt, sizeof(evt), "Failed to allocate id for subscriber");
+            dispatch_event(evt);
+            return;
+        }
+        subscriber->id = subscriber_id;
+        pjsip_evsub_set_mod_data(sub, mod_tester.id, subscriber);
+
+        make_evt_request(evt, sizeof(evt), "subscriber", subscriber_id, rdata->msg_info.len, rdata->msg_info.msg_buf);	
+        dispatch_event(evt);    
     }
 }
 
@@ -6110,23 +6122,17 @@ static void on_tsx_state_changed(pjsip_inv_session *inv,
 
     char evt[2048];
 
-    Call *call;
-
     if(!inv->dlg) return;
 
-    call = (Call*) inv->dlg->mod_data[mod_tester.id];
-
-    if (call == NULL) {
-	return;
-    }
+    Call *call = (Call*)inv->dlg->mod_data[mod_tester.id];
 
     if (call->inv == NULL) {
-	/* Shouldn't happen. It happens only when we don't terminate the
-	 * server subscription caused by REFER after the call has been
-	 * transfered (and this call has been disconnected), and we
-	 * receive another REFER for this call.
-	 */
-	return;
+        /* Shouldn't happen. It happens only when we don't terminate the
+         * server subscription caused by REFER after the call has been
+         * transfered (and this call has been disconnected), and we
+         * receive another REFER for this call.
+         */
+        return;
     }
 
     //ostringstream oss;
@@ -6362,7 +6368,6 @@ bool notify(pjsip_evsub *evsub, const char *content_type, const char *body, int 
 	return true;
 }
 
-//int pjw_notify(long subscriber_id, const char *content_type, const char *body, int subscription_state, const char *reason, const char *additional_headers)
 int pjw_notify(long subscriber_id, const char *json)
 {
 	PJW_LOCK();
@@ -6868,7 +6873,7 @@ int pjw_subscription_create(long transport_id, const char *json, long *out_subsc
 	}
 
 	subscription = (Subscription*)pj_pool_zalloc(dlg->pool, sizeof(Subscription));
-	
+
 	if(!g_subscription_ids.add((long)subscription, subscription_id)){
 		status = pjsip_dlg_terminate(dlg); //ToDo:
 		set_error("Failed to allocate id");
@@ -6879,7 +6884,10 @@ int pjw_subscription_create(long transport_id, const char *json, long *out_subsc
 	subscription->dlg = dlg;
 	strcpy(subscription->event, event);
 	strcpy(subscription->accept, accept);
+
 	pjsip_evsub_set_mod_data(evsub, mod_tester.id, subscription);
+
+    printf("subscription=%x\n", subscription);
 	
 	*out_subscription_id = subscription_id;
 out:
@@ -7003,18 +7011,7 @@ out:
 void process_in_dialog_subscribe(pjsip_dialog *dlg, pjsip_rx_data *rdata) {
 	char evt[2048];
 
-	Subscriber *s;
-	//Transport *t;
-
-	s = (Subscriber*)dlg->mod_data[mod_tester.id];
-	if(!s) {
-		make_evt_internal_error(evt, sizeof(evt), "no subscriber in mod_data");
-		dispatch_event(evt);
-		return;
-	}
-
-	make_evt_request(evt, sizeof(evt), "subscriber", s->id, rdata->msg_info.len, rdata->msg_info.msg_buf);
-	dispatch_event(evt);
+    return;
 }
 
 int pjw_call_gen_string_replaces(long call_id, char *out_replaces) {

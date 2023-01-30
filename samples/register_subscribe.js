@@ -6,7 +6,7 @@ var sip_msg = require('sip-matching')
 var assert = require('assert')
 
 async function test() {
-    //sip.set_log_level(6)
+    sip.set_log_level(9)
     sip.dtmf_aggregation_on(500)
 
     z.trap_events(sip.event_source, 'event', (evt) => {
@@ -125,8 +125,31 @@ async function test() {
         },
     ], 1000)
 
-    // Subscription-State expires will be computed by pjsip. It might not be the exact value of sub_expires due to latence so we give 2 seconds of tolerance
+    // Subscription-State expires will be computed by pjsip. It might not be the exact value of sub_expires due to latency so we give 2 seconds of tolerance
     assert(z.store.sub_expires > (sub_expires - 2))
+
+    sip.subscriber.notify(subscriber_id, {
+        content_type: 'application/dialog-info+xml',
+        body: '<dialog>bla bla bla</dialog>', 
+        subscription_state: 4,
+        reason: 'normal',
+    })
+
+    await z.wait([
+        {
+            event: 'request',
+            subscription_id: s1,
+            msg: sip_msg({
+                $rm: 'NOTIFY',
+                hdr_event: 'dialog',
+                hdr_subscription_state: 'active;expires=!{expires}',
+                hdr_content_type: 'application/dialog-info+xml',
+                $rb: '<dialog>bla bla bla</dialog>',
+            }),
+        },
+    ], 1000)
+    
+    await z.sleep(100)
 
     sip.account.unregister(a1)
 
