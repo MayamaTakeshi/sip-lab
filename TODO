@@ -49,11 +49,5 @@ update to use invite session's pools (https://docs.pjsip.org/en/latest/api/gener
 -------------------------
 Need to add REFER (blind and consultative) samples.
 
--------------------------
-Consider allowing to specify media in a simplified way like this:
-  "media": ["audio", "mrcp"]
-So, the items can be strings and they can be individually expanded to their default values:
-  "media": [{"type": "audio"}, {"type": "mrcp"}]
-
 
 

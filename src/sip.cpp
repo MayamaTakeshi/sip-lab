@@ -5462,15 +5462,56 @@ bool process_media(Call *call, pjsip_dialog *dlg, Document &document, bool hold)
 
     call->local_hold = hold;
 
-    if(!document.HasMember("media")) {
-        Document::AllocatorType& allocator = document.GetAllocator();
+    Document::AllocatorType& allocator = document.GetAllocator();
 
+    if(!document.HasMember("media")) {
         Value audio(kObjectType);
         audio.AddMember("type", Value().SetString("audio"), allocator);
 
         Value media(kArrayType);
         media.PushBack(audio, allocator);
         document.AddMember("media", media, allocator);
+    } else {
+        if(document["media"].IsString()) {
+            Value media(kArrayType);
+
+            std::string str = document["media"].GetString();
+
+            std::stringstream ss(str);
+            std::string item;
+            while (std::getline(ss, item, ',')) {
+                Value mediaItem(kObjectType);
+                mediaItem.AddMember("type", Value().SetString(item.c_str(), item.length(), allocator), allocator);
+
+                media.PushBack(mediaItem, allocator);
+            }
+
+            document["media"] = media;
+        } else if(document["media"].IsArray()) {
+            Value media = document["media"].GetArray();
+            assert(media.Size() <= PJMEDIA_MAX_SDP_MEDIA);
+
+            for (Value::ValueIterator itr = media.Begin(); itr != media.End(); ++itr) {
+                if(itr->IsString()) {
+                    const char* type = itr->GetString();
+                    int len = itr->GetStringLength();
+                    Value mediaItem(kObjectType);
+                    mediaItem.AddMember("type", Value().SetString(type, len, allocator), allocator);
+
+                    *itr = mediaItem;
+                } else if(itr->IsObject()) {
+                    printf("itr is object\n");
+                    // do nothing
+                } else {
+                    set_error("Param media item must be either object or string");
+                    return false;
+                }
+            }
+            document["media"] = media;
+        } else {
+            set_error("Param media must be either array or string");
+            return false;
+        }
     }
 
     Value media = document["media"].GetArray();
