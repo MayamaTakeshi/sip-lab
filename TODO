@@ -1,6 +1,16 @@
 TODO: 
 
 -------------------------
+Prepare new
+
+struct Request {
+  inv;
+  is_uac;
+}
+
+This will keep pending out-of-dialog requests (like REGISTER, OPTIONS, MESSAGE) that can be answered individually (407, 200, etc) by request_id:
+
+-------------------------
 need to allow hold parameter to each media independently (if parameter hold is absent on a media, the value of the parameter hold in the json options will be used (default is false).
 
 -------------------------
@@ -34,11 +44,16 @@ set proper call to PJW_LOCK/PJW_UNLOCK in on_dtmf and on_inband_dtmf
 if digit buffers have no more space generate an error for the channel so that it doesn't get unnoticed.
 
 -------------------------
-on_media_update: when doing "Processing call->media", I forgot that we need to rearrange the array to remove blank spots in the middle of it (it is not enough to remove elements)
-
--------------------------
 update to use invite session's pools (https://docs.pjsip.org/en/latest/api/generated/pjsip/group/group__PJSIP__INV.html)
 
 -------------------------
 Need to add REFER (blind and consultative) samples.
+
+-------------------------
+Consider allowing to specify media in a simplified way like this:
+  "media": ["audio", "mrcp"]
+So, the items can be strings and they can be individually expanded to their default values:
+  "media": [{"type": "audio"}, {"type": "mrcp"}]
+
+
 

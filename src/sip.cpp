@@ -3115,6 +3115,7 @@ out:
 }
 
 pj_status_t call_stop_audio_endpoints_op(Call *call, audio_endpoint_stop_op_t op) {
+    addon_log(L_DBG, "call_stop_audio_endpoints_op media_count=%d\n", call->media_count);
     pj_status_t status;
     for(int i=0 ; i<call->media_count ; i++) {
         MediaEndpoint *me = (MediaEndpoint*)call->media[i];
@@ -3127,6 +3128,8 @@ pj_status_t call_stop_audio_endpoints_op(Call *call, audio_endpoint_stop_op_t op
             return status;
         }
     }
+
+    return PJ_SUCCESS;
 }
 
 pj_status_t audio_endpoint_stop_play_wav(Call *call, AudioEndpoint *ae) {
