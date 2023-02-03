@@ -44,7 +44,8 @@ if digit buffers have no more space, generate an error for the channel so that i
 update to use invite session's pools (https://docs.pjsip.org/en/latest/api/generated/pjsip/group/group__PJSIP__INV.html)
 
 -------------------------
-Need to add REFER (blind and consultative) samples.
+Currently when sending a body on a request/response, we are required to pass extra params ct_type and ct_subtype that pjsip will use to compose the Content-Type header.
+This will be unusual for the script writers so it is better to expect the header Content-Type to be present when body is passed and and obtain ct_type/ct_subtype from it internally.
 
 
 
