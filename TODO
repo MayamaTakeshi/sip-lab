@@ -45,7 +45,10 @@ update to use invite session's pools (https://docs.pjsip.org/en/latest/api/gener
 
 -------------------------
 Currently when sending a body on a request/response, we are required to pass extra params ct_type and ct_subtype that pjsip will use to compose the Content-Type header.
-This will be unusual for the script writers so it is better to expect the header Content-Type to be present when body is passed and and obtain ct_type/ct_subtype from it internally.
+This will be unusual for the script writers so it is better to expect the header Content-Type to be present when body is passed and obtain ct_type/ct_subtype from it internally to be passed to pjsip.
 
+-------------------------
+Disable pjw_call_refer. 
+Instead REFER will be done by pjw_call_send_request as any other in-dialog request aside from BYE and CANCEL.
 
 
