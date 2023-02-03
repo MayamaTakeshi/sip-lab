@@ -1,6 +1,9 @@
 TODO: 
 
 -------------------------
+Update tests to check for hold/unhold (a:sendrecv, a:sendonly, a:recvonly etc)
+
+-------------------------
 Prepare new
 
 struct Request {
@@ -23,12 +26,6 @@ This was solved by adding a z.sleep(1000) before call.terminate(). It seems it i
 We should check if this problem existed before (it might be a problem we added with the new multiple_media implementation).
 
 -------------------------
-write tests for:
-  - removal of media
-      INVITE: [{type: 'mcrp'},{type: 'audio'}]
-      200 OK: [{type: 'audio'}]
-
--------------------------
 if 'media: []' or 'media: null' it means there is no media, so do not generate a body (content-length: 0)
 
 -------------------------
@@ -41,7 +38,7 @@ review processing of SUBSCRIBE (SUBSCRIBE is a dialog-creating method, so we sho
 set proper call to PJW_LOCK/PJW_UNLOCK in on_dtmf and on_inband_dtmf
 
 -------------------------
-if digit buffers have no more space generate an error for the channel so that it doesn't get unnoticed.
+if digit buffers have no more space, generate an error for the channel so that it doesn't get unnoticed.
 
 -------------------------
 update to use invite session's pools (https://docs.pjsip.org/en/latest/api/generated/pjsip/group/group__PJSIP__INV.html)
