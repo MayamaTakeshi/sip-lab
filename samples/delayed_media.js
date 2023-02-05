@@ -124,7 +124,7 @@ async function test() {
     ], 1500)
 
     //await z.sleep(100)
-    sip.call.reinvite(oc.id, {hold: true, delayed_media: true})
+    sip.call.reinvite(oc.id, {delayed_media: true})
 
     await z.wait([
         {
@@ -207,7 +207,6 @@ async function test() {
             mode: 0,
             media_id: 0
         },
-        /*
         {
             event: 'dtmf',
             call_id: oc.id,
@@ -215,11 +214,10 @@ async function test() {
             mode: 1,
             media_id: 0
         },
-        */
     ], 1500)
 
     //await z.sleep(100)
-    sip.call.reinvite(ic.id, {hold: false, delayed_media: true})
+    sip.call.reinvite(ic.id, {delayed_media: true})
 
     await z.wait([
         {

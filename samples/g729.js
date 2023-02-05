@@ -86,7 +86,7 @@ async function test() {
         },
     ], 1000)
 
-    sip.call.reinvite(oc.id, {hold: true})
+    sip.call.reinvite(oc.id)
 
     await z.wait([
         {
@@ -113,7 +113,7 @@ async function test() {
             msg: sip_msg({
                 $rs: '200',
                 $rr: 'OK',
-                $rb: '!{_}a=recvonly',
+                $rb: '!{_}a=sendrecv',
             }),
         },
         {

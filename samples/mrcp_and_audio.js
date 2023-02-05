@@ -148,7 +148,7 @@ async function test() {
 
     for(i=0 ;i< 1; i++) {
         //await z.sleep(100)
-        sip.call.reinvite(oc.id, {hold: true, media: [{type: 'mrcp'}, {type: 'audio'}]})
+        sip.call.reinvite(oc.id, {media: [{type: 'mrcp'}, {type: 'audio'}]})
 
         await z.wait([
             {
@@ -175,7 +175,7 @@ async function test() {
                 msg: sip_msg({
                     $rs: '200',
                     $rr: 'OK',
-                    $rb: '!{_}a=recvonly',
+                    $rb: '!{_}a=sendrecv',
                 }),
             },
             {
@@ -191,7 +191,7 @@ async function test() {
         ], 500)
 
         //await z.sleep(100)
-        sip.call.reinvite(ic.id, {hold: false, media: [{type: 'mrcp'}, {type: 'audio'}]})
+        sip.call.reinvite(ic.id, {media: [{type: 'mrcp'}, {type: 'audio'}]})
 
         await z.wait([
             {

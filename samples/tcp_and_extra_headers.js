@@ -126,7 +126,7 @@ async function test() {
     ], 2000)
 
 
-    sip.call.reinvite(oc.id, { hold: true })
+    sip.call.reinvite(oc.id)
 
     await z.wait([
         {
@@ -153,7 +153,7 @@ async function test() {
             msg: sip_msg({
                 $rs: '200',
                 $rr: 'OK',
-                $rb: '!{_}a=recvonly',
+                $rb: '!{_}a=sendrecv',
             }),
         },
         {
@@ -169,7 +169,7 @@ async function test() {
     ], 500)
 
     sip.call.send_dtmf(oc.id, {digits: '1234', mode: 0})
-    sip.call.send_dtmf(ic.id, {digits: '4321', mode: 0}) // this will not generate event 'dtmf' as the call is on hold
+    sip.call.send_dtmf(ic.id, {digits: '4321', mode: 1})
 
     await z.wait([
         {
@@ -178,6 +178,13 @@ async function test() {
             digits: '1234',
             mode: 0,
         },
+        {
+            event: 'dtmf',
+            call_id: oc.id,
+            digits: '4321',
+            mode: 1,
+        },
+
     ], 2000)
 
     sip.call.reinvite(ic.id)

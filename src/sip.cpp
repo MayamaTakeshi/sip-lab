@@ -377,9 +377,6 @@ struct Call {
 
 	Transport *transport;
 
-	pj_bool_t local_hold;
-	pj_bool_t remote_hold;
-
 	bool outgoing;
 
 	pjsip_evsub *xfer_sub; // Xfer server subscription, if this call was triggered by xfer.
@@ -611,9 +608,8 @@ bool is_media_active(Call *c, MediaEndpoint *me);
 void close_media_endpoint(MediaEndpoint *me);
 
 void close_media(Call *c);
-//bool create_local_sdp(Call *c, pjsip_dialog *dlg, Document &document, pjmedia_sdp_session **p_sdp, bool hold);
 
-bool process_media(Call *c, pjsip_dialog *dlg, Document &document, bool hold);
+bool process_media(Call *c, pjsip_dialog *dlg, Document &document);
 
 typedef pj_status_t (*audio_endpoint_stop_op_t) (Call *call, AudioEndpoint *ae);
 
@@ -1943,7 +1939,7 @@ int pjw_call_respond(long call_id, const char *json)
     }
 
     if(183 == code || (code >= 200 && code < 300)) {
-        if(!process_media(call, call->inv->dlg, document, false)) {
+        if(!process_media(call, call->inv->dlg, document)) {
             goto out;
         }
 
@@ -2446,7 +2442,7 @@ int call_create(Transport *t, unsigned flags, pjsip_dialog *dlg, const char *pro
 
     pjmedia_sdp_session *sdp = 0;
 
-    if(!process_media(call, dlg, document, false)) {
+    if(!process_media(call, dlg, document)) {
         close_media(call);
         return -1; 
     }
@@ -2689,7 +2685,6 @@ int pjw_call_reinvite(long call_id, const char *json) {
 	PJW_LOCK();
 	clear_error();
 
-    bool hold = false;
     unsigned flags = 0;
 
 	long val;
@@ -2707,7 +2702,7 @@ int pjw_call_reinvite(long call_id, const char *json) {
 
     Document document;
     
-    const char *valid_params[] = {"hold", "delayed_media", "media", ""};
+    const char *valid_params[] = {"delayed_media", "media", ""};
 
 	if(!g_call_ids.get(call_id, val)){
 	    set_error("Invalid call_id");
@@ -2725,10 +2720,6 @@ int pjw_call_reinvite(long call_id, const char *json) {
         goto out;
     }
 
-    if(json_get_bool_param(document, "hold", true, &hold) <= 0) {
-        goto out;
-    }
-
     if(document.HasMember("delayed_media")) {
         if(!document["delayed_media"].IsBool()) {
             set_error("Parameter delayed_media must be a boolean");
@@ -2740,9 +2731,7 @@ int pjw_call_reinvite(long call_id, const char *json) {
         }
     }
 
-    call->local_hold = hold;
-
-    if(!process_media(call, inv->dlg, document, hold)) {
+    if(!process_media(call, inv->dlg, document)) {
         goto out;
     }
 
@@ -5372,7 +5361,7 @@ MediaEndpoint *find_media_endpt_by_json_descr(Call *call, Value &descr, bool in_
     return NULL;
 }
 
-pjmedia_sdp_media * create_sdp_media(MediaEndpoint *me, pjsip_dialog *dlg, bool local_hold, bool remote_hold) {
+pjmedia_sdp_media * create_sdp_media(MediaEndpoint *me, pjsip_dialog *dlg) {
     pj_status_t status;
     pjmedia_sdp_media *media;
 
@@ -5395,18 +5384,8 @@ pjmedia_sdp_media * create_sdp_media(MediaEndpoint *me, pjsip_dialog *dlg, bool 
 
         pjmedia_sdp_attr *attr;
 
-        // TODO: probably it is better to use inv-> instead of dlg->pool
-        if(local_hold){
-            if(remote_hold) {
-                attr = pjmedia_sdp_attr_create(dlg->pool, "inactive", NULL);
-            } else {
-                attr = pjmedia_sdp_attr_create(dlg->pool, "sendonly", NULL);
-            }
-        } else if(remote_hold) {
-            attr = pjmedia_sdp_attr_create(dlg->pool, "recvonly", NULL);
-        } else {
-            attr = pjmedia_sdp_attr_create(dlg->pool, "sendrecv", NULL);
-        }
+        // TODO: need to compute proper mode attribute
+        attr = pjmedia_sdp_attr_create(dlg->pool, "sendrecv", NULL);
 
         pjmedia_sdp_media_add_attr(media, attr);
 
@@ -5436,7 +5415,7 @@ pjmedia_sdp_media * create_sdp_media(MediaEndpoint *me, pjsip_dialog *dlg, bool 
     return media;
 }
 
-bool process_media(Call *call, pjsip_dialog *dlg, Document &document, bool hold) {
+bool process_media(Call *call, pjsip_dialog *dlg, Document &document) {
     printf("process_media call_id=%d\n", call->id);
   
     bool in_use_chart[PJMEDIA_MAX_SDP_MEDIA] = {false};
@@ -5459,8 +5438,6 @@ bool process_media(Call *call, pjsip_dialog *dlg, Document &document, bool hold)
     }
     
     Transport *t = call->transport;
-
-    call->local_hold = hold;
 
     Document::AllocatorType& allocator = document.GetAllocator();
 
@@ -5531,7 +5508,7 @@ bool process_media(Call *call, pjsip_dialog *dlg, Document &document, bool hold)
             in_use_chart[call->media_count-1] = true; // added elements must be set as in use
         }
 
-        pjmedia_sdp_media *media = create_sdp_media(me, dlg, call->local_hold, call->remote_hold);
+        pjmedia_sdp_media *media = create_sdp_media(me, dlg);
         if(!media) return false;
 
         sdp->media[sdp->media_count++] = media;

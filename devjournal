@@ -2054,4 +2054,22 @@ Regarding attribute sendrecv, sendonly, recvonly, inactive:
 
 https://www.ietf.org/rfc/rfc3264.txt
 
+
+I think we should first work to have parameter mode (replacing hold) working on each AudioEndpoint (later we will allow a general mode parameter in the json options that could be overwritten by each AudioEndpoint)
+
+Draft:
+  - add 
+      pjmedia_sdp_session *remote_sdp;
+    to struct Call
+
+  - update on_rx_offer2 to:
+    - save call->remote_sdp
+    - in case of delayed_media, compute the answer mode attribute (sendrecv, sendonly, recvonly, inactive) based on call->local_sdp and call->remote_sdp and send it.
+      obs: since call->local_sdp was precomputed, we need to remove old mode attribute if necessary before adding the new attribute value
+
+  - update call_respond to compute the answer (sendrecv, sendonly, recvonly, inactive) based on call->local_sdp and call->remote_sdp and send it.
+
+  - update calls to process_media (remove parameter hold and let each AudioEndpoint to generate the correct attribute based on local and remote sdp media)
+
+
 -----------------------------------------------------
