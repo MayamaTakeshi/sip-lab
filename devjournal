@@ -1984,5 +1984,74 @@ would match any m0a0, m0a1, m0a2, m1a0, m1a1, m1a2 etc.
 Obs: if media setup fails we would raise an error event for the channel.
 This would make scripts easier to write.
 
------------------------------------------------------
+UPDATE: thinking again, we will create mrcp-matching that will convert the body to an object. Then we will use jq to select items to match.
 
+Research:
+
+takeshi@takeshi-desktop:~/tmp$ cat b.json | jq .
+{
+  "media": [
+    {
+      "type": "audio",
+      "attrs": [
+        "rtpmap:1234",
+        "sendrecv"
+      ]
+    },
+    {
+      "type": "video",
+      "attrs": [
+        "rtpmap:4321",
+      ]
+    }
+  ]
+}
+
+takeshi@takeshi-desktop:~/tmp$ cat b.json | jq '.media[] | select(.type=="audio").attrs'
+[
+  "rtpmap:1234",
+  "sendrecv"
+]
+
+takeshi@takeshi-desktop:~/tmp$ cat b.json | jq '.media[] | select(.type=="audio").attrs | any(. == "sendonly")'
+false
+
+takeshi@takeshi-desktop:~/tmp$ cat b.json | jq '.media[] | select(.type=="audio").attrs | any(. == "sendrecv")'
+true
+
+
+So to check hold/unhold the key for element selection would need to be specified like this:
+
+var expected = {
+    '.media[] | select(.type=="audio").attrs | any(. == "sendrecv")': true,
+}
+
+But although this would be very exact, for cases where there is just one media, we can simply match against the body of the sip message:
+
+var expected = {
+    msg: sip_msg({
+        $rb: '!{_}a:sendrecv'
+    }),
+}
+
+-----------------------------------------------------
+2023/02/05 takeshi
+
+Regarding attribute sendrecv, sendonly, recvonly, inactive:
+
+
+   If a stream is offered as sendonly, the corresponding stream MUST be
+   marked as recvonly or inactive in the answer.  If a media stream is
+   listed as recvonly in the offer, the answer MUST be marked as
+   sendonly or inactive in the answer.  If an offered media stream is
+   listed as sendrecv (or if there is no direction attribute at the
+   media or session level, in which case the stream is sendrecv by
+   default), the corresponding stream in the answer MAY be marked as
+   sendonly, recvonly, sendrecv, or inactive.  If an offered media
+   stream is listed as inactive, it MUST be marked as inactive in the
+   answer.
+
+
+https://www.ietf.org/rfc/rfc3264.txt
+
+-----------------------------------------------------

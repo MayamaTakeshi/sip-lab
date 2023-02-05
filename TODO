@@ -1,7 +1,26 @@
 TODO: 
 
 -------------------------
-Update tests to check for hold/unhold (a:sendrecv, a:sendonly, a:recvonly etc)
+Replace
+  hold: true|false 
+with
+  mode: sendrecv|sendonly|recvonly|inactive
+and correct code to properly set the media attribute value based on the local mode.
+
+Ref:
+
+   If a stream is offered as sendonly, the corresponding stream MUST be
+   marked as recvonly or inactive in the answer.  If a media stream is
+   listed as recvonly in the offer, the answer MUST be marked as
+   sendonly or inactive in the answer.  If an offered media stream is
+   listed as sendrecv (or if there is no direction attribute at the
+   media or session level, in which case the stream is sendrecv by
+   default), the corresponding stream in the answer MAY be marked as
+   sendonly, recvonly, sendrecv, or inactive.  If an offered media
+   stream is listed as inactive, it MUST be marked as inactive in the
+   answer.
+
+https://www.ietf.org/rfc/rfc3264.txt
 
 -------------------------
 Prepare new

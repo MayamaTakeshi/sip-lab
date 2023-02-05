@@ -72,14 +72,56 @@ async function test() {
             event: 'media_update',
             call_id: oc.id,
             status: 'ok',
+            media: [
+              {
+                type: 'audio',
+                local: {
+                  mode: 'sendrecv'
+                },
+                remote: {
+                  mode: 'sendrecv'
+                },
+              }
+            ],
         },
         {
             event: 'media_update',
             call_id: ic.id,
             status: 'ok',
+            media: [
+              {
+                type: 'audio',
+                local: {
+                  mode: 'sendrecv'
+                },
+                remote: {
+                  mode: 'sendrecv'
+                },
+              }
+            ],
         },
 
     ], 1000)
+
+    sip.call.send_dtmf(oc.id, {digits: '1234', mode: 0})
+    sip.call.send_dtmf(ic.id, {digits: '4321', mode: 1})
+
+    await z.wait([
+        {
+            event: 'dtmf',
+            call_id: ic.id,
+            digits: '1234',
+            mode: 0,
+            media_id: 0
+        },
+        {
+            event: 'dtmf',
+            call_id: oc.id,
+            digits: '4321',
+            mode: 1,
+            media_id: 0
+        },
+    ], 1500)
 
     //await z.sleep(100)
     sip.call.reinvite(oc.id, {hold: true, delayed_media: true})
@@ -119,14 +161,62 @@ async function test() {
             event: 'media_update',
             call_id: oc.id,
             status: 'ok',
+            media: [
+              {
+                type: 'audio',
+                /*
+                local: {
+                  mode: 'recvonly'
+                },
+                remote: {
+                  mode: 'sendrecv'
+                },
+                */
+              }
+            ],
         },
         {
             event: 'media_update',
             call_id: ic.id,
             status: 'ok',
+            media: [
+              {
+                type: 'audio',
+                /*
+                local: {
+                  mode: 'sendrecv'
+                },
+                remote: {
+                  mode: 'recvonly'
+                },
+                */
+              }
+            ],
         },
 
     ], 500)
+
+    sip.call.send_dtmf(oc.id, {digits: '1234', mode: 0})
+    sip.call.send_dtmf(ic.id, {digits: '4321', mode: 1})
+
+    await z.wait([
+        {
+            event: 'dtmf',
+            call_id: ic.id,
+            digits: '1234',
+            mode: 0,
+            media_id: 0
+        },
+        /*
+        {
+            event: 'dtmf',
+            call_id: oc.id,
+            digits: '4321',
+            mode: 1,
+            media_id: 0
+        },
+        */
+    ], 1500)
 
     //await z.sleep(100)
     sip.call.reinvite(ic.id, {hold: false, delayed_media: true})
@@ -174,6 +264,26 @@ async function test() {
         },
 
     ], 500)
+
+    sip.call.send_dtmf(oc.id, {digits: '1234', mode: 0})
+    sip.call.send_dtmf(ic.id, {digits: '4321', mode: 1})
+
+    await z.wait([
+        {
+            event: 'dtmf',
+            call_id: ic.id,
+            digits: '1234',
+            mode: 0,
+            media_id: 0
+        },
+        {
+            event: 'dtmf',
+            call_id: oc.id,
+            digits: '4321',
+            mode: 1,
+            media_id: 0
+        },
+    ], 1500)
 
     //await z.sleep(100)
     sip.call.terminate(oc.id)
