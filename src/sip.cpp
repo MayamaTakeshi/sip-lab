@@ -387,6 +387,7 @@ struct Call {
     bool inv_initial_answer_required;
 
     pjmedia_sdp_session *local_sdp;
+    pjmedia_sdp_session *remote_sdp;
 
     pjmedia_sdp_session *active_local_sdp;
     pjmedia_sdp_session *active_remote_sdp;
@@ -1943,9 +1944,12 @@ int pjw_call_respond(long call_id, const char *json)
             goto out;
         }
 
+        //process_media above set call->local_sdp based on document.
+
         if(call->pending_rdata && call->pending_rdata->msg_info.msg->body && call->pending_rdata->msg_info.msg->body->len) {
             status = pjsip_inv_set_sdp_answer(call->inv, call->local_sdp);
         } else {
+            // delayed media. we need to sned the offer
             status = pjmedia_sdp_neg_create_w_local_offer(call->inv->dlg->pool,
                 call->local_sdp,
                 &call->inv->neg
@@ -4715,6 +4719,7 @@ static void on_rx_offer2(pjsip_inv_session *inv, struct pjsip_inv_on_rx_offer_cb
     pjmedia_sdp_neg_state state = pjmedia_sdp_neg_get_state(inv->neg);
     printf("neg state: %d\n", state);
     if(PJMEDIA_SDP_NEG_STATE_NULL == state || PJMEDIA_SDP_NEG_STATE_DONE == state ) {
+        call->remote_sdp = (pjmedia_sdp_session*)param->offer;
         status = pjmedia_sdp_neg_set_remote_offer(inv->dlg->pool,
             inv->neg,
             param->offer

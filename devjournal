@@ -2058,18 +2058,29 @@ https://www.ietf.org/rfc/rfc3264.txt
 I think we should first work to have parameter mode (replacing hold) working on each AudioEndpoint (later we will allow a general mode parameter in the json options that could be overwritten by each AudioEndpoint)
 
 Draft:
+  - remove all code related to hold/unhold (DONE)
+
   - add 
       pjmedia_sdp_session *remote_sdp;
-    to struct Call
+    to struct Call (DONE)
 
   - update on_rx_offer2 to:
-    - save call->remote_sdp
+    - save call->remote_sdp (DONE)
     - in case of delayed_media, compute the answer mode attribute (sendrecv, sendonly, recvonly, inactive) based on call->local_sdp and call->remote_sdp and send it.
       obs: since call->local_sdp was precomputed, we need to remove old mode attribute if necessary before adding the new attribute value
 
-  - update call_respond to compute the answer (sendrecv, sendonly, recvonly, inactive) based on call->local_sdp and call->remote_sdp and send it.
+  - write function gen_mode_for_answer to compute the value of the mode for answer based on mode in offer.
 
-  - update calls to process_media (remove parameter hold and let each AudioEndpoint to generate the correct attribute based on local and remote sdp media)
+  - write function 
+      int get_media_stream_mode(pjmedia_sdp_media *media) 
+    to get the mode of a stream
 
+  - update calls to process_media (remove parameter hold and let each AudioEndpoint to generate the correct attribute based on local and remote sdp media):
+    - update each AudioEndpoint in call->media according the value of media mode in the document
+    - for each media:
+       - if call->remote_media is not set, send the mode attr according to local media endpoints
+       - else find the remote pjmedia_sdp_media and use get_media_stream_mode() and gen_mode_for_answer
+
+However, let's check if pjmedia does adjustment of mode by itself based on what each side sets (if so, we will not need to handle mode in answer, just set it as specified in the document)
 
 -----------------------------------------------------
