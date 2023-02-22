@@ -1,28 +1,6 @@
 TODO: 
 
 -------------------------
-Replace
-  hold: true|false 
-with
-  mode: sendrecv|sendonly|recvonly|inactive
-and correct code to properly set the media attribute value based on the local mode.
-
-Ref:
-
-   If a stream is offered as sendonly, the corresponding stream MUST be
-   marked as recvonly or inactive in the answer.  If a media stream is
-   listed as recvonly in the offer, the answer MUST be marked as
-   sendonly or inactive in the answer.  If an offered media stream is
-   listed as sendrecv (or if there is no direction attribute at the
-   media or session level, in which case the stream is sendrecv by
-   default), the corresponding stream in the answer MAY be marked as
-   sendonly, recvonly, sendrecv, or inactive.  If an offered media
-   stream is listed as inactive, it MUST be marked as inactive in the
-   answer.
-
-https://www.ietf.org/rfc/rfc3264.txt
-
--------------------------
 Prepare new
 
 struct Request {
@@ -33,10 +11,9 @@ struct Request {
 This will keep pending out-of-dialog requests (like REGISTER, OPTIONS, MESSAGE) that can be answered individually (407, 200, etc) by request_id:
 
 -------------------------
-need to allow hold parameter to each media independently (if parameter hold is absent on a media, the value of the parameter hold in the json options will be used (default is false).
-
--------------------------
 we need to clone the active local/remote media for each MediaEndpoint of type audio/video using inv->pool_prov.
+(we might use this also to update AudioEndpoint mode)
+
 Then when on_media_update happens, we should compare them with the new active local/remote media and if they differ, we should restart the media endpoint.
 
 -------------------------

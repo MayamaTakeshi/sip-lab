@@ -2084,3 +2084,42 @@ Draft:
 However, let's check if pjmedia does adjustment of mode by itself based on what each side sets (if so, we will not need to handle mode in answer, just set it as specified in the document)
 
 -----------------------------------------------------
+2023/02/22 takeshi:
+
+How hold is signaled in SIP:
+
+According to RFC 6337 a user can hold calls by sending a new SDP offer in an established session (Re-INVITE on active call), with an SDP payload of a=sendonly for each media stream the user want’s to hold.
+
+The SIP Switch / PBX / UAS replies with an updated SDP where each media stream’s SDP contains a=recvonly.
+
+To retrieve the call another SIP re-invite is sent by the UAC, this time setting the media attribute back to sendrecv
+
+
+https://nickvsnetworking.com/sip-hold-with-rfc6337/
+
+-------------------------
+2023/02/22 takeshi:
+
+We replaced
+  hold: true|false 
+with
+  mode: sendrecv|sendonly|recvonly|inactive
+and corrected code to properly set the media attribute value based on the local mode.
+
+Ref:
+
+   If a stream is offered as sendonly, the corresponding stream MUST be
+   marked as recvonly or inactive in the answer.  If a media stream is
+   listed as recvonly in the offer, the answer MUST be marked as
+   sendonly or inactive in the answer.  If an offered media stream is
+   listed as sendrecv (or if there is no direction attribute at the
+   media or session level, in which case the stream is sendrecv by
+   default), the corresponding stream in the answer MAY be marked as
+   sendonly, recvonly, sendrecv, or inactive.  If an offered media
+   stream is listed as inactive, it MUST be marked as inactive in the
+   answer.
+
+https://www.ietf.org/rfc/rfc3264.txt
+
+The mode can be set at the root of the JSON document or can be set individually per media that supports streaming (currently only the ones of type=audio).
+

@@ -64,12 +64,6 @@ IdManager g_dialog_ids(IDS_MAX);
 #define DEFAULT_ILBC_MODE	(30)
 #define DEFAULT_CODEC_QUALITY	(5)
 
-#define UNKNOWN  0 
-#define SENDRECV 1
-#define SENDONLY 2
-#define RECVONLY 3
-#define INACTIVE 4
-
 static pjsip_endpoint *g_sip_endpt;
 static pj_caching_pool cp;
 static pj_pool_t *g_pool;
@@ -335,6 +329,8 @@ struct AudioEndpoint {
 	char DigitBuffers[2][MAXDIGITS + 1];
 	int DigitBufferLength[2];
 	int last_digit_timestamp[2];
+
+    pj_str_t mode;
 };
 
 struct VideoEndpoint {
@@ -763,32 +759,22 @@ void dispatch_event(const char * evt)
 	g_events.push_back(evt);
 }
 
-static char *get_media_mode_str(int mode) {
-	if(mode == SENDRECV) return (char*)"sendrecv";
-	if(mode == SENDONLY) return (char*)"sendonly";
-	if(mode == RECVONLY) return (char*)"recvonly";
-	if(mode == INACTIVE) return (char*)"inactive";
-	if(mode == UNKNOWN) return (char*)"unknown";
-    return (char*)"unexpected";
-}
-
-static int get_media_mode(pjmedia_sdp_attr **attrs, int count) {
+const char* get_media_mode(pjmedia_sdp_attr **attrs, int count) {
         int i;
         for(i=0 ; i<count ; ++i) {
                 pjmedia_sdp_attr *a = attrs[i];
                 if(pj_strcmp2(&a->name, "sendrecv")==0) {
-                        return SENDRECV;
+                        return "sendrecv";
                 } else if(pj_strcmp2(&a->name, "sendonly")==0) {
-                        return SENDONLY;
+                        return "sendonly";
                 } else if(pj_strcmp2(&a->name, "recvonly")==0) {
-                        return RECVONLY;
+                        return "recvonly";
 				} else if(pj_strcmp2(&a->name, "inactive")==0) {
-                        return INACTIVE;
+                        return "inactive";
 				}
         }
-        return UNKNOWN;
+        return "unknown";
 }
-
 
 
 // Adapted from
@@ -2706,7 +2692,7 @@ int pjw_call_reinvite(long call_id, const char *json) {
 
     Document document;
     
-    const char *valid_params[] = {"delayed_media", "media", ""};
+    const char *valid_params[] = {"delayed_media", "media", "mode", ""};
 
 	if(!g_call_ids.get(call_id, val)){
 	    set_error("Invalid call_id");
@@ -3722,12 +3708,9 @@ void gen_media_json(char *dest, int len, Call *call, const pjmedia_sdp_session *
         case ENDPOINT_TYPE_AUDIO: {
             AudioEndpoint *ae = (AudioEndpoint*)me->endpoint.audio;
 
-            int local_media_mode = get_media_mode(local_media->attr, local_media->attr_count); 
-            int remote_media_mode = get_media_mode(remote_media->attr, remote_media->attr_count); 
+            const char *local_mode = get_media_mode(local_media->attr, local_media->attr_count); 
+            const char *remote_mode = get_media_mode(remote_media->attr, remote_media->attr_count); 
 
-            char *local_mode = get_media_mode_str(local_media_mode);
-            char *remote_mode = get_media_mode_str(remote_media_mode);
-            
             pjmedia_sdp_conn *local_conn = local_sdp->conn;
             pjmedia_sdp_conn *remote_conn = remote_sdp->conn;
 
@@ -5245,7 +5228,27 @@ void close_media_transport(pjmedia_transport *med_transport) {
 	}
 }
 
-bool create_media_endpoint(Call *call, Value &descr, pjsip_dialog *dlg, char *address, MediaEndpoint **out) {
+
+bool set_streaming_mode(pj_str_t *mode, pj_pool_t *pool, Document &document, Value &descr){
+    if(descr.HasMember("mode")) {
+        if(!descr["mode"].IsString()) {
+            set_error("set_streaming_mode failed. Media param mode must be string");
+            return false;
+        }
+        pj_strdup2(pool, mode, descr["mode"].GetString());
+    } else if(document.HasMember("mode")) {
+        if(!document["mode"].IsString()) {
+            set_error("set_streaming_mode failed. Document param mode must be string");
+            return false;
+        }
+        pj_strdup2(pool, mode, document["mode"].GetString());
+    } else {
+        pj_strdup2(pool, mode, "sendrecv");
+    }
+    return true;
+}
+
+bool create_media_endpoint(Call *call, Document &document, Value &descr, pjsip_dialog *dlg, char *address, MediaEndpoint **out) {
     printf("create_media_endpoint call_id=%d\n", call->id); 
     MediaEndpoint *med_endpt = (MediaEndpoint*)pj_pool_zalloc(dlg->pool, sizeof(MediaEndpoint));
     if(!med_endpt) {
@@ -5275,6 +5278,10 @@ bool create_media_endpoint(Call *call, Value &descr, pjsip_dialog *dlg, char *ad
         pj_strdup2(dlg->pool, &med_endpt->transport, "RTP/AVP");
         med_endpt->port = allocated_port;
         med_endpt->endpoint.audio = audio_endpt;
+
+        if(!set_streaming_mode(&audio_endpt->mode, dlg->pool, document, descr)) {
+            return false;
+        }
     } else if(strcmp("mrcp", type) == 0) {
         MrcpEndpoint *mrcp_endpt = (MrcpEndpoint*)pj_pool_zalloc(dlg->pool, sizeof(MrcpEndpoint));
         int allocated_port;
@@ -5298,6 +5305,16 @@ bool create_media_endpoint(Call *call, Value &descr, pjsip_dialog *dlg, char *ad
     *out = med_endpt;
     printf("create_media_endpoint call_id=%d type=%d\n", call->id, med_endpt->type); 
 
+    return true;
+}
+
+bool update_media_endpoint_streaming_mode(MediaEndpoint *me, pj_pool_t *pool, Document &document, Value &descr) {
+    if(ENDPOINT_TYPE_AUDIO == me->type) {
+        AudioEndpoint *ae = me->endpoint.audio;
+        if(!set_streaming_mode(&ae->mode, pool, document, descr)) {
+            return false;
+        }
+    }
     return true;
 }
 
@@ -5390,7 +5407,9 @@ pjmedia_sdp_media * create_sdp_media(MediaEndpoint *me, pjsip_dialog *dlg) {
         pjmedia_sdp_attr *attr;
 
         // TODO: need to compute proper mode attribute
-        attr = pjmedia_sdp_attr_create(dlg->pool, "sendrecv", NULL);
+        char mode[1024];
+        sprintf(mode, "%.*s", audio->mode.slen, audio->mode.ptr);
+        attr = pjmedia_sdp_attr_create(dlg->pool, mode, NULL);
 
         pjmedia_sdp_media_add_attr(media, attr);
 
@@ -5505,9 +5524,12 @@ bool process_media(Call *call, pjsip_dialog *dlg, Document &document) {
         MediaEndpoint *me = find_media_by_json_descr(call, descr, in_use_chart);
         if(me) {
             addon_log(L_DBG, "i=%d media found\n", i);
+            if(!update_media_endpoint_streaming_mode(me, dlg->pool, document, descr)) {
+                return false;
+            }
         } else {
             addon_log(L_DBG, "i=%d media not found\n", i);
-            if(!create_media_endpoint(call, descr, dlg, t->address, &me)) return false;
+            if(!create_media_endpoint(call, document, descr, dlg, t->address, &me)) return false;
             addon_log(L_DBG, "i=%d media created %x\n", i, me);
             call->media[call->media_count++] = me;
             in_use_chart[call->media_count-1] = true; // added elements must be set as in use
