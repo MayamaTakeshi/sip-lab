@@ -123,7 +123,7 @@ async function test() {
             mode: 1,
             media_id: 1
         },
-    ], 1500)
+    ], 2000)
 
     sip.call.reinvite(oc.id, {media: "audio,audio"})
 
@@ -459,7 +459,7 @@ async function test() {
             mode: 1,
             media_id: 1
         },
-    ], 1500)
+    ], 2000)
 
     sip.call.terminate(oc.id)
 
