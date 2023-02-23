@@ -367,6 +367,7 @@ struct MediaEndpoint {
 };
 
 struct Request {
+	int id;
     pjsip_rx_data *pending_rdata;
     bool is_uac;
 };
@@ -2093,6 +2094,20 @@ out:
 	return 0;
 }
 
+
+void request_callback(void *token, pjsip_event *event) {
+    addon_log(L_DBG, "request_callback\n");
+
+    Request *request = (Request*)token;
+
+	pjsip_rx_data *rdata = event->body.tsx_state.src.rdata;
+	pj_str_t mname = rdata->msg_info.cseq->method.name;
+
+	char evt[2048];
+	make_evt_response(evt, sizeof(evt), "request", request->id, mname.slen, mname.ptr, rdata->msg_info.len, rdata->msg_info.msg_buf);
+	dispatch_event(evt);
+}
+
 int pjw_request_create(long t_id, const char *json, long *out_request_id, char *out_sip_call_id)
 {
 	PJW_LOCK();
@@ -2200,20 +2215,21 @@ int pjw_request_create(long t_id, const char *json, long *out_request_id, char *
         goto out;
 	}
 
-    status = pjsip_endpt_send_request(g_sip_endpt, tdata, -1, NULL, NULL);
+    request = (Request*)pj_pool_zalloc(tdata->pool, sizeof(Request));
+    request->is_uac = true;
+
+    status = pjsip_endpt_send_request(g_sip_endpt, tdata, -1, (void*)request, request_callback);
     if (status != PJ_SUCCESS) {
         set_error("pjsip_endpt_send_request failed");
         goto out;
     }
-
-    request = (Request*)pj_pool_zalloc(tdata->pool, sizeof(Request));
-    request->is_uac = true;
 
     if(!g_request_ids.add((long)request, request_id)){
         set_error("Failed to allocate id");
         goto out;
     }
 
+    request->id = request_id;
 out:
 	PJW_UNLOCK();
 	if(pjw_errorstring[0]){
@@ -4696,6 +4712,7 @@ static pj_bool_t on_rx_request( pjsip_rx_data *rdata ){
             addon_log(L_DBG, "Failed to allocate request_id. Event will not be notified\n");
             return PJ_TRUE;
         }
+        request->id = request_id;
 
         char tag[64];
         build_transport_tag_from_pjsip_transport(tag, t);
