@@ -2128,3 +2128,27 @@ The mode can be set at the root of the JSON document or can be set individually 
 
 We created struct Request to permit to respond to non-dialog SIP requests (like REGISTER, OPTIONS, MESSAGE, INFO).
 
+-------------------------
+2023/02/23 takeshi:
+
+There was an issue with notify being sent to itself by UAC (should have been sent by the UAS to the UAC):
+
+              127.0.0.1:5090                127.0.0.1:5092  │Via: SIP/2.0/UDP 127.0.0.1:5090;rport;branch=z9hG4bKPjadf79a44-6914-4025-b1b9-f277aac2d4fd                                                    
+          ──────────┬─────────          ──────────┬─────────│Max-Forwards: 70                                                                                                                              
+  14:07:23.386208   │          SUBSCRIBE          │         │From: <sip:user1@test1.com>;tag=e7aa8818-1f78-4905-8b1b-009b63ec7e9e                                                                          
+        +0.048537   │ ──────────────────────────> │         │To: <sip:user1@test1.com>                                                                                                                     
+  14:07:23.434745   │           200 OK            │         │Contact: <sip:user1@127.0.0.1:5090>                                                                                                           
+        +0.000157   │ <────────────────────────── │         │Call-ID: c596520a-2f8c-4efd-8dec-70348b125920                                                                                                 
+  14:07:23.434902   │─┐ NOTIFY                    │         │CSeq: 25548 SUBSCRIBE                                                                                                                         
+        +0.050352   │<┘                           │         │Route: <sip:127.0.0.1:5092;lr>                                                                                                                
+  14:07:23.485254   │─┐ 200 OK                    │         │Event: dialog                                                                                                                                 
+        +0.054625   │<┘                           │         │Expires: 120                                                                                                                                  
+  14:07:23.539879   │─┐ NOTIFY                    │         │Supported: replaces, 100rel                                                                                                                   
+        +0.046769   │<┘                           │         │Accept: application/dialog-info+xml                                                                                                           
+  14:07:23.586648   │─┐ 200 OK                    │         │Allow-Events: refer, dialog                                                                                                                   
+                    │<┘                           │         │Content-Length:  0                                                                                                                            
+                    │                             │         │                                                                                                                                              
+                    │                             │         │         
+
+This was happening because we forgot to call dlg_set_transport() when processing the SUBSCRIBE request.
+

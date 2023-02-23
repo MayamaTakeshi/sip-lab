@@ -4485,6 +4485,7 @@ static void process_subscribe_request(pjsip_rx_data *rdata) {
 	long subscriber_id;
 	char local_contact[1000];
 	pjsip_tx_data *tdata;
+	pjsip_transport *t = rdata->tp_info.transport;
 
 	memset(&user_cb, 0, sizeof(user_cb));
 	//user_cb.on_evsub_state = server_on_evsub_state;
@@ -4525,6 +4526,13 @@ static void process_subscribe_request(pjsip_rx_data *rdata) {
 	subscriber->dlg = dlg;
 
 	pjsip_evsub_set_mod_data(evsub, mod_tester.id, subscriber);
+
+	status = dlg_set_transport(t, dlg);
+	if(!status) {
+		make_evt_internal_error(evt, sizeof(evt), "dlg_set_transport failed");
+		dispatch_event(evt);
+        goto out;
+	}
 
 	status = pjsip_evsub_accept(evsub, rdata, 200, NULL);
 	if(status != PJ_SUCCESS) {
