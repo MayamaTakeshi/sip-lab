@@ -2152,3 +2152,11 @@ There was an issue with notify being sent to itself by UAC (should have been sen
 
 This was happening because we forgot to call dlg_set_transport() when processing the SUBSCRIBE request.
 
+-------------------------
+2023/02/23 takeshi:
+
+pjw_call_refer was disabled.
+
+Instead REFER will be done by pjw_call_send_request as any other in-dialog request aside from BYE and CANCEL.
+
+

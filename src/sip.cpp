@@ -2172,7 +2172,7 @@ int pjw_request_create(long t_id, const char *json, long *out_request_id, char *
     } else if(strcmp(method, "MESSAGE") == 0) {
         m = &message_method; 
     } else {
-        set_error("Invalid method");
+        set_error("Unsupported method");
         goto out;
     }
 
@@ -3032,7 +3032,6 @@ out:
 }
 
 //To send INFO and other requests inside dialog
-//int pjw_call_send_request(long call_id, const char *method_name, const char *additional_headers, const char *body, const char *ct_type, const char *ct_subtype)
 int pjw_call_send_request(long call_id, const char *json)
 {
 	PJW_LOCK();
@@ -4859,7 +4858,7 @@ static pj_bool_t on_rx_request( pjsip_rx_data *rdata ){
 }
 
 static pj_bool_t on_rx_response( pjsip_rx_data *rdata ){
-	//addon_log(L_DBG, "on_rx_response\n");
+	addon_log(L_DBG, "on_rx_response\n");
 	//Very important: this callback notifies reception of any SIP response
 	//received by the endpoint, no matter if the endpoint was the one
 	//that sent the request or not (for example, if the app is running
@@ -6521,7 +6520,7 @@ static void on_tsx_state_changed(pjsip_inv_session *inv,
     }
 }
 
-//int pjw_call_refer(long call_id, const char *dest_uri, const char *additional_headers, long *out_subscription_id)
+/*
 int pjw_call_refer(long call_id, const char *json, long *out_subscription_id)
 {
 	PJW_LOCK();
@@ -6595,6 +6594,7 @@ out:
 	}
 	return 0;
 }
+*/
 
 int pjw_call_get_info(long call_id, const char *required_info, char *out_info)
 {

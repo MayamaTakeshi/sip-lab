@@ -632,6 +632,7 @@ Napi::Value call_get_stream_stat(const Napi::CallbackInfo& info) {
   return Napi::String::New(env, out_stats);
 }
 
+/*
 Napi::Value call_refer(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
 
@@ -663,6 +664,7 @@ Napi::Value call_refer(const Napi::CallbackInfo& info) {
 
   return Napi::Number::New(env, out_subscription_id);
 }
+*/
 
 Napi::Value call_get_info(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
@@ -1155,7 +1157,7 @@ Napi::Object init(Napi::Env env, Napi::Object exports) {
   exports.Set("call_stop_play_wav", Napi::Function::New(env, call_stop_play_wav));
   exports.Set("call_stop_fax", Napi::Function::New(env, call_stop_fax));
   exports.Set("call_get_stream_stat", Napi::Function::New(env, call_get_stream_stat));
-  exports.Set("call_refer", Napi::Function::New(env, call_refer));
+  //exports.Set("call_refer", Napi::Function::New(env, call_refer));
   exports.Set("call_get_info", Napi::Function::New(env, call_get_info));
   exports.Set("call_gen_string_replaces", Napi::Function::New(env, call_gen_string_replaces));
 
