@@ -15,6 +15,63 @@ the scripts samples/mrcp_and_audio.js and samples/mrcp_and_audio_switching_order
 This was solved by adding a z.sleep(1000) before call.terminate(). It seems it is caused by call termination being done too soon after reinvite.
 We should check if this problem existed before (it might be a problem we added with the new multiple_media implementation).
 
+Sample segfault:
+
+Thread 16 "clock" received signal SIGSEGV, Segmentation fault.
+[Switching to Thread 0x7fffe67fc640 (LWP 64725)]
+0x00007ffff4ead8b6 in pjmedia_transport_send_rtp (size=172, pkt=0x4db2e78, tp=0x4ddda98) at ../include/pjmedia/transport.h:870
+870         return (*tp->op->send_rtp)(tp, pkt, size);
+(gdb) bt
+#0  0x00007ffff4ead8b6 in pjmedia_transport_send_rtp (size=172, pkt=0x4db2e78, tp=0x4ddda98) at ../include/pjmedia/transport.h:870
+#1  put_frame_imp (frame=frame@entry=0x7fffe67fbd10, port=<optimized out>, port=<optimized out>) at ../src/pjmedia/stream.c:1556
+#2  0x00007ffff4eaddec in put_frame (port=0x4db0648, frame=0x7fffe67fbd10) at ../src/pjmedia/stream.c:1690
+#3  0x00007ffff4ea477a in clock_callback (ts=0x4da4ad0, user_data=0x4da47f8) at ../src/pjmedia/master_port.c:198
+#4  0x00007ffff4eb4b8b in clock_thread (arg=0x4da4ab0) at ../src/pjmedia/clock_thread.c:378
+#5  0x00007ffff4efd8e8 in thread_main (param=0x4da4bd8) at ../src/pj/os_core_unix.c:686
+#6  0x00007ffff7894b43 in start_thread (arg=<optimized out>) at ./nptl/pthread_create.c:442
+#7  0x00007ffff7926a00 in clone3 () at ../sysdeps/unix/sysv/linux/x86_64/clone3.S:81
+(gdb)
+
+(gdb) bt full
+#0  0x00007ffff4ead8b6 in pjmedia_transport_send_rtp (size=172, pkt=0x4db2e78, tp=0x4ddda98) at ../include/pjmedia/transport.h:870
+No locals.
+#1  put_frame_imp (frame=frame@entry=0x7fffe67fbd10, port=<optimized out>, port=<optimized out>) at ../src/pjmedia/stream.c:1556
+        stream = 0x4dafe38
+        channel = 0x4d6c290
+        status = 0
+        frame_out = {type = PJMEDIA_FRAME_TYPE_AUDIO, buf = 0x4db2e84, size = 160, timestamp = {u32 = {lo = 16160, hi = 0}, u64 = 16160}, bit_info = 81414472}
+        ts_len = <optimized out>
+        rtp_ts_len = 160
+        rtphdr = 0x4d6c2b0
+        rtphdrlen = 12
+        inc_timestamp = 0
+#2  0x00007ffff4eaddec in put_frame (port=0x4db0648, frame=0x7fffe67fbd10) at ../src/pjmedia/stream.c:1690
+        stream = 0x4dafe38
+        tmp_zero_frame = {type = PJMEDIA_FRAME_TYPE_NONE, buf = 0x0, size = 85899345940, timestamp = {u32 = {lo = 46511360, hi = 1599295815}, u64 = 6868923222101177600}, bit_info = 0}
+        samples_per_frame = <optimized out>
+#3  0x00007ffff4ea477a in clock_callback (ts=0x4da4ad0, user_data=0x4da47f8) at ../src/pjmedia/master_port.c:198
+        m = 0x4da47f8
+        frame = {type = PJMEDIA_FRAME_TYPE_AUDIO, buf = 0x4da4948, size = 320, timestamp = {u32 = {lo = 16160, hi = 0}, u64 = 16160}, bit_info = 0}
+        status = <optimized out>
+#4  0x00007ffff4eb4b8b in clock_thread (arg=0x4da4ab0) at ../src/pjmedia/clock_thread.c:378
+        now = {u32 = {lo = 3315498073, hi = 8374}, u64 = 35969371634777}
+        clock = 0x4da4ab0
+#5  0x00007ffff4efd8e8 in thread_main (param=0x4da4bd8) at ../src/pj/os_core_unix.c:686
+        rec = <optimized out>
+        result = <optimized out>
+        rc = <optimized out>
+        __PRETTY_FUNCTION__ = "thread_main"
+#6  0x00007ffff7894b43 in start_thread (arg=<optimized out>) at ./nptl/pthread_create.c:442
+        ret = <optimized out>
+        pd = <optimized out>
+        out = <optimized out>
+        unwind_buf = {cancel_jmp_buf = {{jmp_buf = {140737488317104, -4057415993380356440, 140737060521536, 11, 140737346357328, 140737488317456, 4057432488133476008, 4057398791275364008}, 
+              mask_was_saved = 0}}, priv = {pad = {0x0, 0x0, 0x0, 0x0}, data = {prev = 0x0, cleanup = 0x0, canceltype = 0}}}
+        not_first_call = <optimized out>
+#7  0x00007ffff7926a00 in clone3 () at ../sysdeps/unix/sysv/linux/x86_64/clone3.S:81
+No locals.
+
+
 -------------------------
 if 'media: []' or 'media: null' it means there is no media, so do not generate a body (content-length: 0)
 
