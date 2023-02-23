@@ -72,6 +72,14 @@ No locals.
 No locals.
 
 
+Things checked:
+  - the problem doesn't happen with original sip-lab@1.12.39 using a single media
+  - the problem happens with audio+audio if there is no sleep between reinvite and call termination (samples/reinvite_audio_audio.js): 14 out of 100 test. So this is not a problem with the mrcp part of the code. Then if we add 1000ms sleep between reinvite and call termination only 3 out of 100 tests failed.
+
+Things to check:
+  - if the problem happens with single media in new sip-lab
+
+
 -------------------------
 if 'media: []' or 'media: null' it means there is no media, so do not generate a body (content-length: 0)
 

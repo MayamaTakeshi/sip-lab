@@ -98,6 +98,40 @@ async function test() {
         },
     ], 1000)
 
+    sip.call.send_dtmf(oc.id, {digits: '1234', mode: 0})
+    sip.call.send_dtmf(ic.id, {digits: '4321', mode: 1})
+
+    await z.wait([
+        {
+            event: 'dtmf',
+            call_id: ic.id,
+            digits: '1234',
+            mode: 0,
+            media_id: 0
+        },
+        {
+            event: 'dtmf',
+            call_id: oc.id,
+            digits: '4321',
+            mode: 1,
+            media_id: 0
+        },
+        {
+            event: 'dtmf',
+            call_id: ic.id,
+            digits: '1234',
+            mode: 0,
+            media_id: 1
+        },
+        {
+            event: 'dtmf',
+            call_id: oc.id,
+            digits: '4321',
+            mode: 1,
+            media_id: 1
+        },
+    ], 1500)
+
     sip.call.reinvite(oc.id, {media: 'audio,audio'})
 
     await z.wait([
@@ -157,6 +191,40 @@ async function test() {
         },
     ], 500)
 
+    sip.call.send_dtmf(oc.id, {digits: '1234', mode: 0})
+    sip.call.send_dtmf(ic.id, {digits: '4321', mode: 1})
+
+    await z.wait([
+        {
+            event: 'dtmf',
+            call_id: ic.id,
+            digits: '1234',
+            mode: 0,
+            media_id: 0
+        },
+        {
+            event: 'dtmf',
+            call_id: oc.id,
+            digits: '4321',
+            mode: 1,
+            media_id: 0
+        },
+        {
+            event: 'dtmf',
+            call_id: ic.id,
+            digits: '1234',
+            mode: 0,
+            media_id: 1
+        },
+        {
+            event: 'dtmf',
+            call_id: oc.id,
+            digits: '4321',
+            mode: 1,
+            media_id: 1
+        },
+    ], 1500)
+
     sip.call.reinvite(ic.id, {media: 'audio,audio'})
 
     await z.wait([
@@ -213,6 +281,8 @@ async function test() {
             ],
         },
     ], 500)
+
+    await z.sleep(1000)
 
     sip.call.terminate(oc.id)
 
