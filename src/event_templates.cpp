@@ -38,8 +38,8 @@ int make_evt_call_ended(char *dest, int size, long call_id, int sip_msg_len, con
 	}
 }
 
-int make_evt_non_dialog_request(char *dest, int size, int sip_msg_len, const char *sip_msg) {
-	return snprintf(dest, size, "{\"event\": \"non_dialog_request\"}\n%.*s", sip_msg_len, sip_msg);
+int make_evt_non_dialog_request(char *dest, int size, long transport_id, long request_id, int sip_msg_len, const char *sip_msg) {
+	return snprintf(dest, size, "{\"event\": \"non_dialog_request\", \"request_id\": %i, \"transport_id\": %i}\n%.*s", request_id, transport_id, sip_msg_len, sip_msg);
 }
 
 int make_evt_internal_error(char *dest, int size, const char *msg) {

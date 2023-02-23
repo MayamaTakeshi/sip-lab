@@ -41,6 +41,7 @@ async function test() {
     await z.wait([
         {
             event: 'non_dialog_request',
+            request_id: m.collect('req_id'),
             msg: sip_msg({
                 $rm: 'REGISTER',
                 $fU: 'user1',
@@ -53,7 +54,7 @@ async function test() {
         },
     ], 1000)
 
-    // sip-lab automatically replies with '200 OK' to non_dialog_request.
+    sip.request.respond(z.store.req_id, {code: 200, reason: 'OK', headers: {Expires: '60'}})
 
     await z.wait([
         {
@@ -151,20 +152,26 @@ async function test() {
     
     await z.sleep(100)
 
+    z.store.req_id = null
+
     sip.account.unregister(a1)
 
     await z.wait([
         {
             event: 'non_dialog_request',
+            request_id: m.collect('req_id'),
             msg: sip_msg({
                 $rm: 'REGISTER',
                 $fU: 'user1',
                 $fd: domain,
                 $tU: 'user1',
                 $td: domain,
+                hdr_expires: '0',
             }),
         },
     ], 1000)
+
+    sip.request.respond(z.store.req_id, {code: 200, reason: 'OK', headers: {Expires: '0'}})
 
     await z.wait([
         {

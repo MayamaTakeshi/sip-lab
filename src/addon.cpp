@@ -166,6 +166,74 @@ Napi::Value account_unregister(const Napi::CallbackInfo& info) {
 }
 
 
+Napi::Value request_create(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+
+  if (info.Length() != 2) {
+    Napi::Error::New(env, "Wrong number of arguments. Expected: transport_id, params.").ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
+  if (!info[0].IsNumber()) {
+    Napi::TypeError::New(env, "transport_id must be number.").ThrowAsJavaScriptException();
+    return env.Null();
+  }
+  int transport_id = info[0].As<Napi::Number>().Int32Value();
+
+  if (!info[1].IsString()) {
+    Napi::TypeError::New(env, "params must be a JSON string.").ThrowAsJavaScriptException();
+    return env.Null();
+  }
+  const string json = info[1].As<Napi::String>().Utf8Value();
+
+  long int out_request_id;
+  char out_sip_call_id[256];
+
+  int res = pjw_request_create(transport_id, json.c_str(), &out_request_id, out_sip_call_id);
+
+  if(res != 0) {
+    Napi::Error::New(env, pjw_get_error()).ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
+  Napi::Object obj = Napi::Object::New(env);
+  obj.Set(Napi::String::New(env, "id"), Napi::Number::New(env, out_request_id));
+  obj.Set(Napi::String::New(env, "sip_call_id"), out_sip_call_id);
+
+  return obj;
+}
+
+Napi::Value request_respond(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+
+  if (info.Length() != 2) {
+    Napi::Error::New(env, "Wrong number of arguments. Expected: request_id, params").ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
+  if (!info[0].IsNumber()) {
+    Napi::TypeError::New(env, "request_id must be number.").ThrowAsJavaScriptException();
+    return env.Null();
+  }
+  int request_id = info[0].As<Napi::Number>().Int32Value();
+ 
+  if (!info[1].IsString()) {
+    Napi::TypeError::New(env, "params must be a JSON string.").ThrowAsJavaScriptException();
+    return env.Null();
+  }
+  const string json = info[1].As<Napi::String>().Utf8Value();
+
+  int res = pjw_request_respond(request_id, json.c_str());
+
+  if(res != 0) {
+    Napi::Error::New(env, pjw_get_error()).ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
+  return env.Null();
+}
+
+
 Napi::Value call_create(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
 
@@ -1070,6 +1138,9 @@ Napi::Object init(Napi::Env env, Napi::Object exports) {
   exports.Set("account_create", Napi::Function::New(env, account_create));
   exports.Set("account_register", Napi::Function::New(env, account_register));
   exports.Set("account_unregister", Napi::Function::New(env, account_unregister));
+
+  exports.Set("request_create", Napi::Function::New(env, request_create));
+  exports.Set("request_respond", Napi::Function::New(env, request_respond));
 
   exports.Set("call_create", Napi::Function::New(env, call_create));
   exports.Set("call_respond", Napi::Function::New(env, call_respond));

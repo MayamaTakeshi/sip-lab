@@ -53,12 +53,11 @@ using namespace std;
 
 IdManager g_transport_ids(IDS_MAX);
 IdManager g_account_ids(IDS_MAX);
+IdManager g_request_ids(IDS_MAX);
 IdManager g_call_ids(IDS_MAX);
 IdManager g_subscription_ids(IDS_MAX);
 IdManager g_subscriber_ids(IDS_MAX);
 IdManager g_dialog_ids(IDS_MAX);
-
-//PacketDumper *g_PacketDumper = 0;
 
 #define AF	pj_AF_INET()
 #define DEFAULT_ILBC_MODE	(30)
@@ -241,7 +240,10 @@ bool json_get_and_check_uri(Document &document, const char *param, bool optional
     return true;
 }
 
+static pjsip_method info_method = {PJSIP_OTHER_METHOD, {"INFO", 4} };
+static pjsip_method message_method = {PJSIP_OTHER_METHOD, {"MESSAGE", 7} };
 
+static pj_str_t trying_reason = pj_str("Trying");
 
 #define PJW_LOCK()	pthread_mutex_lock(&g_mutex)
 #define PJW_UNLOCK()	pthread_mutex_unlock(&g_mutex)
@@ -362,6 +364,11 @@ struct MediaEndpoint {
         VideoEndpoint *video;
         MrcpEndpoint  *mrcp;
     } endpoint;
+};
+
+struct Request {
+    pjsip_rx_data *pending_rdata;
+    bool is_uac;
 };
 
 struct Call {
@@ -2085,6 +2092,240 @@ out:
 
 	return 0;
 }
+
+int pjw_request_create(long t_id, const char *json, long *out_request_id, char *out_sip_call_id)
+{
+	PJW_LOCK();
+	clear_error();
+
+	long val;
+	Transport *t;
+
+	long request_id;
+
+    Request *request;
+
+    char *method = NULL;
+    char *from_uri = NULL;
+    char *to_uri = NULL;
+    char *request_uri = NULL;
+
+	char local_contact[1024];
+	char call_id[1024];
+
+    pj_str_t request_uri_s;
+    pj_str_t from_uri_s;
+    pj_str_t to_uri_s;
+
+    pj_str_t local_contact_s;
+    pj_str_t call_id_s;
+
+    char buffer[MAX_JSON_INPUT];
+
+    Document document;
+
+    const  char *valid_params[] = {"method", "from_uri", "to_uri", "request_uri", "headers", ""};
+
+    const pjsip_method *m;
+    pjsip_tx_data *tdata;
+    pj_status_t status;
+
+	if(!g_transport_ids.get(t_id, val)){
+		set_error("Invalid transport_id");
+		goto out;
+	}
+	t = (Transport*)val;
+
+    if(!parse_json(document, json, buffer, MAX_JSON_INPUT)) {
+        goto out;
+    }
+        
+    if(!validate_params(document, valid_params)) {
+        goto out;
+    }
+
+    if(!json_get_string_param(document, "method", false, &method)) {
+        goto out;
+    }
+
+    if(strcmp(method, "REGISTER") == 0) {
+        m = &pjsip_register_method; 
+    } else if(strcmp(method, "OPTIONS") == 0) {
+        m = &pjsip_options_method; 
+    } else if(strcmp(method, "INFO") == 0) {
+        m = &info_method; 
+    } else if(strcmp(method, "MESSAGE") == 0) {
+        m = &message_method; 
+    } else {
+        set_error("Invalid method");
+        goto out;
+    }
+
+    if(!json_get_and_check_uri(document, "from_uri", false, &from_uri)) {
+        goto out;
+    }
+    from_uri_s = pj_str(from_uri);
+
+    if(!json_get_and_check_uri(document, "to_uri", false, &to_uri)) {
+        goto out;
+    }
+    to_uri_s = pj_str(to_uri);
+
+    request_uri = to_uri;
+    if(!json_get_and_check_uri(document, "request_uri", true, &request_uri)) {
+        goto out;
+    }
+    request_uri_s = pj_str(request_uri);
+
+	if(t->type == PJSIP_TRANSPORT_UDP) {
+		build_local_contact(local_contact, t->sip_transport, "sip-lab");
+	} else {
+		build_local_contact_from_tpfactory(local_contact, t->tpfactory, "sip-lab", t->type);
+	}
+    local_contact_s = pj_str(local_contact);
+
+    call_id_s = pj_str(call_id);
+    pj_generate_unique_string_lower(&call_id_s);
+
+    status = pjsip_endpt_create_request(g_sip_endpt, m,
+                                        &request_uri_s, &from_uri_s, &to_uri_s,
+                                        &local_contact_s, &call_id_s, -1, NULL,
+                                        &tdata);
+    if (status != PJ_SUCCESS) {
+        set_error("pjsip_endpt_create_request failed");
+        goto out;
+    }
+
+	if(!add_headers(tdata->pool, tdata, document)) {
+        goto out;
+	}
+
+    status = pjsip_endpt_send_request(g_sip_endpt, tdata, -1, NULL, NULL);
+    if (status != PJ_SUCCESS) {
+        set_error("pjsip_endpt_send_request failed");
+        goto out;
+    }
+
+    request = (Request*)pj_pool_zalloc(tdata->pool, sizeof(Request));
+    request->is_uac = true;
+
+    if(!g_request_ids.add((long)request, request_id)){
+        set_error("Failed to allocate id");
+        goto out;
+    }
+
+out:
+	PJW_UNLOCK();
+	if(pjw_errorstring[0]){
+		return -1;
+	}
+
+	*out_request_id = request_id;
+	strncpy(out_sip_call_id, call_id_s.ptr, call_id_s.slen);
+	out_sip_call_id[call_id_s.slen] = 0;
+	return 0;
+}
+
+int pjw_request_respond(long request_id, const char *json)
+{
+	addon_log(L_DBG, "pjw_request_respond: request_id=%lu json=%s\n", request_id, json);
+	PJW_LOCK();
+	clear_error();
+
+	long val;
+
+    int code;
+    char *reason;
+
+	pj_str_t r;// pj_str((char*)reason);
+
+	pj_status_t status;
+
+	pjsip_tx_data *tdata;
+
+    pjsip_response_addr res_addr;
+
+	Request *request;
+
+    char buffer[MAX_JSON_INPUT];
+
+    Document document;
+
+    const char *valid_params[] = {"code", "reason", "headers", ""};
+
+	if(!g_request_ids.get(request_id, val)){
+		set_error("Invalid request_id");
+        goto out;
+	}
+	request = (Request*)val;
+
+    if(request->is_uac) {
+		set_error("Cannot respond to our own request");
+        goto out;
+    }
+
+    if(!request->pending_rdata) {
+		set_error("Final response already sent");
+        goto out;
+    }
+
+    if(!parse_json(document, json, buffer, MAX_JSON_INPUT)) {
+        goto out;
+    }
+    
+    if(!validate_params(document, valid_params)) {
+        goto out;
+    }
+
+    if(json_get_int_param(document, "code", true, &code) <= 0) {
+        goto out;
+    }
+
+    if(json_get_string_param(document, "reason", true, &reason) <= 0) {
+        goto out;
+    }
+
+	r = pj_str((char*)reason);
+
+    status = pjsip_endpt_create_response(g_sip_endpt, request->pending_rdata, code, &r, &tdata);
+    if(status != PJ_SUCCESS) {
+        set_error("pjsip_endpt_create_response failed");
+        goto out;
+    }
+
+	if(!add_headers(tdata->pool, tdata, document)) {
+        goto out;
+	}
+
+    status = pjsip_get_response_addr(tdata->pool, request->pending_rdata, &res_addr);
+    if(status != PJ_SUCCESS) {
+        set_error("pjsip_get_response_addr failed");
+        goto out;
+	}
+
+    status = pjsip_endpt_send_response(g_sip_endpt, &res_addr, tdata, NULL, NULL);
+    if(status != PJ_SUCCESS) {
+        set_error("pjsip_endpt_send_response failed");
+        goto out;
+	}
+
+    if(code >= 200 && request->pending_rdata) {
+        status = pjsip_rx_data_free_cloned(request->pending_rdata);
+        if(status != PJ_SUCCESS) {
+            set_error("pjsip_rx_data_free_cloned failed with status=%i", status);
+            goto out;
+        }
+        request->pending_rdata = NULL;
+    }
+
+out:
+	PJW_UNLOCK();
+	if(pjw_errorstring[0]) {
+		return -1;
+	}
+	return 0;
+}
+
 
 
 int pjw_call_create(long t_id, const char *json, long *out_call_id, char *out_sip_call_id)
@@ -4443,39 +4684,48 @@ static pj_bool_t on_rx_request( pjsip_rx_data *rdata ){
 
 	if(rdata->msg_info.msg->line.req.method.id != PJSIP_INVITE_METHOD)
 	{
-		reason = pj_str((char*)"OK");
+        // Here we handle out-of-dialog requests like REGISTER, OPTIONS, MESSAGE etc.
 
-		pjsip_hdr hdr_list;
-		pj_list_init(&hdr_list);
+        pjsip_transport *t = rdata->tp_info.transport;
+        Request *request = (Request*)pj_pool_zalloc(rdata->tp_info.pool, sizeof(Request));
+        request->is_uac = false;
+        request->pending_rdata = rdata;
 
-		if(rdata->msg_info.msg->line.req.method.id == PJSIP_REGISTER_METHOD) {
-    			pjsip_hdr *hdr_from_request;
+        long request_id;
+        if(!g_request_ids.add((long)request, request_id)){
+            addon_log(L_DBG, "Failed to allocate request_id. Event will not be notified\n");
+            return PJ_TRUE;
+        }
 
-			//Add Contact header from Request, if present
-			pj_str_t STR_CONTACT = {(char*)"Contact" , 7 };
-			hdr_from_request = (pjsip_hdr*)pjsip_msg_find_hdr_by_name(rdata->msg_info.msg,
-								&STR_CONTACT,
-								NULL);
-			if(hdr_from_request) {
-				pjsip_hdr *clone_hdr = (pjsip_hdr*) pjsip_hdr_clone(rdata->tp_info.pool, hdr_from_request);
-				pj_list_push_back(&hdr_list, clone_hdr);
-			}
+        char tag[64];
+        build_transport_tag_from_pjsip_transport(tag, t);
 
-			//Add Expires header from Request, if present
-			pj_str_t STR_EXPIRES = {(char*)"Expires" , 7 };
-    			hdr_from_request = (pjsip_hdr*)pjsip_msg_find_hdr_by_name(rdata->msg_info.msg,
-								&STR_EXPIRES,
-								NULL);
-			if(hdr_from_request) {
-				pjsip_hdr *clone_hdr = (pjsip_hdr*) pjsip_hdr_clone(rdata->tp_info.pool, hdr_from_request);
-				pj_list_push_back(&hdr_list, clone_hdr);
-			}
+        long transport_id;
 
-		}
+        //printf("tag=%s\n", tag);
 
-		pjsip_endpt_respond_stateless(g_sip_endpt, rdata, 200, &reason, &hdr_list, NULL);
+        TransportMap::iterator iter = g_TransportMap.find(tag);
+        if( iter != g_TransportMap.end() ){
+            transport_id = iter->second;
+        } else {
+            transport_id = -1;
+        }
 
-		make_evt_non_dialog_request(evt, sizeof(evt), rdata->msg_info.len, rdata->msg_info.msg_buf);
+        pjsip_rx_data *cloned_rdata = 0;
+        if(pjsip_rx_data_clone(rdata, 0, &cloned_rdata) != PJ_SUCCESS) {
+            const pj_str_t reason = pj_str((char*)"Internal Server Error (pjsip_rx_data_clone failed)");
+            pjsip_endpt_respond_stateless(g_sip_endpt, rdata, 500, &reason, NULL, NULL);
+            return PJ_TRUE;
+        }
+        request->pending_rdata = cloned_rdata;
+
+        // Automatically sending a '100 Trying' (but we might add an option when creating transports to disable this)
+        status = pjsip_endpt_respond_stateless(g_sip_endpt, rdata, 100, &trying_reason, NULL, NULL);
+        if(status != PJ_SUCCESS) {
+            addon_log(L_DBG, "on_rx_request pjsip_endpt_respond_stateless failed");
+        }
+
+		make_evt_non_dialog_request(evt, sizeof(evt), transport_id, request_id, rdata->msg_info.len, rdata->msg_info.msg_buf);
 		dispatch_event(evt);
 		return PJ_TRUE;
 	}
@@ -4554,7 +4804,7 @@ static pj_bool_t on_rx_request( pjsip_rx_data *rdata ){
 
     long transport_id;
 
-    printf("tag=%s\n", tag);
+    //printf("tag=%s\n", tag);
 
 	TransportMap::iterator iter = g_TransportMap.find(tag);
 	if( iter != g_TransportMap.end() ){
@@ -6649,6 +6899,10 @@ pj_bool_t add_headers(pj_pool_t *pool, pjsip_tx_data *tdata, Document &document)
     Value headers = document["headers"].GetObject();
 
     for (Value::ConstMemberIterator itr = headers.MemberBegin(); itr != headers.MemberEnd(); ++itr) {
+        if(!itr->value.IsString()) {
+            set_error("Value of header must be string");
+            return PJ_FALSE;
+        }
         printf("%s => '%s'\n", itr->name.GetString(), itr->value.GetString());
 
         const char *name = itr->name.GetString();

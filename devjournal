@@ -2123,3 +2123,8 @@ https://www.ietf.org/rfc/rfc3264.txt
 
 The mode can be set at the root of the JSON document or can be set individually per media that supports streaming (currently only the ones of type=audio).
 
+-------------------------
+2023/02/23 takeshi:
+
+We created struct Request to permit to respond to non-dialog SIP requests (like REGISTER, OPTIONS, MESSAGE, INFO).
+

@@ -48,6 +48,11 @@ addon.account = {
   unregister: addon.account_unregister,
 }
 
+addon.request = {
+  create: (t_id, params) => { return addon.request_create(t_id, JSON.stringify(params)) },
+  respond: (r_id, params) => { return addon.request_respond(r_id, JSON.stringify(params)) },
+}
+
 addon.call = {
   create: (t_id, params) => { return addon.call_create(t_id, JSON.stringify(params)) },
   respond: (c_id, params) => { return addon.call_respond(c_id, JSON.stringify(params)) },

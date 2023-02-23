@@ -14,7 +14,7 @@ int make_evt_dtmf(char *dest, int size, long call_id, int digits_len, const char
 
 int make_evt_call_ended(char *dest, int size, long call_id, int sip_msg_len, const char *sip_msg);
 
-int make_evt_non_dialog_request(char *dest, int size, int sip_msg_len, const char *sip_msg);
+int make_evt_non_dialog_request(char *dest, int size, long transport_id, long request_id, int sip_msg_len, const char *sip_msg);
 
 int make_evt_internal_error(char *dest, int size, const char *msg);
 
