@@ -48,6 +48,11 @@ addon.account = {
   unregister: addon.account_unregister,
 }
 
+addon.request = {
+  create: (t_id, params) => { return addon.request_create(t_id, JSON.stringify(params)) },
+  respond: (r_id, params) => { return addon.request_respond(r_id, JSON.stringify(params)) },
+}
+
 addon.call = {
   create: (t_id, params) => { return addon.call_create(t_id, JSON.stringify(params)) },
   respond: (c_id, params) => { return addon.call_respond(c_id, JSON.stringify(params)) },
@@ -55,14 +60,14 @@ addon.call = {
   send_dtmf: (c_id, params) => { return addon.call_send_dtmf(c_id, JSON.stringify(params)) },
   reinvite: (c_id, params) => { return addon.call_reinvite(c_id, JSON.stringify(params ? params : {})) },
   send_request: (c_id, params) => { return addon.call_send_request(c_id, JSON.stringify(params)) },
-  start_recording: (c_id, params) => { return addon.call_start_record_wav(c_id, JSON.stringify(params)) },
-  start_playing: (c_id, params) => { return addon.call_start_play_wav(c_id, JSON.stringify(params)) },
-  stop_recording: addon.call_stop_record_wav,
-  stop_playing: addon.call_stop_play_wav,
+  start_record_wav: (c_id, params) => { return addon.call_start_record_wav(c_id, JSON.stringify(params)) },
+  start_play_wav: (c_id, params) => { return addon.call_start_play_wav(c_id, JSON.stringify(params)) },
+  stop_record_wav: (c_id, params) => { return addon.call_stop_record_wav(c_id, JSON.stringify(params ? params : {})) },
+  stop_play_wav: (c_id, params) => { return addon.call_stop_play_wav(c_id, JSON.stringify(params ? params : {})) },
   start_fax: (c_id, params) => { return addon.call_start_fax(c_id, JSON.stringify(params)) },
-  stop_fax: addon.call_stop_fax,
-  get_stream_stat: addon.call_get_stream_stat,
-  refer: (c_id, params) => { return addon.call_refer(c_id, JSON.stringify(params)) },
+  stop_fax: (c_id, params) => { return addon.call_stop_fax(c_id, JSON.stringify(params ? params : {})) },
+  get_stream_stat: (c_id, params) => { return addon.call_get_stream_stat(c_id, JSON.stringify(params ? params : {})) },
+  //refer: (c_id, params) => { return addon.call_refer(c_id, JSON.stringify(params)) },
   get_info: addon.call_get_info,
   gen_string_replaces: addon.call_gen_string_replaces,
 }

@@ -117,6 +117,98 @@ async function test() {
         },
     ], 1000)
 
+    sip.call.send_request(oc.id, {method: 'REFER', headers: {'Refer-To': '0312341234'}})
+
+    await z.wait([
+        {
+            event: 'request',
+            call_id: ic.id,
+            msg: sip_msg({
+                $rm: 'REFER',
+                hdr_refer_to: '0312341234',
+            }),
+        },
+    ], 1000)
+
+    sip.call.respond(ic.id, {code: 202, reason: 'Accepted'})
+
+    await z.wait([
+        {
+            event: 'response',
+            call_id: oc.id,
+            msg: sip_msg({
+                $rm: 'REFER',
+                $rs: '202',
+                $rr: 'Accepted',
+            }),
+        },
+    ], 1000)
+
+    sip.call.send_request(ic.id, {method: 'NOTIFY', headers: {
+        'Event': 'refer',
+        'Subscription-State': 'active;expires=60',
+    }, body: 'SIP/2.0 100 Trying', ct_type: 'message', ct_subtype: 'sipfrag;version=2.0'})
+
+    await z.wait([
+        {
+            event: 'request',
+            call_id: oc.id,
+            msg: sip_msg({
+                $rm: 'NOTIFY',
+                hdr_subscription_state: 'active;expires=60',
+                hdr_content_type: 'message/sipfrag;version=2.0',
+                $rb: 'SIP/2.0 100 Trying',
+            }),
+        },
+    ], 1000)
+
+    sip.call.respond(oc.id, {code: 200, reason: 'OK'})
+
+    await z.wait([
+        {
+            event: 'response',
+            call_id: ic.id,
+            msg: sip_msg({
+                $rm: 'NOTIFY',
+                $rs: '200',
+                $rr: 'OK',
+            }),
+        },
+    ], 1000)
+
+    sip.call.send_request(ic.id, {method: 'NOTIFY', headers: {'Event': 'refer',
+        'Subscription-State': 'terminated;reason=noresource',
+    }, body: 'SIP/2.0 200 OK', ct_type: 'message', ct_subtype: 'sipfrag;version=2.0'})
+
+    await z.wait([
+        {
+            event: 'request',
+            call_id: oc.id,
+            msg: sip_msg({
+                $rm: 'NOTIFY',
+                hdr_subscription_state: 'terminated;reason=noresource',
+                hdr_content_type: 'message/sipfrag;version=2.0',
+                $rb: 'SIP/2.0 200 OK',
+            }),
+        },
+    ], 1000)
+
+    sip.call.respond(oc.id, {code: 200, reason: 'OK'})
+
+    await z.wait([
+        {
+            event: 'response',
+            call_id: ic.id,
+            msg: sip_msg({
+                $rm: 'NOTIFY',
+                $rs: '200',
+                $rr: 'OK',
+            }),
+        },
+    ], 1000)
+
+    await z.sleep(100)
+
     // now we terminate the call from t1 side
     sip.call.terminate(oc.id)
 

@@ -3,10 +3,10 @@
 
 #include <stdarg.h>
 
-#define LOG_LEVEL_INFO 0
-#define LOG_LEVEL_DEBUG 1
+#define LL_INFO 0
+#define L_DBG 1
 
-static int _log_level = LOG_LEVEL_DEBUG;
+static int _log_level = L_DBG;
 
 void _addon_log(int level, const char *fmt, ...);
 

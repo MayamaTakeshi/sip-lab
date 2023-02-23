@@ -60,18 +60,14 @@ async function test() {
 
     await z.wait([
         {
-            event: 'media_status',
+            event: 'media_update',
             call_id: oc.id,
-            status: 'setup_ok',
-            local_mode: 'sendrecv',
-            remote_mode: 'sendrecv',
+            status: 'ok',
         },
         {
-            event: 'media_status',
+            event: 'media_update',
             call_id: ic.id,
-            status: 'setup_ok',
-            local_mode: 'sendrecv',
-            remote_mode: 'sendrecv',
+            status: 'ok',
         },
         {
             event: 'response',
@@ -90,7 +86,16 @@ async function test() {
         },
     ], 1000)
 
-    sip.call.reinvite(oc.id, {hold: true})
+    sip.call.reinvite(oc.id)
+
+    await z.wait([
+        {
+            event: 'reinvite',
+            call_id: ic.id
+        },
+    ], 1000)
+
+    sip.call.respond(ic.id, {code: 200, reason: 'OK'})
 
     await z.wait([
         {
@@ -98,30 +103,9 @@ async function test() {
             call_id: oc.id,
             method: 'INVITE',
             msg: sip_msg({
-                $rs: '200',
-                $rr: 'OK',
-                $rb: '!{_}a=recvonly',
+                $rs: '100',
             }),
         },
-        {
-            event: 'media_status',
-            call_id: oc.id,
-            status: 'setup_ok',
-            local_mode: 'sendonly',
-            remote_mode: 'recvonly',
-        },
-        {
-            event: 'media_status',
-            call_id: ic.id,
-            status: 'setup_ok',
-            local_mode: 'recvonly',
-            remote_mode: 'sendonly',
-        },
-    ], 500)
-
-    sip.call.reinvite(oc.id, false, 0)
-
-    await z.wait([
         {
             event: 'response',
             call_id: oc.id,
@@ -133,23 +117,61 @@ async function test() {
             }),
         },
         {
-            event: 'media_status',
+            event: 'media_update',
             call_id: oc.id,
-            status: 'setup_ok',
-            local_mode: 'sendrecv',
-            remote_mode: 'sendrecv',
+            status: 'ok',
         },
         {
-            event: 'media_status',
+            event: 'media_update',
             call_id: ic.id,
-            status: 'setup_ok',
-            local_mode: 'sendrecv',
-            remote_mode: 'sendrecv',
+            status: 'ok',
         },
     ], 500)
 
-    oc_stat = sip.call.get_stream_stat(oc.id)
-    ic_stat = sip.call.get_stream_stat(ic.id)
+    sip.call.reinvite(oc.id, false, 0)
+
+    await z.wait([
+        {
+            event: 'reinvite',
+            call_id: ic.id
+        },
+    ], 1000)
+
+    sip.call.respond(ic.id, {code: 200, reason: 'OK'})
+
+    await z.wait([
+        {
+            event: 'response',
+            call_id: oc.id,
+            method: 'INVITE',
+            msg: sip_msg({
+                $rs: '100',
+            }),
+        },
+        {
+            event: 'response',
+            call_id: oc.id,
+            method: 'INVITE',
+            msg: sip_msg({
+                $rs: '200',
+                $rr: 'OK',
+                $rb: '!{_}a=sendrecv',
+            }),
+        },
+        {
+            event: 'media_update',
+            call_id: oc.id,
+            status: 'ok',
+        },
+        {
+            event: 'media_update',
+            call_id: ic.id,
+            status: 'ok',
+        },
+    ], 500)
+
+    oc_stat = sip.call.get_stream_stat(oc.id, {media_id: 0})
+    ic_stat = sip.call.get_stream_stat(ic.id, {media_id: 0})
 
     console.log(oc_stat)
     console.log(ic_stat)

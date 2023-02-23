@@ -54,18 +54,14 @@ async function test() {
 
     await z.wait([
         {
-            event: 'media_status',
+            event: 'media_update',
             call_id: oc.id,
-            status: 'setup_ok',
-            local_mode: 'sendrecv',
-            remote_mode: 'sendrecv',
+            status: 'ok',
         },
         {
-            event: 'media_status',
+            event: 'media_update',
             call_id: ic.id,
-            status: 'setup_ok',
-            local_mode: 'sendrecv',
-            remote_mode: 'sendrecv',
+            status: 'ok',
         },
         {
             event: 'response',

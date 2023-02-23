@@ -41,6 +41,7 @@
 
 #include "siplab_constants.h"
 
+
 using namespace rapidjson;
 using namespace std;
 
@@ -52,22 +53,15 @@ using namespace std;
 
 IdManager g_transport_ids(IDS_MAX);
 IdManager g_account_ids(IDS_MAX);
+IdManager g_request_ids(IDS_MAX);
 IdManager g_call_ids(IDS_MAX);
 IdManager g_subscription_ids(IDS_MAX);
 IdManager g_subscriber_ids(IDS_MAX);
 IdManager g_dialog_ids(IDS_MAX);
 
-//PacketDumper *g_PacketDumper = 0;
-
 #define AF	pj_AF_INET()
 #define DEFAULT_ILBC_MODE	(30)
 #define DEFAULT_CODEC_QUALITY	(5)
-
-#define UNKNOWN  0 
-#define SENDRECV 1
-#define SENDONLY 2
-#define RECVONLY 3
-#define INACTIVE 4
 
 static pjsip_endpoint *g_sip_endpt;
 static pj_caching_pool cp;
@@ -156,73 +150,78 @@ bool validate_params(Document &document, const char **valid_params) {
     return true;
 }
 
-bool json_get_string_param(Document &document, const char *param, bool optional, char **dest) {
+#define FOUND_INVALID -1
+#define NOT_FOUND_NOT_OPTIONAL 0
+#define NOT_FOUND_OPTIONAL 1
+#define FOUND 2
+
+int json_get_string_param(Document &document, const char *param, bool optional, char **dest) {
     printf("json_get_string_param %s\n", param);
     if(!document.HasMember(param)) {
         if(optional) {
-            return true;
+            return NOT_FOUND_OPTIONAL;
         } 
         set_error("Parameter %s is required", param);
-        return false;
+        return NOT_FOUND_NOT_OPTIONAL;
     }
 
     if(!document[param].IsString()) {
         set_error("Parameter %s must be a string", param);
-        return false;
+        return FOUND_INVALID;
     }
     *dest = (char*)document[param].GetString();
-    return true;
+    return FOUND;
 }
 
-bool json_get_int_param(Document &document, const char *param, bool optional, int *dest) {
+int json_get_int_param(Document &document, const char *param, bool optional, int *dest) {
     if(!document.HasMember(param)) {
         if(optional) {
-            return true;
+            return NOT_FOUND_OPTIONAL;
         } 
         set_error("Parameter %s is required", param);
-        return false;
+        return NOT_FOUND_NOT_OPTIONAL;
     }
 
     if(!document[param].IsInt()) {
         set_error("Parameter %s must be an integer", param);
-        return false;
+        return FOUND_INVALID;
     }
     *dest = document[param].GetInt();
-    return true;
+    return FOUND;
 }
 
-bool json_get_uint_param(Document &document, const char *param, bool optional, unsigned *dest) {
+int json_get_uint_param(Document &document, const char *param, bool optional, unsigned *dest) {
     if(!document.HasMember(param)) {
         if(optional) {
-            return true;
+            return NOT_FOUND_OPTIONAL;
         } 
         set_error("Parameter %s is required", param);
-        return false;
+        return NOT_FOUND_NOT_OPTIONAL;
     }
 
     if(!document[param].IsUint()) {
         set_error("Parameter %s must be an unsigned integer", param);
-        return false;
+        return FOUND_INVALID;
     }
     *dest = document[param].GetUint();
-    return true;
+    return FOUND;
 }
 
-bool json_get_bool_param(Document &document, const char *param, bool optional, bool *dest) {
+int json_get_bool_param(Document &document, const char *param, bool optional, bool *dest) {
     if(!document.HasMember(param)) {
         if(optional) {
-            return true;
+            return NOT_FOUND_OPTIONAL;
         } 
         set_error("Parameter %s is required", param);
-        return false;
+        return NOT_FOUND_NOT_OPTIONAL;
     }
 
     if(!document[param].IsBool()) {
         set_error("Parameter %s must be a boolean", param);
-        return false;
+        return FOUND_INVALID;
     }
     *dest = document[param].GetBool();
-    return true;
+    return FOUND;
 }
 
 
@@ -241,7 +240,10 @@ bool json_get_and_check_uri(Document &document, const char *param, bool optional
     return true;
 }
 
+static pjsip_method info_method = {PJSIP_OTHER_METHOD, {"INFO", 4} };
+static pjsip_method message_method = {PJSIP_OTHER_METHOD, {"MESSAGE", 7} };
 
+static pj_str_t trying_reason = pj_str("Trying");
 
 #define PJW_LOCK()	pthread_mutex_lock(&g_mutex)
 #define PJW_UNLOCK()	pthread_mutex_unlock(&g_mutex)
@@ -278,7 +280,6 @@ pjsip_route_hdr *route;
 const pj_str_t hname = pj_str((char*)"Route");
 
 #define MAXDIGITS 256 
-#define INITIAL_DIGITBUFFERLENGTH 1
 
 #define DTMF_MODE_RFC2833 0
 #define DTMF_MODE_INBAND 1
@@ -296,6 +297,10 @@ struct Transport {
 	pjsip_transport_type_e type;
 	pjsip_transport *sip_transport;
 	pjsip_tpfactory *tpfactory;
+    char address[32];
+    int port;
+    char tag[64];
+
 	char domain[100];
 	char username[100];
 	char password[100];
@@ -310,13 +315,9 @@ struct Subscription {
 	bool initialized;
 };
 
-struct Call {
-	int id;
-	pjsip_inv_session *inv;
+struct AudioEndpoint {
 	pjmedia_transport *med_transport;
 	pjmedia_stream *med_stream;
-	pj_bool_t local_hold;
-	pj_bool_t remote_hold;
 	pjmedia_master_port *master_port;
 	pjmedia_port *media_port; //will contain Null Port, WAV File Player etc.
 
@@ -327,19 +328,93 @@ struct Call {
 	chainlink *dtmfdet;
 	chainlink *fax;
 
-	Transport *transport;
-
-	bool outgoing;
-
 	char DigitBuffers[2][MAXDIGITS + 1];
 	int DigitBufferLength[2];
 	int last_digit_timestamp[2];
 
-	pjsip_evsub *xfer_sub; // Xfer server subscription, if this call was triggered by xfer.
-
-	pjsip_rx_data *initial_invite_rdata;
+    pj_str_t mode;
 };
 
+struct VideoEndpoint {
+	pjmedia_transport *med_transport;
+	pjmedia_stream *med_stream;
+	pjmedia_master_port *master_port;
+};
+
+struct MrcpEndpoint {
+
+};
+
+
+#define ENDPOINT_TYPE_AUDIO 1
+#define ENDPOINT_TYPE_VIDEO 2
+#define ENDPOINT_TYPE_T38   3
+#define ENDPOINT_TYPE_MRCP  4
+#define ENDPOINT_TYPE_MSRP  5
+
+struct MediaEndpoint {
+    int type;
+    pj_str_t media;
+    pj_str_t transport;
+    pj_str_t addr;
+    int port;
+
+    union {
+        AudioEndpoint *audio;
+        VideoEndpoint *video;
+        MrcpEndpoint  *mrcp;
+    } endpoint;
+};
+
+struct Request {
+	int id;
+    pjsip_rx_data *pending_rdata;
+    bool is_uac;
+};
+
+struct Call {
+	int id;
+	pjsip_inv_session *inv;
+
+    int media_count;
+    MediaEndpoint *media[PJMEDIA_MAX_SDP_MEDIA];
+
+	Transport *transport;
+
+	bool outgoing;
+
+	pjsip_evsub *xfer_sub; // Xfer server subscription, if this call was triggered by xfer.
+
+    int pending_request;
+	pjsip_rx_data *pending_rdata;
+
+    bool inv_initial_answer_required;
+
+    pjmedia_sdp_session *local_sdp;
+    pjmedia_sdp_session *remote_sdp;
+
+    pjmedia_sdp_session *active_local_sdp;
+    pjmedia_sdp_session *active_remote_sdp;
+};
+
+/*
+#define DIALOG_TYPE_CALL 1
+#define DIALOG_TYPE_SUBSCRIPTION 2
+#define DIALOG_TYPE_SUBSCRIBER 3
+
+struct Dialog {
+    int type;
+
+    union {
+        Call *call;
+        Subscription *subscription;
+        //Subscriber *subscriber;
+    } d;
+};
+*/
+
+bool init_media_ports(Call *c, AudioEndpoint *ae, unsigned sampling_rate, unsigned channel_count, unsigned samples_per_frame, unsigned bits_per_sample); 
+void connect_media_ports(AudioEndpoint *ae);
 
 struct Pair_Call_CallId {
 	Call *pCall;
@@ -353,10 +428,10 @@ typedef boost::circular_buffer<Pair_Call_CallId> Pair_Call_CallId_Buf;
 Pair_Call_CallId_Buf g_LastCalls(1000);	
 	
 
-typedef map<pjsip_transport*, int> SipTransportMap;
-SipTransportMap g_SipTransportMap;
-int g_TlsTransportId = -100;
-int g_TcpTransportId = -100;
+typedef map<std::string, long> TransportMap;
+TransportMap g_TransportMap;
+//int g_TlsTransportId = -100;
+//int g_TcpTransportId = -100;
 
 typedef set< pair<string,string> > PackageSet;
 PackageSet g_PackageSet;
@@ -389,7 +464,7 @@ void handle_events(){
 /*
 static int worker_thread(void *arg)
 {
-	//addon_log(LOG_LEVEL_DEBUG, "Starting worker_thread\n");
+	//addon_log(L_DBG, "Starting worker_thread\n");
 
 	pj_thread_set_prio(pj_thread_this(),
 			pj_thread_get_prio_min(pj_thread_this()));
@@ -400,7 +475,7 @@ static int worker_thread(void *arg)
 
 	while(!g_thread_quit_flag){
 		PJW_LOCK();
-		//addon_log(LOG_LEVEL_DEBUG, ".");
+		//addon_log(L_DBG, ".");
 		handle_events();
 		PJW_UNLOCK();
 
@@ -482,7 +557,7 @@ static int call_create(Transport *t, unsigned flags, pjsip_dialog *dlg, const ch
 bool subscription_subscribe_no_headers(Subscription *s, int expires);
 bool subscription_subscribe(Subscription *s, int expires, Document &document);
 
-static pjmedia_transport *create_media_transport(const pj_str_t *addr);
+static pjmedia_transport *create_media_transport(const pj_str_t *addr, int *allocated_port);
 void close_media_transport(pjmedia_transport *med_transport);
 pjsip_transport *create_udp_transport(pjsip_endpoint* sip_endpt, pj_str_t *ipaddr, int *allocated_port);
 pjsip_transport *allocate_udp_transport(pjsip_endpoint* sip_endpt, pj_str_t *ipaddr, int port); 
@@ -495,6 +570,8 @@ pjsip_tpfactory *allocate_tcp_tpfactory(pjsip_endpoint* sip_endpt, pj_str_t *ipa
 
 bool set_proxy(pjsip_dialog *dlg, const char *proxy_uri);
 
+void build_transport_tag(char *dest, const char *type, const char *address, int port);
+void build_transport_tag_from_pjsip_transport(char *dest, pjsip_transport *t);
 void build_local_contact(char *dest, pjsip_transport *transport, const char *contact_username);
 void build_local_contact_from_tpfactory(char *dest, pjsip_tpfactory *tpfactory, const char *contact_username, pjsip_transport_type_e type);
 
@@ -516,32 +593,39 @@ void process_in_dialog_refer(pjsip_dialog *dlg, pjsip_rx_data *rdata);
 
 void process_in_dialog_subscribe(pjsip_dialog *dlg, pjsip_rx_data *rdata);
 
-static pj_bool_t set_ports(Call *call, pjmedia_port *stream_port, pjmedia_port *media_port);
+static pj_bool_t set_ports(Call *call, AudioEndpoint *ae, pjmedia_port *stream_port, pjmedia_port *media_port);
 //static pj_bool_t stop_media_operation(Call *call);
 static void build_stream_stat(ostringstream &oss, pjmedia_rtcp_stat *stat, pjmedia_stream_info *stream_info);
 
-bool init_media_ports(Call *c, unsigned sampling_rate, unsigned channel_count, unsigned samples_per_frame, unsigned bits_per_sample); 
-void connect_media_ports(Call *c);
-
 bool prepare_wire(pj_pool_t *pool, chainlink **link, unsigned sampling_rate, unsigned channel_count, unsigned samples_per_frame, unsigned bits_per_sample);
 
-bool prepare_tonegen(Call *c); 
-bool prepare_wav_player(Call *c, const char *file);
-bool prepare_wav_writer(Call *c, const char *file); 
+bool prepare_tonegen(Call *call, AudioEndpoint *ae); 
+bool prepare_wav_player(Call *c, AudioEndpoint *ae, const char *file);
+bool prepare_wav_writer(Call *c, AudioEndpoint *ae, const char *file); 
 
-bool prepare_fax(Call *c, bool is_sender, const char *file, unsigned flags); 
+bool prepare_fax(Call *c, AudioEndpoint *ae, bool is_sender, const char *file, unsigned flags); 
 
 void prepare_error_event(ostringstream *oss, char *scope, char *details);
 //void prepare_pjsipcall_error_event(ostringstream *oss, char *scope, char *function, pj_status_t s);
 void append_status(ostringstream *oss, pj_status_t s);
+
+bool is_media_active(Call *c, MediaEndpoint *me);
+void close_media_endpoint(MediaEndpoint *me);
+
+void close_media(Call *c);
+
+bool process_media(Call *c, pjsip_dialog *dlg, Document &document);
+
+typedef pj_status_t (*audio_endpoint_stop_op_t) (Call *call, AudioEndpoint *ae);
 
 static pjsip_module mod_tester =
 {
 	NULL, NULL,			    /* prev, next.		*/
 	{ (char*)"mod_tester", 10 },	    /* Name.			*/
 	-1,				    /* Id			*/
-	//PJSIP_MOD_PRIORITY_APPLICATION, /* Priority			*/
-	PJSIP_MOD_PRIORITY_DIALOG_USAGE, /* Priority			*/
+	PJSIP_MOD_PRIORITY_APPLICATION, /* Priority			*/
+	//PJSIP_MOD_PRIORITY_DIALOG_USAGE, /* Priority			*/
+    //PJSIP_MOD_PRIORITY_TSX_LAYER - 6, /* Priority */
 	NULL,			    /* load()			*/
 	NULL,			    /* start()			*/
 	NULL,			    /* stop()			*/
@@ -581,12 +665,39 @@ const char *translate_pjsip_inv_state(int state)
 	}
 }
 
+static int find_endpoint_by_inband_dtmf_media_stream(Call *call, pjmedia_stream *med_stream) {
+    for(int i=0 ; i<call->media_count ; i++) {
+        MediaEndpoint *me = (MediaEndpoint*)call->media[i];
+        if(ENDPOINT_TYPE_AUDIO == me->type) {
+            AudioEndpoint *ae = (AudioEndpoint*)me->endpoint.audio;
+            if(ae->med_stream == med_stream) {
+                return i;
+            }
+        }
+    }
+    return -1;
+}
+
+static int find_endpoint_by_inband_dtmf_media_port(Call *call, pjmedia_port *port) {
+    for(int i=0 ; i<call->media_count ; i++) {
+        MediaEndpoint *me = (MediaEndpoint*)call->media[i];
+        if(ENDPOINT_TYPE_AUDIO == me->type) {
+            AudioEndpoint *ae = (AudioEndpoint*)me->endpoint.audio;
+            if((pjmedia_port*)ae->dtmfdet == port) {
+                return i;
+            }
+        }
+    }
+    return -1;
+}
+
+
 static void on_inband_dtmf(pjmedia_port *port, void *user_data, char digit){
 	if(g_shutting_down) return;
 
 	long call_id;
 	if( !g_call_ids.get_id((long)user_data, call_id) ){
-		addon_log(LOG_LEVEL_DEBUG, "on_inband_dtmf: Failed to get call_id. Event will not be notified.\n");	
+		addon_log(L_DBG, "on_inband_dtmf: Failed to get call_id. Event will not be notified.\n");	
 		return;
 	}
 
@@ -594,24 +705,30 @@ static void on_inband_dtmf(pjmedia_port *port, void *user_data, char digit){
 	if(d == '*') d = 'e';
 	if(d == '#') d = 'f';
 
-	Call *c = (Call*)user_data;
+	Call *call = (Call*)user_data;
+
+    int media_id = find_endpoint_by_inband_dtmf_media_port(call, port);
+    assert(media_id >= 0);
+
+    MediaEndpoint *me = (MediaEndpoint*)call->media[media_id];
+    AudioEndpoint *ae = (AudioEndpoint*)me->endpoint.audio;
 
 	int mode = DTMF_MODE_INBAND;
 
 	if(g_dtmf_inter_digit_timer) {
 
 		PJW_LOCK();
-		int *pLen = &c->DigitBufferLength[mode];
+		int *pLen = &ae->DigitBufferLength[mode];
 
 		if(*pLen > MAXDIGITS) {
 			PJW_UNLOCK();
-			addon_log(LOG_LEVEL_DEBUG, "No more space for digits in inband buffer\n");
+			addon_log(L_DBG, "No more space for digits in inband buffer\n");
 			return;
 		}
 
-		c->DigitBuffers[mode][*pLen] = d;
+		ae->DigitBuffers[mode][*pLen] = d;
 		(*pLen)++;
-		c->last_digit_timestamp[mode] = ms_timestamp();
+		ae->last_digit_timestamp[mode] = ms_timestamp();
 		PJW_UNLOCK();
 	} else {
 		/*
@@ -622,7 +739,7 @@ static void on_inband_dtmf(pjmedia_port *port, void *user_data, char digit){
 		*/
 
 		char evt[256];
-		make_evt_dtmf(evt, sizeof(evt), call_id, 1, &d, mode);
+		make_evt_dtmf(evt, sizeof(evt), call_id, 1, &d, mode, media_id);
 		dispatch_event(evt);
 	}
 }
@@ -644,38 +761,28 @@ static void on_fax_result(pjmedia_port *port, void *user_data, int result){
 
 void dispatch_event(const char * evt)
 {
-	//addon_log(LOG_LEVEL_DEBUG, "dispach_event called\n");
+	//addon_log(L_DBG, "dispach_event called\n");
 	//g_event_sink(evt);
 
 	g_events.push_back(evt);
 }
 
-static char *get_media_mode_str(int mode) {
-	if(mode == SENDRECV) return (char*)"sendrecv";
-	if(mode == SENDONLY) return (char*)"sendonly";
-	if(mode == RECVONLY) return (char*)"recvonly";
-	if(mode == INACTIVE) return (char*)"inactive";
-	if(mode == UNKNOWN) return (char*)"unknown";
-    return (char*)"unexpected";
-}
-
-static int get_media_mode(pjmedia_sdp_attr **attrs, int count) {
+const char* get_media_mode(pjmedia_sdp_attr **attrs, int count) {
         int i;
         for(i=0 ; i<count ; ++i) {
                 pjmedia_sdp_attr *a = attrs[i];
                 if(pj_strcmp2(&a->name, "sendrecv")==0) {
-                        return SENDRECV;
+                        return "sendrecv";
                 } else if(pj_strcmp2(&a->name, "sendonly")==0) {
-                        return SENDONLY;
+                        return "sendonly";
                 } else if(pj_strcmp2(&a->name, "recvonly")==0) {
-                        return RECVONLY;
+                        return "recvonly";
 				} else if(pj_strcmp2(&a->name, "inactive")==0) {
-                        return INACTIVE;
+                        return "inactive";
 				}
         }
-        return UNKNOWN;
+        return "unknown";
 }
-
 
 
 // Adapted from
@@ -815,7 +922,7 @@ on_error:
 
 int __pjw_init()
 {
-	addon_log(LOG_LEVEL_DEBUG, "pjw_init thread_id=%i\n", syscall(SYS_gettid));
+	addon_log(L_DBG, "pjw_init thread_id=%i\n", syscall(SYS_gettid));
 
 	g_shutting_down = false;
 
@@ -824,14 +931,14 @@ int __pjw_init()
 	status = pj_init();
 	if(status != PJ_SUCCESS)
 	{
-		addon_log(LOG_LEVEL_DEBUG, "pj_init failed\n");
+		addon_log(L_DBG, "pj_init failed\n");
 		return 1; 
 	}
 
 	status = pjlib_util_init();
 	if(status != PJ_SUCCESS)
 	{
-		addon_log(LOG_LEVEL_DEBUG, "pj_lib_util_init failed\n");
+		addon_log(L_DBG, "pj_lib_util_init failed\n");
 		return 1;
 	}
 
@@ -846,7 +953,7 @@ int __pjw_init()
 	status = pjsip_endpt_create(&cp.factory, sip_endpt_name, &g_sip_endpt);
 	if(status != PJ_SUCCESS)
 	{
-		addon_log(LOG_LEVEL_DEBUG, "pjsip_endpt_create failed\n");
+		addon_log(L_DBG, "pjsip_endpt_create failed\n");
 		return 1;
 	}
 
@@ -856,7 +963,7 @@ int __pjw_init()
     status = pjmedia_event_mgr_create(g_pool, 0, NULL);
     if(status != PJ_SUCCESS)
     {
-        addon_log(LOG_LEVEL_DEBUG, "pjmedia_event_mgr_create  failed\n");
+        addon_log(L_DBG, "pjmedia_event_mgr_create  failed\n");
         return 1;
     }
 
@@ -869,7 +976,7 @@ int __pjw_init()
 		NULL, 1, &msg_tag);
 	if(status != PJ_SUCCESS)
 	{
-		addon_log(LOG_LEVEL_DEBUG, "pjsip_endpt_add_capability PJSIP_H_ALLOW failed\n");
+		addon_log(L_DBG, "pjsip_endpt_add_capability PJSIP_H_ALLOW failed\n");
 		return 1;
 	}
 
@@ -878,7 +985,7 @@ int __pjw_init()
 		NULL, 1, &STR_MIME_APP_ISCOMPOSING);
 	if(status != PJ_SUCCESS)
 	{
-		addon_log(LOG_LEVEL_DEBUG, "pjsip_endpt_add_capability PJSIP_H_ACCEPT for MIME_APP_ISCOMPOSING failed\n");
+		addon_log(L_DBG, "pjsip_endpt_add_capability PJSIP_H_ACCEPT for MIME_APP_ISCOMPOSING failed\n");
 		return 1;
 	}
 
@@ -887,42 +994,42 @@ int __pjw_init()
 		NULL, 1, &STR_MIME_TEXT_PLAIN);
 	if(status != PJ_SUCCESS)
 	{
-		addon_log(LOG_LEVEL_DEBUG, "pjsip_endpt_add_capability PJSIP_H_ACCEPT for MIME_TEXT_PLAIN failed\n");
+		addon_log(L_DBG, "pjsip_endpt_add_capability PJSIP_H_ACCEPT for MIME_TEXT_PLAIN failed\n");
 		return 1;
 	}
 
 	status = pjsip_tsx_layer_init_module(g_sip_endpt);
 	if(status != PJ_SUCCESS)
 	{
-		addon_log(LOG_LEVEL_DEBUG, "pjsip_tsx_layer_init_module failed\n");
+		addon_log(L_DBG, "pjsip_tsx_layer_init_module failed\n");
 		return 1;
 	}
 
 	status = pjsip_ua_init_module(g_sip_endpt, NULL);
 	if(status != PJ_SUCCESS)
 	{
-		addon_log(LOG_LEVEL_DEBUG, "pjsip_ua_init_module failed\n");
+		addon_log(L_DBG, "pjsip_ua_init_module failed\n");
 		return 1;
 	}
 
 	status = pjsip_evsub_init_module(g_sip_endpt);
 	if(status != PJ_SUCCESS)
 	{
-		addon_log(LOG_LEVEL_DEBUG, "pjsip_evsub_init_module failed\n");
+		addon_log(L_DBG, "pjsip_evsub_init_module failed\n");
 		return 1;
 	}
 
 	status = pjsip_xfer_init_module(g_sip_endpt);
 	if(status != PJ_SUCCESS)
 	{
-		addon_log(LOG_LEVEL_DEBUG, "pjsip_xfer_init_module failed\n");
+		addon_log(L_DBG, "pjsip_xfer_init_module failed\n");
 		return 1;
 	}
 
 	status = pjsip_replaces_init_module(g_sip_endpt);
 	if(status != PJ_SUCCESS)
 	{
-		addon_log(LOG_LEVEL_DEBUG, "pjsip_replaces_init_module failed\n");
+		addon_log(L_DBG, "pjsip_replaces_init_module failed\n");
 		return 1;
 	}
 
@@ -931,30 +1038,29 @@ int __pjw_init()
 	inv_cb.on_state_changed = &on_state_changed;
 	inv_cb.on_new_session = &on_forked;
 	inv_cb.on_media_update = &on_media_update;
-	inv_cb.on_rx_offer = NULL;
-    inv_cb.on_rx_offer2 = &on_rx_offer2;
+    inv_cb.on_rx_offer2 = &on_rx_offer2; // we need this for delayed_media scenarios.
 	inv_cb.on_rx_reinvite = &on_rx_reinvite;
-	inv_cb.on_tsx_state_changed = &on_tsx_state_changed;
+	//inv_cb.on_tsx_state_changed = &on_tsx_state_changed;
 	inv_cb.on_redirected = &on_redirected;
 
 	status = pjsip_inv_usage_init(g_sip_endpt, &inv_cb);
 	if(status != PJ_SUCCESS)
 	{
-		addon_log(LOG_LEVEL_DEBUG, "pjsip_inv_usage_init failed\n");
+		addon_log(L_DBG, "pjsip_inv_usage_init failed\n");
 		return 1;
 	}
 
 	status = pjsip_100rel_init_module(g_sip_endpt);
 	if(status != PJ_SUCCESS)
 	{
-		addon_log(LOG_LEVEL_DEBUG, "pjsip_100rel_init_module failed\n");
+		addon_log(L_DBG, "pjsip_100rel_init_module failed\n");
 		return 1;
 	}
 	
 	status = pjsip_endpt_register_module(g_sip_endpt, &mod_tester);
 	if(status != PJ_SUCCESS)
 	{
-		addon_log(LOG_LEVEL_DEBUG, "pjsip_endpt_register_module failed\n");
+		addon_log(L_DBG, "pjsip_endpt_register_module failed\n");
 		return 1;
 	}
 #if PJ_HAS_THREADS
@@ -966,7 +1072,7 @@ int __pjw_init()
 #endif
 	if(status != PJ_SUCCESS)
 	{
-		addon_log(LOG_LEVEL_DEBUG, "pjmedia_endpt_create failed\n");
+		addon_log(L_DBG, "pjmedia_endpt_create failed\n");
 		return 1;
 	}
 
@@ -974,7 +1080,7 @@ int __pjw_init()
 	status = pjmedia_codec_g711_init(g_med_endpt);
 	if(status != PJ_SUCCESS)
 	{
-		addon_log(LOG_LEVEL_DEBUG, "pjmedia_codec_g711_init failed\n");
+		addon_log(L_DBG, "pjmedia_codec_g711_init failed\n");
 		return 1;
 	}
 #endif
@@ -983,7 +1089,7 @@ int __pjw_init()
 	status = pjmedia_codec_gsm_init(g_med_endpt);
 	if(status != PJ_SUCCESS)
 	{
-		addon_log(LOG_LEVEL_DEBUG, "pjmedia_codec_gsm_init failed\n");
+		addon_log(L_DBG, "pjmedia_codec_gsm_init failed\n");
 		return 1;
 	}
 #endif
@@ -992,7 +1098,7 @@ int __pjw_init()
 	status = pjmedia_codec_l16_init(g_med_endpt, 0);
 	if(status != PJ_SUCCESS)
 	{
-		addon_log(LOG_LEVEL_DEBUG, "pjmedia_codec_l16_init failed\n");
+		addon_log(L_DBG, "pjmedia_codec_l16_init failed\n");
 		return 1;
 	}
 #endif
@@ -1001,7 +1107,7 @@ int __pjw_init()
 	status = pjmedia_codec_ilbc_init(g_med_endpt, DEFAULT_ILBC_MODE);
 	if(status != PJ_SUCCESS)
 	{
-		addon_log(LOG_LEVEL_DEBUG, "pjmedia_codec_ilbc_init failed\n");
+		addon_log(L_DBG, "pjmedia_codec_ilbc_init failed\n");
 		return 1;
 	}
 #endif
@@ -1013,7 +1119,7 @@ int __pjw_init()
 				-1);
 	if(status != PJ_SUCCESS)
 	{
-		addon_log(LOG_LEVEL_DEBUG, "pjmedia_codec_speex_init failed\n");
+		addon_log(L_DBG, "pjmedia_codec_speex_init failed\n");
 		return 1;
 	}
 #endif
@@ -1022,7 +1128,7 @@ int __pjw_init()
 	status = pjmedia_codec_g722_init(g_med_endpt);
 	if(status != PJ_SUCCESS)
 	{
-		addon_log(LOG_LEVEL_DEBUG, "pjmedia_codec_g722_init failed\n");
+		addon_log(L_DBG, "pjmedia_codec_g722_init failed\n");
 		return 1;
 	}
 #endif
@@ -1031,7 +1137,7 @@ int __pjw_init()
     status = pjmedia_codec_opus_init(g_med_endpt);
     if(status != PJ_SUCCESS)
     {
-        addon_log(LOG_LEVEL_DEBUG, "pjmedia_codec_opus_init failed\n");
+        addon_log(L_DBG, "pjmedia_codec_opus_init failed\n");
         return 1;
     }
 #endif
@@ -1046,15 +1152,15 @@ int __pjw_init()
 	status = pj_thread_register("main_thread", g_main_thread_descriptor, &g_main_thread);
 	if(status != PJ_SUCCESS)
 	{
-		addon_log(LOG_LEVEL_DEBUG, "pj_thread_register(main_thread) failed\n");
+		addon_log(L_DBG, "pj_thread_register(main_thread) failed\n");
 		exit(1);
 	} else {
-		//addon_log(LOG_LEVEL_DEBUG, "pj_thread_register(main_thread) success\n");
+		//addon_log(L_DBG, "pj_thread_register(main_thread) success\n");
 		;
 	}
 
 	if(!start_digit_buffer_thread()) {
-		addon_log(LOG_LEVEL_DEBUG, "start_digit_buffer_thread() failed\n");
+		addon_log(L_DBG, "start_digit_buffer_thread() failed\n");
 		return 1;
 	}
 
@@ -1069,10 +1175,10 @@ int __pjw_poll(char *out_evt){
 		status = pj_thread_register("poll_thread", g_poll_thread_descriptor, &g_poll_thread);
 		if(status != PJ_SUCCESS)
 		{
-			addon_log(LOG_LEVEL_DEBUG, "pj_thread_register(poll_thread) failed\n");
+			addon_log(L_DBG, "pj_thread_register(poll_thread) failed\n");
 			exit(1);
 		} else {
-			//addon_log(LOG_LEVEL_DEBUG, "pj_thread_register(poll_thread) success\n");
+			//addon_log(L_DBG, "pj_thread_register(poll_thread) success\n");
 			;
 		}
 	}
@@ -1185,7 +1291,7 @@ pjsip_tpfactory *create_tcp_tpfactory(pjsip_endpoint* sip_endpt, pj_str_t *ipadd
 }
 
 pjsip_tpfactory *allocate_tls_tpfactory(pjsip_endpoint* sip_endpt, pj_str_t *ipaddr, int port) {
-	addon_log(LOG_LEVEL_DEBUG, "allocate_tls_tpfactory ipaddr=%.*s port=%i\n", ipaddr->slen, ipaddr->ptr, port);
+	addon_log(L_DBG, "allocate_tls_tpfactory ipaddr=%.*s port=%i\n", ipaddr->slen, ipaddr->ptr, port);
 	pj_status_t status;
 	pjsip_tpfactory *tpfactory;
 	pj_sockaddr local_addr;
@@ -1207,7 +1313,7 @@ pjsip_tpfactory *allocate_tls_tpfactory(pjsip_endpoint* sip_endpt, pj_str_t *ipa
 		
         status = pjsip_tls_transport_start2(sip_endpt, &tls_opt, &local_addr, NULL, 1, &tpfactory);
         if (status != PJ_SUCCESS) {
-		addon_log(LOG_LEVEL_DEBUG, "status=%i\n", status);
+		addon_log(L_DBG, "status=%i\n", status);
 		return NULL;
         }
 
@@ -1245,7 +1351,8 @@ int pjw_transport_create(const char *json, int *out_t_id, char *out_t_address, i
     pjsip_transport_type_e type = PJSIP_TRANSPORT_UDP;
 
 	pj_status_t status;
-	Transport *t = NULL;
+	Transport *transport = NULL;
+    const char *tp;
 	long t_id;
 
     char buffer[MAX_JSON_INPUT];
@@ -1284,21 +1391,23 @@ int pjw_transport_create(const char *json, int *out_t_id, char *out_t_address, i
         port = document["port"].GetInt();
     }
 
+    tp = "udp";
+
     // type
     if(document.HasMember("type")) {
         if(!document["type"].IsString()) {
             set_error("Parameter type must be a string");
             goto out;
         }
-        const char *t = document["type"].GetString();
-        if(stricmp(t, "UDP") == 0) {
+        tp = (char*)document["type"].GetString();
+        if(strcmp(tp, "udp") == 0) {
             type = PJSIP_TRANSPORT_UDP;
-        } else if(stricmp(t, "TCP") == 0) {
+        } else if(strcmp(tp, "tcp") == 0) {
             type = PJSIP_TRANSPORT_TCP;
-        } else if(stricmp(t, "TLS") == 0) {
+        } else if(strcmp(tp, "tls") == 0) {
             type = PJSIP_TRANSPORT_TLS;
         } else {
-            set_error("Invalid type %s. It must be one of 'UDP' (default), 'TCP' or 'TLS'", type);
+            set_error("Invalid type %s. It must be one of 'UDP' (default), 'TCP' or 'TLS'", tp);
             goto out;
         }
     }
@@ -1318,18 +1427,16 @@ int pjw_transport_create(const char *json, int *out_t_id, char *out_t_address, i
 			goto out;
 		}
 
-		t = new Transport;
-		t->type = PJSIP_TRANSPORT_UDP;
-		t->sip_transport = sip_transport;
+		transport = new Transport;
+		transport->type = PJSIP_TRANSPORT_UDP;
+		transport->sip_transport = sip_transport;
 
-		if(!g_transport_ids.add((long)t, t_id)){
+		if(!g_transport_ids.add((long)transport, t_id)){
 			status = pjsip_udp_transport_pause(sip_transport,PJSIP_UDP_TRANSPORT_DESTROY_SOCKET);
             printf("pjsip_dup_transport_pause status=%i\n", status);
 			set_error("Failed to allocate id");
 		    goto out;	
 		}
-
-		g_SipTransportMap.insert(make_pair(sip_transport, t_id));
     } else if(type == PJSIP_TRANSPORT_TCP) {
 		pjsip_tpfactory *tpfactory;
 		//int af;
@@ -1347,18 +1454,16 @@ int pjw_transport_create(const char *json, int *out_t_id, char *out_t_address, i
             goto out;
 		}
 
-		t = new Transport;
-		t->type = PJSIP_TRANSPORT_TCP;
-		t->tpfactory = tpfactory;
+		transport = new Transport;
+		transport->type = PJSIP_TRANSPORT_TCP;
+		transport->tpfactory = tpfactory;
 
-		if(!g_transport_ids.add((long)t, t_id)){
+		if(!g_transport_ids.add((long)transport, t_id)){
 			status = (tpfactory->destroy)(tpfactory);
 
 			set_error("Failed to allocate id");
             goto out;
 		}
-
-		g_TcpTransportId = t_id; 
 	} else {
 		pjsip_tpfactory *tpfactory;
 		//int af;
@@ -1376,21 +1481,24 @@ int pjw_transport_create(const char *json, int *out_t_id, char *out_t_address, i
             goto out;
 		}
 
-		t = new Transport;
-		t->type = PJSIP_TRANSPORT_TLS;
-		t->tpfactory = tpfactory;
+		transport = new Transport;
+		transport->type = PJSIP_TRANSPORT_TLS;
+		transport->tpfactory = tpfactory;
 
-		if(!g_transport_ids.add((long)t, t_id)) {
+		if(!g_transport_ids.add((long)transport, t_id)) {
 			status = (tpfactory->destroy)(tpfactory);
 
 			set_error("Failed to allocate id");
             goto out;
 		}
-
-		g_TlsTransportId = t_id; 
 	}
 
-	t->id = t_id;
+	transport->id = t_id;
+    strcpy(transport->address, addr);
+    transport->port = port;
+
+    build_transport_tag(transport->tag, tp, addr, port);
+    g_TransportMap.insert(make_pair(transport->tag, t_id));
 
     /*
 	if(g_PacketDumper) {
@@ -1497,27 +1605,27 @@ int pjw_account_create(int t_id, const char *json, int *out_acc_id)
         goto out;
     }
 
-    if(!json_get_string_param(document, "domain", false, &domain)) {
+    if(json_get_string_param(document, "domain", false, &domain) <= 0) {
         goto out;
     }
 
-    if(!json_get_string_param(document, "server", false, &server)) {
+    if(json_get_string_param(document, "server", false, &server) <= 0) {
         goto out;
     }
 
-    if(!json_get_string_param(document, "username", false, &username)) {
+    if(json_get_string_param(document, "username", false, &username) <= 0) {
         goto out;
     }
 
-    if(!json_get_string_param(document, "password", false, &password)) {
+    if(json_get_string_param(document, "password", false, &password) <= 0) {
         goto out;
     }
 
-    if(!json_get_string_param(document, "to_uri", true, &c_to_uri)) {
+    if(json_get_string_param(document, "to_uri", true, &c_to_uri) <= 0) {
         goto out;
     }
 
-    if(!json_get_int_param(document, "expires", true, &expires)) {
+    if(json_get_int_param(document, "expires", true, &expires) <= 0) {
         goto out;
     }
 
@@ -1663,7 +1771,7 @@ int pjw_account_register(long acc_id, const char *json)
         goto out;
     }
 
-    if(!json_get_bool_param(document, "auto_refresh", true, &auto_refresh)) {
+    if(json_get_bool_param(document, "auto_refresh", true, &auto_refresh) <= 0) {
         goto out;
     }
 
@@ -1731,10 +1839,9 @@ out:
 	return 0;
 }
 
-//int pjw_call_respond(long call_id, int code, const char *reason, const char *additional_headers)
 int pjw_call_respond(long call_id, const char *json)
 {
-	printf("pjw_call_respond: call_id=%lu json=%s\n", call_id, json);
+	addon_log(L_DBG, "pjw_call_respond: call_id=%lu json=%s\n", call_id, json);
 	PJW_LOCK();
 	clear_error();
 
@@ -1749,24 +1856,27 @@ int pjw_call_respond(long call_id, const char *json)
 
 	pjsip_tx_data *tdata;
 
+    const pjmedia_sdp_session *local_sdp;
+
 	Call *call;
 
     char buffer[MAX_JSON_INPUT];
 
     Document document;
 
-    const char *valid_params[] = {"code", "reason", "headers", ""};
+    const char *valid_params[] = {"code", "reason", "headers", "media", ""};
 
 	if(!g_call_ids.get(call_id, val)){
 		set_error("Invalid call_id");
         goto out;
 	}
 	call = (Call*)val;
+	//addon_log(L_DBG, "pending_invite=%d\n", call->pending_invite);
 
-	if(call->outgoing) {
-		set_error("You cannot respond an outgoing call");
-		goto out;
-	}
+    if(call->pending_request == -1) {
+        set_error("no pending request to be answered");
+        goto out;
+    }
 
     if(!parse_json(document, json, buffer, MAX_JSON_INPUT)) {
         goto out;
@@ -1776,44 +1886,115 @@ int pjw_call_respond(long call_id, const char *json)
         goto out;
     }
 
-    if(!json_get_int_param(document, "code", true, &code)) {
+    if(json_get_int_param(document, "code", true, &code) <= 0) {
         goto out;
     }
 
-    if(!json_get_string_param(document, "reason", true, &reason)) {
+    if(json_get_string_param(document, "reason", true, &reason) <= 0) {
         goto out;
     }
 
 	r = pj_str((char*)reason);
 
-	if(call->initial_invite_rdata) {
-		status = pjsip_inv_initial_answer(call->inv, call->initial_invite_rdata,
+    if(call->pending_request != PJSIP_INVITE_METHOD) {
+        pjsip_transaction *tsx = pjsip_rdata_get_tsx(call->pending_rdata);
+        if(!tsx) goto out;
+        assert(tsx);
+
+        pjsip_tx_data *tdata;
+
+        status = pjsip_dlg_create_response(call->inv->dlg,
+            call->pending_rdata,
+            code,
+            NULL,
+            &tdata 
+        );
+
+        assert(status == PJ_SUCCESS);
+
+        status = pjsip_dlg_send_response(call->inv->dlg,
+            tsx,
+            tdata
+        );
+
+        assert(status == PJ_SUCCESS); 
+
+        if(code >= 200) {
+            status = pjsip_rx_data_free_cloned(call->pending_rdata);
+            if(status != PJ_SUCCESS) {
+                set_error("pjsip_rx_data_free_cloned failed with status=%i", status);
+                goto out;
+            }
+        
+            call->pending_request = -1;
+            call->pending_rdata = 0;
+        }
+
+        goto out;
+    }
+
+    if(183 == code || (code >= 200 && code < 300)) {
+        if(!process_media(call, call->inv->dlg, document)) {
+            goto out;
+        }
+
+        //process_media above set call->local_sdp based on document.
+
+        if(call->pending_rdata && call->pending_rdata->msg_info.msg->body && call->pending_rdata->msg_info.msg->body->len) {
+            status = pjsip_inv_set_sdp_answer(call->inv, call->local_sdp);
+        } else {
+            // delayed media. we need to sned the offer
+            status = pjmedia_sdp_neg_create_w_local_offer(call->inv->dlg->pool,
+                call->local_sdp,
+                &call->inv->neg
+            );
+            if(status != PJ_SUCCESS) {
+                set_error("pjmedia_sdp_neg_create_w_local_offer failed");
+                goto out;
+            }
+        }
+    }
+
+	if(call->inv_initial_answer_required) {
+		status = pjsip_inv_initial_answer(call->inv, call->pending_rdata,
 						code,
 						&r,
-						NULL,
+						call->local_sdp,
 						&tdata);
 		if(status != PJ_SUCCESS) {
 			set_error("pjsip_inv_initial_answer failed with status=%i", status);
             goto out;
 		}
 
-		status = pjsip_rx_data_free_cloned(call->initial_invite_rdata);
-		if(status != PJ_SUCCESS) {
-			set_error("pjsip_rx_data_free_cloned failed with status=%i", status);
-            goto out;
-		}
-		call->initial_invite_rdata = 0;
+        call->inv_initial_answer_required = false;
+
+        if(code >= 200) {
+            status = pjsip_rx_data_free_cloned(call->pending_rdata);
+            if(status != PJ_SUCCESS) {
+                set_error("pjsip_rx_data_free_cloned failed with status=%i", status);
+                goto out;
+            }
+
+            call->pending_request = -1;
+            call->pending_rdata = 0;
+        }
 	} else {
+        /*
+        pjmedia_sdp_neg_state state = pjmedia_sdp_neg_get_state(call->inv->neg);
+        printf("neg_state=%d\n", state);
+        */
+
 		status = pjsip_inv_answer(call->inv,
 					  code,
 					  &r,
-					  NULL,
+					  NULL, //local_sdp,
 					  &tdata); 
-
 		if(status != PJ_SUCCESS){
 			set_error("pjsip_inv_answer failed with status=%i", status);
             goto out;
 		}
+
+        call->pending_request = -1;
 
 		if(!add_headers(call->inv->dlg->pool, tdata, document)) {
 			goto out;
@@ -1825,7 +2006,6 @@ int pjw_call_respond(long call_id, const char *json)
 		set_error("pjsip_inv_send_msg failed with status=%i", status);
         goto out;
 	}
-
 out:
 	PJW_UNLOCK();
 	if(pjw_errorstring[0]) {
@@ -1837,6 +2017,7 @@ out:
 //int pjw_call_terminate(long call_id, int code, const char *reason, const char *additional_headers)
 int pjw_call_terminate(long call_id, const char *json)
 {
+    addon_log(L_DBG, "call_terminate call_id=%d\n", call_id);
 	PJW_LOCK();
 	clear_error();
 
@@ -1869,11 +2050,11 @@ int pjw_call_terminate(long call_id, const char *json)
         goto out;
     }
 
-    if(!json_get_int_param(document, "code", true, &code)) {
+    if(json_get_int_param(document, "code", true, &code) <= 0) {
         goto out;
     }
 
-    if(!json_get_string_param(document, "reason", true, &reason)) {
+    if(json_get_string_param(document, "reason", true, &reason) <= 0) {
         goto out;
     }
 
@@ -1914,7 +2095,255 @@ out:
 }
 
 
-//int pjw_call_create(long t_id, unsigned flags, const char *from_uri, const char *to_uri, const char *request_uri, const char *proxy_uri, const char *additional_headers, const char *realm, const char *username, const char *password, long *out_call_id, char *out_sip_call_id)
+void request_callback(void *token, pjsip_event *event) {
+    addon_log(L_DBG, "request_callback\n");
+
+    Request *request = (Request*)token;
+
+	pjsip_rx_data *rdata = event->body.tsx_state.src.rdata;
+	pj_str_t mname = rdata->msg_info.cseq->method.name;
+
+	char evt[2048];
+	make_evt_response(evt, sizeof(evt), "request", request->id, mname.slen, mname.ptr, rdata->msg_info.len, rdata->msg_info.msg_buf);
+	dispatch_event(evt);
+}
+
+int pjw_request_create(long t_id, const char *json, long *out_request_id, char *out_sip_call_id)
+{
+	PJW_LOCK();
+	clear_error();
+
+	long val;
+	Transport *t;
+
+	long request_id;
+
+    Request *request;
+
+    char *method = NULL;
+    char *from_uri = NULL;
+    char *to_uri = NULL;
+    char *request_uri = NULL;
+
+	char local_contact[1024];
+	char call_id[1024];
+
+    pj_str_t request_uri_s;
+    pj_str_t from_uri_s;
+    pj_str_t to_uri_s;
+
+    pj_str_t local_contact_s;
+    pj_str_t call_id_s;
+
+    char buffer[MAX_JSON_INPUT];
+
+    Document document;
+
+    const  char *valid_params[] = {"method", "from_uri", "to_uri", "request_uri", "headers", ""};
+
+    const pjsip_method *m;
+    pjsip_tx_data *tdata;
+    pj_status_t status;
+
+	if(!g_transport_ids.get(t_id, val)){
+		set_error("Invalid transport_id");
+		goto out;
+	}
+	t = (Transport*)val;
+
+    if(!parse_json(document, json, buffer, MAX_JSON_INPUT)) {
+        goto out;
+    }
+        
+    if(!validate_params(document, valid_params)) {
+        goto out;
+    }
+
+    if(!json_get_string_param(document, "method", false, &method)) {
+        goto out;
+    }
+
+    if(strcmp(method, "REGISTER") == 0) {
+        m = &pjsip_register_method; 
+    } else if(strcmp(method, "OPTIONS") == 0) {
+        m = &pjsip_options_method; 
+    } else if(strcmp(method, "INFO") == 0) {
+        m = &info_method; 
+    } else if(strcmp(method, "MESSAGE") == 0) {
+        m = &message_method; 
+    } else {
+        set_error("Unsupported method");
+        goto out;
+    }
+
+    if(!json_get_and_check_uri(document, "from_uri", false, &from_uri)) {
+        goto out;
+    }
+    from_uri_s = pj_str(from_uri);
+
+    if(!json_get_and_check_uri(document, "to_uri", false, &to_uri)) {
+        goto out;
+    }
+    to_uri_s = pj_str(to_uri);
+
+    request_uri = to_uri;
+    if(!json_get_and_check_uri(document, "request_uri", true, &request_uri)) {
+        goto out;
+    }
+    request_uri_s = pj_str(request_uri);
+
+	if(t->type == PJSIP_TRANSPORT_UDP) {
+		build_local_contact(local_contact, t->sip_transport, "sip-lab");
+	} else {
+		build_local_contact_from_tpfactory(local_contact, t->tpfactory, "sip-lab", t->type);
+	}
+    local_contact_s = pj_str(local_contact);
+
+    call_id_s = pj_str(call_id);
+    pj_generate_unique_string_lower(&call_id_s);
+
+    status = pjsip_endpt_create_request(g_sip_endpt, m,
+                                        &request_uri_s, &from_uri_s, &to_uri_s,
+                                        &local_contact_s, &call_id_s, -1, NULL,
+                                        &tdata);
+    if (status != PJ_SUCCESS) {
+        set_error("pjsip_endpt_create_request failed");
+        goto out;
+    }
+
+	if(!add_headers(tdata->pool, tdata, document)) {
+        goto out;
+	}
+
+    request = (Request*)pj_pool_zalloc(tdata->pool, sizeof(Request));
+    request->is_uac = true;
+
+    status = pjsip_endpt_send_request(g_sip_endpt, tdata, -1, (void*)request, request_callback);
+    if (status != PJ_SUCCESS) {
+        set_error("pjsip_endpt_send_request failed");
+        goto out;
+    }
+
+    if(!g_request_ids.add((long)request, request_id)){
+        set_error("Failed to allocate id");
+        goto out;
+    }
+
+    request->id = request_id;
+out:
+	PJW_UNLOCK();
+	if(pjw_errorstring[0]){
+		return -1;
+	}
+
+	*out_request_id = request_id;
+	strncpy(out_sip_call_id, call_id_s.ptr, call_id_s.slen);
+	out_sip_call_id[call_id_s.slen] = 0;
+	return 0;
+}
+
+int pjw_request_respond(long request_id, const char *json)
+{
+	addon_log(L_DBG, "pjw_request_respond: request_id=%lu json=%s\n", request_id, json);
+	PJW_LOCK();
+	clear_error();
+
+	long val;
+
+    int code;
+    char *reason;
+
+	pj_str_t r;// pj_str((char*)reason);
+
+	pj_status_t status;
+
+	pjsip_tx_data *tdata;
+
+    pjsip_response_addr res_addr;
+
+	Request *request;
+
+    char buffer[MAX_JSON_INPUT];
+
+    Document document;
+
+    const char *valid_params[] = {"code", "reason", "headers", ""};
+
+	if(!g_request_ids.get(request_id, val)){
+		set_error("Invalid request_id");
+        goto out;
+	}
+	request = (Request*)val;
+
+    if(request->is_uac) {
+		set_error("Cannot respond to our own request");
+        goto out;
+    }
+
+    if(!request->pending_rdata) {
+		set_error("Final response already sent");
+        goto out;
+    }
+
+    if(!parse_json(document, json, buffer, MAX_JSON_INPUT)) {
+        goto out;
+    }
+    
+    if(!validate_params(document, valid_params)) {
+        goto out;
+    }
+
+    if(json_get_int_param(document, "code", true, &code) <= 0) {
+        goto out;
+    }
+
+    if(json_get_string_param(document, "reason", true, &reason) <= 0) {
+        goto out;
+    }
+
+	r = pj_str((char*)reason);
+
+    status = pjsip_endpt_create_response(g_sip_endpt, request->pending_rdata, code, &r, &tdata);
+    if(status != PJ_SUCCESS) {
+        set_error("pjsip_endpt_create_response failed");
+        goto out;
+    }
+
+	if(!add_headers(tdata->pool, tdata, document)) {
+        goto out;
+	}
+
+    status = pjsip_get_response_addr(tdata->pool, request->pending_rdata, &res_addr);
+    if(status != PJ_SUCCESS) {
+        set_error("pjsip_get_response_addr failed");
+        goto out;
+	}
+
+    status = pjsip_endpt_send_response(g_sip_endpt, &res_addr, tdata, NULL, NULL);
+    if(status != PJ_SUCCESS) {
+        set_error("pjsip_endpt_send_response failed");
+        goto out;
+	}
+
+    if(code >= 200 && request->pending_rdata) {
+        status = pjsip_rx_data_free_cloned(request->pending_rdata);
+        if(status != PJ_SUCCESS) {
+            set_error("pjsip_rx_data_free_cloned failed with status=%i", status);
+            goto out;
+        }
+        request->pending_rdata = NULL;
+    }
+
+out:
+	PJW_UNLOCK();
+	if(pjw_errorstring[0]) {
+		return -1;
+	}
+	return 0;
+}
+
+
+
 int pjw_call_create(long t_id, const char *json, long *out_call_id, char *out_sip_call_id)
 {
 	PJW_LOCK();
@@ -1948,7 +2377,7 @@ int pjw_call_create(long t_id, const char *json, long *out_call_id, char *out_si
 
     Document document;
 
-    const char *valid_params[] = {"from_uri", "to_uri", "request_uri", "proxy_uri", "auth", "delayed_media", "headers", ""};
+    const char *valid_params[] = {"from_uri", "to_uri", "request_uri", "proxy_uri", "auth", "delayed_media", "headers", "media", ""};
 
 	if(!g_transport_ids.get(t_id, val)){
 		set_error("Invalid transport_id");
@@ -2095,6 +2524,33 @@ bool dlg_set_transport_by_t(Transport *t, pjsip_dialog *dlg) {
 	return true;
 }
 
+void build_transport_tag(char *dest, const char *type, const char *address, int port) {
+    sprintf(dest, "%s:%s:%d", type, address, port);
+}
+
+void build_transport_tag_from_pjsip_transport(char *dest, pjsip_transport *t) {
+    char address[16];
+    const char *type;
+    int port;
+    int tport = t->local_name.port;
+
+    assert(t->local_name.host.slen < 16);
+	strncpy(address, t->local_name.host.ptr, t->local_name.host.slen);
+    address[t->local_name.host.slen] = 0;
+
+    if(t->key.type == PJSIP_TRANSPORT_UDP) {
+		type = "udp";
+        port = tport ? tport : 5060;
+	} else if(t->key.type == PJSIP_TRANSPORT_TCP) {
+        type = "tcp";
+        port = tport ? tport : 5060;
+	} else {
+        type = "tls";
+        port = tport ? tport : 5061;
+	}
+
+    build_transport_tag(dest, type, address, port);
+}
 
 void build_local_contact(char *dest, pjsip_transport *t, const char *contact_username) {
 	char *p = dest;
@@ -2147,7 +2603,7 @@ bool set_proxy(pjsip_dialog *dlg, const char *proxy_uri) {
 	if(!strstr(proxy_uri,";lr")){
 		strcat(buf,";lr");
 	}	
-	//addon_log(LOG_LEVEL_DEBUG, ">>%s<<\n",buf);
+	//addon_log(L_DBG, ">>%s<<\n",buf);
 
 //	pjsip_route_hdr route_set;
 //	pjsip_route_hdr *route;
@@ -2223,88 +2679,63 @@ int call_create(Transport *t, unsigned flags, pjsip_dialog *dlg, const char *pro
 	//in_addr addr;
 	//addr.s_addr = t->local_addr.ipv4.sin_addr.s_addr;
 	//pj_str_t str_addr = pj_str( inet_ntoa(addr) );
-	in_addr in_a;
-	if(t->type == PJSIP_TRANSPORT_UDP) {
-		in_a = (in_addr&)t->sip_transport->local_addr.ipv4.sin_addr.s_addr;
-	} else {
-		in_a = (in_addr&)t->tpfactory->local_addr.ipv4.sin_addr.s_addr;
-	}
-
-	pj_str_t str_addr = pj_str( inet_ntoa(in_a) );
-	pjmedia_transport *med_transport = create_media_transport(&str_addr);
-
 	pj_status_t status;
 
-	if(!med_transport)
-	{
-		status = pjsip_dlg_terminate(dlg); //ToDo:
-		set_error("create_media_transport failed");
-		return -1;
-	}
+	Call *call = (Call*)pj_pool_alloc(dlg->pool, sizeof(Call));
+	pj_bzero(call, sizeof(Call));
 
-	pjmedia_transport_info med_tpinfo;
-	pjmedia_transport_info_init(&med_tpinfo);
-	pjmedia_transport_get_info(med_transport, &med_tpinfo);
-	
-	pjmedia_sdp_session *sdp = 0;
+	call->transport = t;
+    call->outgoing = true;
+
+    pjmedia_sdp_session *sdp = 0;
+
+    if(!process_media(call, dlg, document)) {
+        close_media(call);
+        return -1; 
+    }
 
 	if(!(flags & CALL_FLAG_DELAYED_MEDIA)) {
-		status = pjmedia_endpt_create_sdp( g_med_endpt, 
-				dlg->pool, 
-				1,
-				&med_tpinfo.sock_info,
-				&sdp);
-		if(status != PJ_SUCCESS) {
-			close_media_transport(med_transport);
-			status = pjsip_dlg_terminate(dlg); //ToDo:
-			set_error("pjmedia_endpt_create_sdp failed");
-			return -1; 
-		}
-	}
+        sdp = call->local_sdp;
+    }
 
 	status = pjsip_inv_create_uac(dlg, sdp, 0, &inv);
 	if(status != PJ_SUCCESS) {
-		close_media_transport(med_transport);
+		close_media(call);
 		status = pjsip_dlg_terminate(dlg); //ToDo:
 		set_error("pjsip_inv_create_uac failed");
 		return -1;
 	}
 
+	call->inv = inv;
+
 	if(!set_proxy(dlg, proxy_uri)) {
+		close_media(call);
+		status = pjsip_dlg_terminate(dlg); //ToDo:
 		return -1;
 	}
 
-	Call *call = (Call*)pj_pool_alloc(dlg->pool, sizeof(Call));
-	pj_bzero(call, sizeof(Call));
-
-
-	call->inv = inv;
-	call->med_transport = med_transport;
-
 	long call_id;
 	if(!g_call_ids.add((long)call, call_id)){
-		close_media_transport(med_transport);
+		close_media(call);
 		status = pjsip_dlg_terminate(dlg); //ToDo:
 		set_error("Failed to allocate id");
 		return -1;
 	}
-	call->transport = t;
 	call->id = call_id;
+    call->pending_request = -1;
 	pjsip_tx_data *tdata;
 	status = pjsip_inv_invite(inv, &tdata);
 	if(status != PJ_SUCCESS) {
 		g_call_ids.remove(call_id, (long &)call);
-		close_media_transport(med_transport);
+		close_media(call);
 		status = pjsip_dlg_terminate(dlg); //ToDo:
 		set_error("pjsip_inv_invite failed");
 		return -1;
 	}
 
-	
-
 	if(!add_headers(dlg->pool, tdata, document)) {
 		g_call_ids.remove(call_id, (long &)call);
-		close_media_transport(med_transport); //Todo:
+		close_media(call); //Todo:
 		status = pjsip_dlg_terminate(dlg); //ToDo:	
 		return -1;
 	}
@@ -2312,14 +2743,14 @@ int call_create(Transport *t, unsigned flags, pjsip_dialog *dlg, const char *pro
 	if(!dlg_set_transport_by_t(t, dlg)){
 		return -1;
 	}
-	addon_log(LOG_LEVEL_DEBUG, "inv=%x tdata=%x\n",inv,tdata);
+	addon_log(L_DBG, "inv=%x tdata=%x\n",inv,tdata);
 
 	status = pjsip_inv_send_msg(inv, tdata);
-	addon_log(LOG_LEVEL_DEBUG, "status=%d\n",status);
+	addon_log(L_DBG, "status=%d\n",status);
 	pj_perror(0, "", status, "");
 	if(status != PJ_SUCCESS) {
 		g_call_ids.remove(call_id, (long &)call);
-		close_media_transport(med_transport); //Todo:
+		close_media(call); //Todo:
 		//The below code cannot be called here it will cause seg fault
 		//status = pjsip_dlg_terminate(dlg); //ToDo:
 		set_error("pjsip_inv_send_msg failed");
@@ -2330,24 +2761,81 @@ int call_create(Transport *t, unsigned flags, pjsip_dialog *dlg, const char *pro
 	status = pjsip_dlg_add_usage(dlg, &mod_tester, call);
 	if(status != PJ_SUCCESS) {
 		g_call_ids.remove(call_id, (long &)call);
-		close_media_transport(med_transport); //Todo:
+		close_media(call); //Todo:
 		status = pjsip_dlg_terminate(dlg); //ToDo:
 		set_error("pjsip_dlg_add_usage failed");
 		return  -1;
 	}
-	//addon_log(LOG_LEVEL_DEBUG, "pjsip_dlg_add_usage OK\n");
-
-	call->outgoing = true;
+	//addon_log(L_DBG, "pjsip_dlg_add_usage OK\n");
 
 	return call_id;
 }
 
-//int pjw_call_send_dtmf(long call_id, const char *digits, int mode)
-int pjw_call_send_dtmf(long call_id, const char *json)
-{
+pj_status_t audio_endpoint_send_dtmf(Call *call, AudioEndpoint *ae, const char *digits, const int mode) {
 #define ON_DURATION 200
 #define OFF_DURATION 50
 
+    pj_status_t status;
+
+	if(DTMF_MODE_RFC2833 == mode) {
+        printf("rfc2833\n");
+        if(!ae->med_stream) {
+            set_error("Unable to send DTMF: Media not ready");
+            return -1;
+        }
+	    pj_str_t ds = pj_str((char*)digits);
+		status = pjmedia_stream_dial_dtmf(ae->med_stream, &ds);
+		if(status != PJ_SUCCESS)
+		{
+			set_error("pjmedia_stream_dial_dtmf failed.");
+            return status;
+		}
+
+        return PJ_SUCCESS;
+	} else {
+        printf("inband\n");
+		if(!prepare_tonegen(call, ae)) {
+			set_error("prepare_tonegen failed.");
+            return -1;
+		}
+
+        int len = strlen(digits);
+
+		for(int i=0; i<len ; ++i) {
+			pjmedia_tone_digit tone;
+			tone.digit = digits[i];
+			tone.on_msec = ON_DURATION;
+			tone.off_msec = OFF_DURATION;
+			tone.volume = 0;
+			status = chainlink_tonegen_play_digits((pjmedia_port*)ae->tonegen, 1, &tone, 0);
+			if(status != PJ_SUCCESS) {
+				set_error("chainlink_tonegen_play_digits failed.");
+                return status;
+			}
+		}
+
+        return PJ_SUCCESS;
+	}
+}
+
+pj_status_t send_dtmf(Call *call, const char *digits, int mode) {
+    for(int i=0 ; i<call->media_count ; i++) {
+        MediaEndpoint *me = (MediaEndpoint*)call->media[i];
+        if(me->type != ENDPOINT_TYPE_AUDIO) continue;
+
+        AudioEndpoint *ae = (AudioEndpoint*)me->endpoint.audio;
+          
+        pj_status_t status = audio_endpoint_send_dtmf(call, ae, digits, mode);
+        if(status != PJ_SUCCESS) return status;
+    }
+
+    return PJ_SUCCESS;
+}
+
+
+//int pjw_call_send_dtmf(long call_id, const char *digits, int mode)
+int pjw_call_send_dtmf(long call_id, const char *json)
+{
 #define MAX_LENGTH 31 // pjsip allows for 31 digits (inband allows for 32 digits)
 
 	PJW_LOCK();
@@ -2357,11 +2845,6 @@ int pjw_call_send_dtmf(long call_id, const char *json)
     char *digits;
     int mode = 0;;
 
-    int len;
-
-	char adjusted_digits[MAX_LENGTH+1]; // use the greater size
-
-	pj_str_t ds;
 	pj_status_t status;
 
     Call *call;
@@ -2371,7 +2854,6 @@ int pjw_call_send_dtmf(long call_id, const char *json)
     Document document;
 
     const char *valid_params[] = {"digits", "mode", ""};
-
 
     if(!parse_json(document, json, buffer, MAX_JSON_INPUT)) {
         goto out;
@@ -2387,11 +2869,11 @@ int pjw_call_send_dtmf(long call_id, const char *json)
 	}
 	call = (Call*)val;
 
-    if(!json_get_string_param(document, "digits", false, &digits)) {
+    if(json_get_string_param(document, "digits", false, &digits) <= 0) {
         goto out;
     }
 
-    if(!json_get_int_param(document, "mode", false, &mode)) {
+    if(json_get_int_param(document, "mode", false, &mode) <= 0) {
         goto out;
     }
 
@@ -2400,16 +2882,14 @@ int pjw_call_send_dtmf(long call_id, const char *json)
         goto out;
     }
 
+    int len;
+
+	char adjusted_digits[MAX_LENGTH+1]; // use the greater size
+
 	len = strlen(digits);
 
 	if(len > MAX_LENGTH) {
 		set_error("DTMF string too long");
-        goto out;
-	}
-
-	if(!call->med_stream)
-	{
-		set_error("Unable to send DTMF: Media not ready");
         goto out;
 	}
 
@@ -2433,36 +2913,9 @@ int pjw_call_send_dtmf(long call_id, const char *json)
 		}
 	}
 	adjusted_digits[len] = 0;
-	//addon_log(LOG_LEVEL_DEBUG, ">>%s<<\n", adjusted_digits);
+	//addon_log(L_DBG, "adjusted_digits >>%s<<\n", adjusted_digits);
 
-	ds = pj_str((char*)adjusted_digits);
-
-	if(DTMF_MODE_RFC2833 == mode) {
-		status = pjmedia_stream_dial_dtmf(call->med_stream, &ds);
-		if(status != PJ_SUCCESS)
-		{
-			set_error("pjmedia_stream_dial_dtmf failed.");
-            goto out;
-		}
-	} else {
-		if(!prepare_tonegen(call)) {
-			set_error("prepare_tonegen failed.");
-            goto out;
-		}
-
-		for(int i=0; i<len ; ++i) {
-			pjmedia_tone_digit tone;
-			tone.digit = adjusted_digits[i];
-			tone.on_msec = ON_DURATION;
-			tone.off_msec = OFF_DURATION;
-			tone.volume = 0;
-			status = chainlink_tonegen_play_digits((pjmedia_port*)call->tonegen, 1, &tone, 0);
-			if(status != PJ_SUCCESS) {
-				set_error("chainlink_tonegen_play_digits failed.");
-                goto out;
-			}
-		}
-	}
+    send_dtmf(call, adjusted_digits, mode);
 
 out:
 	PJW_UNLOCK();
@@ -2473,30 +2926,30 @@ out:
 	return 0;
 }		
 
-//int pjw_call_reinvite(long call_id, int hold, unsigned flags)
-int pjw_call_reinvite(long call_id, const char *json)
-{
+int pjw_call_reinvite(long call_id, const char *json) {
+	addon_log(L_DBG, "pjw_call_reinvite call_id=%d\n", call_id);
+    
 	PJW_LOCK();
 	clear_error();
 
-    bool hold = false;
-    unsigned flags;
+    unsigned flags = 0;
 
 	long val;
     Call *call;
+	pjsip_inv_session *inv;
 
 	pj_status_t status;
 
 	const pjmedia_sdp_session *old_sdp = NULL;
 
 	pjsip_tx_data *tdata;
-	pjmedia_sdp_session *sdp = 0;
+	//pjmedia_sdp_session *sdp = 0;
 
     char buffer[MAX_JSON_INPUT];
 
     Document document;
     
-    const char *valid_params[] = {"hold", "delayed_media", ""};
+    const char *valid_params[] = {"delayed_media", "media", "mode", ""};
 
 	if(!g_call_ids.get(call_id, val)){
 	    set_error("Invalid call_id");
@@ -2504,15 +2957,13 @@ int pjw_call_reinvite(long call_id, const char *json)
 	}
 	call = (Call*)val;
 
+    inv = call->inv;
+
     if(!parse_json(document, json, buffer, MAX_JSON_INPUT)) {
         goto out;
     }
 
     if(!validate_params(document, valid_params)) {
-        goto out;
-    }
-
-    if(!json_get_bool_param(document, "hold", true, &hold)) {
         goto out;
     }
 
@@ -2527,56 +2978,39 @@ int pjw_call_reinvite(long call_id, const char *json)
         }
     }
 
-	call->local_hold = hold;
+    if(!process_media(call, inv->dlg, document)) {
+        goto out;
+    }
+
+    /*
+    char buf[2048];
+    pjmedia_sdp_print(sdp, buf, 2048);
+    printf("local sdp:\n");
+    printf("%s\n", buf);
+    */
+
 
 	if(!(flags & CALL_FLAG_DELAYED_MEDIA)) {
-		pjmedia_transport_info tpinfo;
-		pjmedia_transport_info_init(&tpinfo);
-		pjmedia_transport_get_info(call->med_transport,&tpinfo);
+        // The below call to create_local_sdp  causes subsequent callt pjsip_inv_reinvite() to fail as  the function wants
+        // inv->invite_tsx to be NULL
+        // but it will not.
 
-		status = pjmedia_endpt_create_sdp(g_med_endpt,
-						call->inv->pool,
-						1,
-						&tpinfo.sock_info,
-						&sdp);
-		if(status != PJ_SUCCESS){
-			set_error("pjmedia_endpt_create_sdp failed");
+        status = pjsip_inv_set_local_sdp(call->inv, call->local_sdp);
+        if(status != PJ_SUCCESS){
+            set_error("pjsip_inv_set_local_sdp failed");
             goto out;
-		}
-	
-		pjmedia_sdp_attr *attr;
+        }
+    }
 
-		pjmedia_sdp_media_remove_all_attr(sdp->media[0], "sendrecv");
-		pjmedia_sdp_media_remove_all_attr(sdp->media[0], "sendonly");
-		pjmedia_sdp_media_remove_all_attr(sdp->media[0], "recvonly");
-		pjmedia_sdp_media_remove_all_attr(sdp->media[0], "inactive");
+    {
+        //assert(inv->invite_tsx==NULL);
+        pjmedia_sdp_neg_state state = pjmedia_sdp_neg_get_state(call->inv->neg);
+        printf("neg state: %d\n", state);
+    }
 
-		if(call->local_hold){
-			if(call->remote_hold) {
-				attr = pjmedia_sdp_attr_create(call->inv->pool, "inactive", NULL);
-			} else {
-				attr = pjmedia_sdp_attr_create(call->inv->pool, "sendonly", NULL);
-			}
-		} else if(call->remote_hold) {
-			attr = pjmedia_sdp_attr_create(call->inv->pool, "recvonly", NULL);
-		} else {
-			attr = pjmedia_sdp_attr_create(call->inv->pool, "sendrecv", NULL);
-		}
-
-		pjmedia_sdp_media_add_attr(sdp->media[0], attr);
-
-		old_sdp = NULL;
-
-		status = pjmedia_sdp_neg_get_active_local(call->inv->neg, &old_sdp);
-		if (status != PJ_SUCCESS || old_sdp == NULL){
-			set_error("pjmedia_sdp_neg_get_active failed");
-            goto out;
-		}
-
-		sdp->origin.version = old_sdp->origin.version + 1;
-	}
-
-	status = pjsip_inv_reinvite(call->inv, NULL, sdp, &tdata);
+	//status = pjsip_inv_reinvite(call->inv, NULL, sdp, &tdata);
+	status = pjsip_inv_reinvite(call->inv, NULL, NULL, &tdata);
+    printf("status=%d\n", status);
 	if(status != PJ_SUCCESS){
 		set_error("pjsip_inv_reinvite failed");
         goto out;
@@ -2598,7 +3032,6 @@ out:
 }
 
 //To send INFO and other requests inside dialog
-//int pjw_call_send_request(long call_id, const char *method_name, const char *additional_headers, const char *body, const char *ct_type, const char *ct_subtype)
 int pjw_call_send_request(long call_id, const char *json)
 {
 	PJW_LOCK();
@@ -2644,19 +3077,19 @@ int pjw_call_send_request(long call_id, const char *json)
 	}
 	call = (Call*)val;
 
-    if(!json_get_string_param(document, "method", false, &method)) {
+    if(json_get_string_param(document, "method", false, &method) <= 0) {
         goto out;
     }
 
-    if(!json_get_string_param(document, "body", true, &body)) {
+    if(json_get_string_param(document, "body", true, &body) <= 0) {
         goto out;
     }
 
-    if(!json_get_string_param(document, "ct_type", true, &ct_type)) {
+    if(json_get_string_param(document, "ct_type", true, &ct_type) <= 0) {
         goto out;
     }
 
-    if(!json_get_string_param(document, "ct_subtype", true, &ct_subtype)) {
+    if(json_get_string_param(document, "ct_subtype", true, &ct_subtype) <= 0) {
         goto out;
     }
 
@@ -2715,6 +3148,15 @@ out:
 	return 0;
 }
 
+int count_media_by_type(Call *call, int type) {
+    int total = 0;
+    for(int i=0 ; i<call->media_count ; i++) {
+        MediaEndpoint *me = (MediaEndpoint*)call->media[i];
+        if(type == me->type) total++;
+    }
+    return total;
+}
+
 //int pjw_call_start_record_wav(long call_id, const char *file)
 int pjw_call_start_record_wav(long call_id, const char *json)
 {
@@ -2726,13 +3168,19 @@ int pjw_call_start_record_wav(long call_id, const char *json)
 	pj_status_t status;
 	pjmedia_port *stream_port;
 
+    unsigned media_id;
+
+    MediaEndpoint *me;
+    AudioEndpoint *ae;
+    int ae_count;
+
     char *file;
 
     char buffer[MAX_JSON_INPUT];
 
     Document document;
 
-    const char *valid_params[] = {"file", ""};
+    const char *valid_params[] = {"file", "media_id", ""};
 
 	if(!g_call_ids.get(call_id, val)){
 		set_error("Invalid call_id");
@@ -2740,11 +3188,13 @@ int pjw_call_start_record_wav(long call_id, const char *json)
 	}
 	call = (Call*)val;
 
-	if(!call->med_stream)
-	{
-		set_error("Media not ready");
-		goto out;
-	}
+    ae_count = count_media_by_type(call, ENDPOINT_TYPE_AUDIO);
+
+    if(ae_count == 0)
+    {
+        set_error("No audio endpoint");
+        goto out;
+    }
 
     if(!parse_json(document, json, buffer, MAX_JSON_INPUT)) {
         goto out;
@@ -2754,24 +3204,35 @@ int pjw_call_start_record_wav(long call_id, const char *json)
         goto out;
     }
 
-    if(!json_get_string_param(document, "file", false, &file)) {
+    if(json_get_string_param(document, "file", false, &file) <= 0) {
         goto out;
     }
- 
+
     if(!file[0]) {
         set_error("file cannot be blank string");
         goto out;
     }
- 
-	status = pjmedia_stream_get_port(call->med_stream,
-					&stream_port);
-	if(status != PJ_SUCCESS)
-	{
-		set_error("pjmedia_stream_get_port failed with status=%i", status);
-        goto out;
-	}
 
-	if(!prepare_wav_writer(call, file)) {
+    if(ae_count > 1) {
+        if(json_get_uint_param(document, "media_id", false, &media_id) <= 0) {
+            goto out;
+        }
+    }
+
+    if(media_id >= call->media_count) {
+        set_error("invalid media_id");
+        goto out;
+    }
+
+    me = (MediaEndpoint*)call->media[media_id];
+    if(ENDPOINT_TYPE_AUDIO != me->type) {
+        set_error("media_endpoint is not audio endpoint");
+        goto out;
+    }
+
+    ae = (AudioEndpoint*)me->endpoint.audio;
+
+	if(!prepare_wav_writer(call, ae, file)) {
 		set_error("prepare_wav_writer failed");
         goto out;
 	}
@@ -2783,6 +3244,21 @@ out:
 	}
 
 	return 0;
+}
+
+pj_status_t audio_endpoint_start_play_wav(Call *call, AudioEndpoint *ae, const char *file) {
+    pjmedia_port *stream_port;
+	pj_status_t status = pjmedia_stream_get_port(ae->med_stream,
+					&stream_port);
+	if(status != PJ_SUCCESS)
+	{
+		set_error("pjmedia_stream_get_port failed with status=%i", status);
+        return status;
+	}
+
+	if(!prepare_wav_player(call, ae, file)){
+        return -1;
+	}
 }
 
 
@@ -2797,13 +3273,19 @@ int pjw_call_start_play_wav(long call_id, const char *json)
 	pj_status_t status;
 	pjmedia_port *stream_port;
 
+    MediaEndpoint *me;
+    AudioEndpoint *ae;
+    int ae_count;
+
+    unsigned media_id;
+
     char *file;
 
     char buffer[MAX_JSON_INPUT];
 
     Document document;
     
-    const char *valid_params[] = {"file", ""};
+    const char *valid_params[] = {"file", "media_id", ""};
 
 	if(!g_call_ids.get(call_id, val)){
 		set_error("Invalid call_id");
@@ -2811,11 +3293,14 @@ int pjw_call_start_play_wav(long call_id, const char *json)
 	}
 	call = (Call*)val;
 
-	if(!call->med_stream)
-	{
-		set_error("Media not ready");
-		goto out;
-	}
+    ae_count = count_media_by_type(call, ENDPOINT_TYPE_AUDIO);
+
+    if(ae_count == 0)
+    {
+        set_error("No audio endpoint");
+        goto out;
+    }
+
 
     if(!parse_json(document, json, buffer, MAX_JSON_INPUT)) {
         goto out;
@@ -2825,7 +3310,7 @@ int pjw_call_start_play_wav(long call_id, const char *json)
         goto out;
     }
 
-    if(!json_get_string_param(document, "file", false, &file)) {
+    if(json_get_string_param(document, "file", false, &file) <= 0) {
         goto out;
     }
   
@@ -2834,18 +3319,26 @@ int pjw_call_start_play_wav(long call_id, const char *json)
         goto out;
     }
 
-	status = pjmedia_stream_get_port(call->med_stream,
-					&stream_port);
-	if(status != PJ_SUCCESS)
-	{
-		set_error("pjmedia_stream_get_port failed with status=%i", status);
-        goto out;
-	}
+    if(ae_count > 1) {
+        if(json_get_uint_param(document, "media_id", false, &media_id) <= 0) {
+            goto out;
+        }
+    }
 
-	if(!prepare_wav_player(call, file)){
-		set_error("prepare_wav_player failed");
-        goto out; 
-	}
+    if(media_id >= call->media_count) {
+        set_error("invalid media_id");
+        goto out;
+    }
+
+    me = (MediaEndpoint*)call->media[media_id];
+    if(ENDPOINT_TYPE_AUDIO != me->type) {
+        set_error("media_endpoint is not audio endpoint");
+        goto out;
+    }
+
+    ae = (AudioEndpoint*)me->endpoint.audio;
+
+    audio_endpoint_start_play_wav(call, ae, file);
 
 out:
 	PJW_UNLOCK();
@@ -2856,17 +3349,66 @@ out:
 	return 0;
 }
 
-int pjw_call_stop_play_wav(long call_id)
+pj_status_t call_stop_audio_endpoints_op(Call *call, audio_endpoint_stop_op_t op) {
+    addon_log(L_DBG, "call_stop_audio_endpoints_op media_count=%d\n", call->media_count);
+    pj_status_t status;
+    for(int i=0 ; i<call->media_count ; i++) {
+        MediaEndpoint *me = (MediaEndpoint*)call->media[i];
+        if(ENDPOINT_TYPE_AUDIO != me->type) continue;
+
+        AudioEndpoint *ae = (AudioEndpoint*)me->endpoint.audio;
+
+        status = op(call, ae);
+	    if(status != PJ_SUCCESS) {
+            return status;
+        }
+    }
+
+    return PJ_SUCCESS;
+}
+
+pj_status_t audio_endpoint_stop_play_wav(Call *call, AudioEndpoint *ae) {
+    pjmedia_port *stream_port;
+	pj_status_t status = pjmedia_stream_get_port(ae->med_stream,
+					&stream_port);
+	if(status != PJ_SUCCESS) {
+		set_error("pjmedia_stream_get_port failed with status=%i", status);
+        return status;
+	}	
+
+	if(!prepare_wire(call->inv->pool, &ae->wav_player, PJMEDIA_PIA_SRATE(&stream_port->info), PJMEDIA_PIA_CCNT(&stream_port->info), PJMEDIA_PIA_SPF(&stream_port->info), PJMEDIA_PIA_BITS(&stream_port->info))) {
+		set_error("prepare_wire failed.");
+        return -1;
+	}
+
+	connect_media_ports(ae);
+
+    return PJ_SUCCESS;
+}
+
+int pjw_call_stop_play_wav(long call_id, const char *json)
 {
 	PJW_LOCK();
     clear_error();
 
     Call *call;
 
-	pjmedia_port *stream_port;
 	pj_status_t status;
 
 	long val;
+
+    MediaEndpoint *me;
+    AudioEndpoint *ae;
+    int ae_count;
+    int res;
+
+    unsigned media_id;
+
+    char buffer[MAX_JSON_INPUT];
+
+    const char *valid_params[] = {"media_id", ""};
+
+    Document document;
 
 	if(!g_call_ids.get(call_id, val)){
 		set_error("Invalid call_id");
@@ -2874,19 +3416,42 @@ int pjw_call_stop_play_wav(long call_id)
 	}
 	call = (Call*)val;
 
-	status = pjmedia_stream_get_port(call->med_stream,
-					&stream_port);
-	if(status != PJ_SUCCESS) {
-		set_error("pjmedia_stream_get_port failed with status=%i", status);
+    if(!parse_json(document, json, buffer, MAX_JSON_INPUT)) {
         goto out;
-	}	
+    }
 
-	if(!prepare_wire(call->inv->pool, &call->wav_player, PJMEDIA_PIA_SRATE(&stream_port->info), PJMEDIA_PIA_CCNT(&stream_port->info), PJMEDIA_PIA_SPF(&stream_port->info), PJMEDIA_PIA_BITS(&stream_port->info))) {
-		set_error("prepare_wire failed.");
+    res = json_get_uint_param(document, "media_id", true, &media_id);
+    if(res <= 0)  {
         goto out;
-	}
+    }
 
-	connect_media_ports(call);
+    if(NOT_FOUND_OPTIONAL == res) {
+        // Stop play wav in all audio endpoints
+        status = call_stop_audio_endpoints_op(call, audio_endpoint_stop_play_wav);
+        if(status != PJ_SUCCESS) {
+            goto out;
+        }
+    } else {
+        // Stop play wav on specified media_id 
+
+        if(media_id >= call->media_count) {
+            set_error("invalid media_id");
+            goto out;
+        }
+
+        me = (MediaEndpoint*)call->media[media_id];
+        if(ENDPOINT_TYPE_AUDIO != me->type) {
+            set_error("invalid media_id non audio");
+            goto out;
+        }
+
+        ae = (AudioEndpoint*)me->endpoint.audio;
+
+        status = audio_endpoint_stop_play_wav(call, ae);
+	    if(status != PJ_SUCCESS) {
+            goto out;
+        }
+    }
 	
 out:
 	PJW_UNLOCK();
@@ -2897,7 +3462,27 @@ out:
 	return 0;
 }
 
-int pjw_call_stop_record_wav(long call_id)
+pj_status_t audio_endpoint_stop_record_wav(Call *call, AudioEndpoint *ae) {
+    pjmedia_port *stream_port;
+
+    pj_status_t status = pjmedia_stream_get_port(ae->med_stream,
+					&stream_port);
+	if(status != PJ_SUCCESS) {
+		set_error("pjmedia_stream_get_port failed.");
+        return status;
+	}	
+
+	if(!prepare_wire(call->inv->pool, &ae->wav_writer, PJMEDIA_PIA_SRATE(&stream_port->info), PJMEDIA_PIA_CCNT(&stream_port->info), PJMEDIA_PIA_SPF(&stream_port->info), PJMEDIA_PIA_BITS(&stream_port->info))) {
+		set_error("prepare_wire failed.");
+        return -1;
+	}
+
+	connect_media_ports(ae);
+
+    return PJ_SUCCESS;
+}
+	
+int pjw_call_stop_record_wav(long call_id, const char *json)
 {
 	PJW_LOCK();
     clear_error();
@@ -2907,26 +3492,62 @@ int pjw_call_stop_record_wav(long call_id)
 	pjmedia_port *stream_port;
 	pj_status_t status;
 
+    MediaEndpoint *me;
+    AudioEndpoint *ae;
+    int ae_count;
+    int res;
+
+    unsigned media_id;
+
+    char buffer[MAX_JSON_INPUT];
+
+    const char *valid_params[] = {"media_id", ""};
+
+    Document document;
+
 	if(!g_call_ids.get(call_id, val)){
 		set_error("Invalid call_id");
         goto out;
 	}
 	call = (Call*)val;
 
-	status = pjmedia_stream_get_port(call->med_stream,
-					&stream_port);
-	if(status != PJ_SUCCESS) {
-		set_error("pjmedia_stream_get_port failed.");
+    if(!parse_json(document, json, buffer, MAX_JSON_INPUT)) {
         goto out;
-	}	
+    }
 
-	if(!prepare_wire(call->inv->pool, &call->wav_writer, PJMEDIA_PIA_SRATE(&stream_port->info), PJMEDIA_PIA_CCNT(&stream_port->info), PJMEDIA_PIA_SPF(&stream_port->info), PJMEDIA_PIA_BITS(&stream_port->info))) {
-		set_error("prepare_wire failed.");
+    res = json_get_uint_param(document, "media_id", true, &media_id);
+    if(res <= 0)  {
         goto out;
-	}
+    }
 
-	connect_media_ports(call);
-	
+    if(NOT_FOUND_OPTIONAL == res) {
+        // Stop record wav in all audio endpoints
+        status = call_stop_audio_endpoints_op(call, audio_endpoint_stop_record_wav);
+        if(status != PJ_SUCCESS) {
+            goto out;
+        }
+    } else {
+        // Stop record wav on specified media_id 
+
+        if(media_id >= call->media_count) {
+            set_error("invalid media_id");
+            goto out;
+        }
+
+        me = (MediaEndpoint*)call->media[media_id];
+        if(ENDPOINT_TYPE_AUDIO != me->type) {
+            set_error("invalid media_id non audio");
+            goto out;
+        }
+
+        ae = (AudioEndpoint*)me->endpoint.audio;
+
+        status = audio_endpoint_stop_record_wav(call, ae);
+	    if(status != PJ_SUCCESS) {
+            goto out;
+        }
+    }
+
 out:
 	PJW_UNLOCK();
 	if(pjw_errorstring[0]){
@@ -2952,11 +3573,18 @@ int pjw_call_start_fax(long call_id, const char *json)
     unsigned flags = 0;
     bool flag;
 
+
+    MediaEndpoint *me;
+    AudioEndpoint *ae;
+    int ae_count;
+
+    unsigned media_id;
+
     char buffer[MAX_JSON_INPUT];
 
-    Document document;
+    const char *valid_params[] = {"is_sender", "file", "transmit_on_idle", "media_id", ""};
 
-    const char *valid_params[] = {"is_sender", "file", "transmit_on_idle", ""};
+    Document document;
 
 	if(!g_call_ids.get(call_id, val)){
 		set_error("Invalid call_id");
@@ -2964,11 +3592,13 @@ int pjw_call_start_fax(long call_id, const char *json)
 	}
 	call = (Call*)val;
 
-	if(!call->med_stream)
-	{
-		set_error("Media not ready");
-		goto out;
-	}
+    ae_count = count_media_by_type(call, ENDPOINT_TYPE_AUDIO);
+
+    if(ae_count == 0)
+    {
+        set_error("No audio endpoint");
+        goto out;
+    }
 
     if(!parse_json(document, json, buffer, MAX_JSON_INPUT)) {
         goto out;
@@ -2978,11 +3608,47 @@ int pjw_call_start_fax(long call_id, const char *json)
         goto out;
     }
 
-    if(!json_get_bool_param(document, "is_sender", false, &is_sender)) {
+    if(json_get_string_param(document, "file", false, &file) <= 0) {
         goto out;
     }
 
-    if(!json_get_string_param(document, "file", false, &file)) {
+    if(!file[0]) {
+        set_error("file cannot be blank string");
+        goto out;
+    }
+
+    if(ae_count > 1) {
+        if(json_get_uint_param(document, "media_id", false, &media_id) <= 0) {
+            goto out;
+        }
+    }
+
+    if(media_id >= call->media_count) {
+        set_error("invalid media_id");
+        goto out;
+    }
+
+    me = (MediaEndpoint*)call->media[media_id];
+    if(ENDPOINT_TYPE_AUDIO != me->type) {
+        set_error("media_endpoint is not audio endpoint");
+        goto out;
+    }
+
+    ae = (AudioEndpoint*)me->endpoint.audio;
+
+    if(!parse_json(document, json, buffer, MAX_JSON_INPUT)) {
+        goto out;
+    }
+
+    if(!validate_params(document, valid_params)) {
+        goto out;
+    }
+
+    if(json_get_bool_param(document, "is_sender", false, &is_sender) <= 0) {
+        goto out;
+    }
+
+    if(json_get_string_param(document, "file", false, &file) <= 0) {
         goto out;
     }
   
@@ -2993,22 +3659,13 @@ int pjw_call_start_fax(long call_id, const char *json)
 
 
     flag = false;
-    if(!json_get_bool_param(document, "transmit_on_idle", true, &flag)) {
+    if(json_get_bool_param(document, "transmit_on_idle", true, &flag) <= 0) {
         goto out;
     } else {
         if(flag) flags |= FAX_FLAG_TRANSMIT_ON_IDLE;
     }
     
-
-	status = pjmedia_stream_get_port(call->med_stream,
-					&stream_port);
-	if(status != PJ_SUCCESS)
-	{
-		set_error("pjmedia_stream_get_port failed with status=%i", status);
-        goto out;
-	}
-
-	if(!prepare_fax(call, is_sender, file, flags)){
+	if(!prepare_fax(call, ae, is_sender, file, flags)){
 		set_error("prepare_fax failed");
         goto out;
 	}
@@ -3022,8 +3679,26 @@ out:
 	return 0;
 }
 
+pj_status_t audio_endpoint_stop_fax(Call *call, AudioEndpoint *ae) {
+    pjmedia_port *stream_port;
+	pj_status_t status = pjmedia_stream_get_port(ae->med_stream,
+					&stream_port);
+	if(status != PJ_SUCCESS) {
+		set_error("pjmedia_stream_get_port failed.");
+        return status;
+	}
 
-int pjw_call_stop_fax(long call_id)
+	if(!prepare_wire(call->inv->pool, &ae->fax, PJMEDIA_PIA_SRATE(&stream_port->info), PJMEDIA_PIA_CCNT(&stream_port->info), PJMEDIA_PIA_SPF(&stream_port->info), PJMEDIA_PIA_BITS(&stream_port->info))) {
+		set_error("prepare_wire failed.");
+        return -1;
+	}
+
+	connect_media_ports(ae);
+
+    return PJ_SUCCESS;
+}
+
+int pjw_call_stop_fax(long call_id, const char *json)
 {
 	PJW_LOCK();
     clear_error();
@@ -3034,26 +3709,61 @@ int pjw_call_stop_fax(long call_id)
 	pjmedia_port *stream_port;
 	pj_status_t status;
 
+    MediaEndpoint *me;
+    AudioEndpoint *ae;
+    int ae_count;
+    int res;
+
+    unsigned media_id;
+
+    char buffer[MAX_JSON_INPUT];
+
+    const char *valid_params[] = {"media_id", ""};
+
+    Document document;
+
 	if(!g_call_ids.get(call_id, val)){
 		set_error("Invalid call_id");
         goto out;
 	}
-
 	call = (Call*)val;
 
-	status = pjmedia_stream_get_port(call->med_stream,
-					&stream_port);
-	if(status != PJ_SUCCESS) {
-		set_error("pjmedia_stream_get_port failed.");
+    if(!parse_json(document, json, buffer, MAX_JSON_INPUT)) {
         goto out;
-	}	
+    }
 
-	if(!prepare_wire(call->inv->pool, &call->fax, PJMEDIA_PIA_SRATE(&stream_port->info), PJMEDIA_PIA_CCNT(&stream_port->info), PJMEDIA_PIA_SPF(&stream_port->info), PJMEDIA_PIA_BITS(&stream_port->info))) {
-		set_error("prepare_wire failed.");
+    res = json_get_uint_param(document, "media_id", true, &media_id);
+    if(res <= 0)  {
         goto out;
-	}
+    }
 
-	connect_media_ports(call);
+    if(NOT_FOUND_OPTIONAL == res) {
+        // Stop fax in all audio endpoints
+        status = call_stop_audio_endpoints_op(call, audio_endpoint_stop_fax);
+        if(status != PJ_SUCCESS) {
+            goto out;
+        }
+    } else {
+        // Stop fax on specified media_id 
+
+        if(media_id >= call->media_count) {
+            set_error("invalid media_id");
+            goto out;
+        }
+
+        me = (MediaEndpoint*)call->media[media_id];
+        if(ENDPOINT_TYPE_AUDIO != me->type) {
+            set_error("invalid media_id non audio");
+            goto out;
+        }
+
+        ae = (AudioEndpoint*)me->endpoint.audio;
+
+        status = audio_endpoint_stop_fax(call, ae);
+	    if(status != PJ_SUCCESS) {
+            goto out;
+        }
+    }
 
 out:
 	PJW_UNLOCK();
@@ -3065,12 +3775,18 @@ out:
 }
 
 
-int pjw_call_get_stream_stat(long call_id, char *out_stats){
+int pjw_call_get_stream_stat(long call_id, const char *json, char *out_stats){
 	PJW_LOCK();
     clear_error();
 
 	long val;
     Call *call;
+
+    char buffer[MAX_JSON_INPUT];
+
+    const char *valid_params[] = {"media_id", ""};
+
+    Document document;
 
 	pj_status_t status;
 	pjmedia_rtcp_stat stat;
@@ -3078,28 +3794,68 @@ int pjw_call_get_stream_stat(long call_id, char *out_stats){
 
 	ostringstream oss;
 
+    MediaEndpoint *me;
+    AudioEndpoint *ae;
+    VideoEndpoint *ve;
+
+    unsigned media_id;
+
+    pjmedia_stream *med_stream = NULL;
+
 	if(!g_call_ids.get(call_id, val)){
 		set_error("Invalid call_id");
         goto out;
 	}
 	call = (Call*)val;
 
-	if(!call->med_stream){
-		set_error("Could not get stream stats. No media session");
+    if(!parse_json(document, json, buffer, MAX_JSON_INPUT)) {
         goto out;
-	}
+    }
 
-	status = pjmedia_stream_get_stat(call->med_stream, &stat);
-	if(status != PJ_SUCCESS){
-		set_error("Could not get stream stats. Call to pjmedia_stream_get_stream_stat failed with status=%i", status);
+    if(!json_get_uint_param(document, "media_id", false, &media_id)) {
         goto out;
-	}
+    }
 
-	status = pjmedia_stream_get_info(call->med_stream, &stream_info);
-	if(status != PJ_SUCCESS){
-		set_error("Could not get stream info. Call to pjmedia_stream_get_info failed with status=%i", status);
+    if(media_id >= call->media_count) {
+        set_error("invalid media_id");
         goto out;
-	}
+    }
+
+    me = (MediaEndpoint*)call->media[media_id];
+    if(ENDPOINT_TYPE_AUDIO == me->type) {
+        ae = (AudioEndpoint*)me->endpoint.audio;
+
+        if(!ae->med_stream){
+            set_error("Could not get stream stats. No media session");
+            goto out;
+        }
+
+        med_stream = ae->med_stream;
+    } else if(ENDPOINT_TYPE_VIDEO == me->type) {
+        ve = (VideoEndpoint*)me->endpoint.video;
+
+        if(!ve->med_stream){
+            set_error("Could not get stream stats. No media session");
+            goto out;
+        }
+
+        med_stream = ve->med_stream;
+    } else {
+        set_error("non streaming media endpoint");
+        goto out;
+    }
+
+    status = pjmedia_stream_get_stat(med_stream, &stat);
+    if(status != PJ_SUCCESS){
+        set_error("Could not get stream stats. Call to pjmedia_stream_get_stream_stat failed with status=%i", status);
+        goto out;
+    }
+
+    status = pjmedia_stream_get_info(med_stream, &stream_info);
+    if(status != PJ_SUCCESS){
+        set_error("Could not get stream info. Call to pjmedia_stream_get_info failed with status=%i", status);
+        goto out;
+    }
 
 	build_stream_stat(oss, &stat, &stream_info);
 	strcpy(out_stats, oss.str().c_str());
@@ -3113,20 +3869,308 @@ out:
 	return 0;
 }
 
+bool stop_master_ports(Call *call) {
+    for(int i=0 ; i<call->media_count ; i++) {
+        MediaEndpoint *me = (MediaEndpoint*)call->media[i];
+        pjmedia_master_port *master_port = NULL;
+        if(ENDPOINT_TYPE_AUDIO == me->type) {
+            AudioEndpoint *ae = (AudioEndpoint*)me->endpoint.audio;
+            master_port = ae->master_port;
+        } else if(ENDPOINT_TYPE_VIDEO == me->type) {
+            VideoEndpoint *ve = (VideoEndpoint*)me->endpoint.video;
+            master_port = ve->master_port;
+        } else {
+            continue;
+        }
+
+        if(master_port){
+            if(pjmedia_master_port_stop(master_port) != PJ_SUCCESS) {
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
+bool media_endpoint_present_in_session_media(MediaEndpoint *me, const pjmedia_sdp_session *local_sdp) {
+    printf("media_endpoint_present_in_session_media:\n"); 
+    for(int i=0 ; i<local_sdp->media_count ; i++) {
+        pjmedia_sdp_media *media = local_sdp->media[i];
+        printf("port: %d %d\n", me->port, media->desc.port);
+        printf("media: %.*s %.*s\n", me->media.slen, me->media.ptr, media->desc.media.slen, media->desc.media.ptr);
+        if(me->port && 
+           (me->port == media->desc.port) &&
+           (pj_strcmp(&me->media, &media->desc.media) == 0) &&
+           (pj_strcmp(&me->transport, &media->desc.transport) == 0) &&
+           (pj_strcmp(&me->addr, &media->conn->addr) == 0)) {
+                printf("  true\n");
+                return true;
+        }
+    }
+    printf("  false\n");
+    return false;
+}
+
+int find_sdp_media_by_media_endpt(const pjmedia_sdp_session *sdp, pjmedia_sdp_media **media_out, MediaEndpoint *me) {
+    printf("find_sdp_media_by_media_endpt %x\n", me);
+    for(int i=0 ; i<sdp->media_count ; i++) {
+        pjmedia_sdp_media *media = sdp->media[i];
+        printf("i=%d media=%x\n", i, media);
+
+        if((me->port == media->desc.port) &&
+           (pj_strcmp(&me->media, &media->desc.media) == 0)) {
+            *media_out = media;
+            printf("found\n");
+            return i;
+        }
+    }
+    printf("not found\n");
+    return -1;
+}
+
+bool is_media_in_active_media(MediaEndpoint *me, MediaEndpoint **active_media, unsigned count) {
+    printf("is_media_in_active_media me=%x\n", me);
+    for(int i=0 ; i<count ; i++) {
+        MediaEndpoint *current = active_media[i];
+        printf("i=%d current=%x\n", i, current);
+        if(current == me) {
+            printf("yes\n");
+            return true;
+        }
+    }
+    printf("no\n");
+    return false;
+}
+
+void gen_media_json(char *dest, int len, Call *call, const pjmedia_sdp_session *local_sdp, const pjmedia_sdp_session *remote_sdp){
+    printf("gen_media_json call_id=%d media_count=%d\n", call->id, call->media_count);
+    char *p = dest;
+
+    p += sprintf(p, "[");
+
+    for(int i=0 ; i<call->media_count ; i++) {
+        if(i > 0) p += sprintf(p, ",");
+
+        MediaEndpoint *me = (MediaEndpoint*)call->media[i];
+
+        pjmedia_sdp_media *dummy;
+        int idx = find_sdp_media_by_media_endpt(local_sdp, &dummy, me);
+
+        pjmedia_sdp_media *local_media = local_sdp->media[idx];
+        pjmedia_sdp_media *remote_media = remote_sdp->media[idx];
+
+        switch(me->type) {
+        case ENDPOINT_TYPE_AUDIO: {
+            AudioEndpoint *ae = (AudioEndpoint*)me->endpoint.audio;
+
+            const char *local_mode = get_media_mode(local_media->attr, local_media->attr_count); 
+            const char *remote_mode = get_media_mode(remote_media->attr, remote_media->attr_count); 
+
+            pjmedia_sdp_conn *local_conn = local_sdp->conn;
+            pjmedia_sdp_conn *remote_conn = remote_sdp->conn;
+
+            if(local_media->conn) {
+                local_conn = local_media->conn;
+            }
+
+            if(remote_media->conn) {
+                remote_conn = remote_media->conn;
+            }
+
+            pj_str_t *local_addr = &local_conn->addr;
+            pj_str_t *remote_addr = &remote_conn->addr;
+
+            p += sprintf(p, "{\"type\": \"audio\", \"local\": {\"addr\": \"%.*s\", \"port\": %d, \"mode\": \"%s\"}, \"remote\": {\"addr\": \"%.*s\", \"port\": %d, \"mode\": \"%s\"}, \"fmt\": [",
+                local_addr->slen, local_addr->ptr,
+                local_media->desc.port,
+                local_mode,
+                remote_addr->slen, remote_addr->ptr,
+                remote_media->desc.port,
+                remote_mode);
+
+            for(int i=0 ; i<local_media->desc.fmt_count ; i++) {
+                if(i > 0) p += sprintf(p, ",");
+                pj_str_t *fmt = &local_media->desc.fmt[i];
+                pjmedia_sdp_attr *attr = pjmedia_sdp_attr_find2(local_media->attr_count, local_media->attr, "rtpmap", fmt);
+                if(attr) {
+                    p += sprintf(p, "\"%.*s\"", attr->value.slen, attr->value.ptr);
+                } else {
+                    p += sprintf(p, "\"%.*s\"", fmt->slen, fmt->ptr);
+                }
+            }
+            p += sprintf(p, "]}");
+            break;
+        }
+        case ENDPOINT_TYPE_MRCP: {
+            p += sprintf(p, "{\"type\": \"mrcp\", \"local\": {\"port\": %d}, \"remote\": {\"port\": %d}}",
+                local_sdp->media[idx]->desc.port,
+                remote_sdp->media[idx]->desc.port);
+            break;
+        }
+        default: {
+            p += sprintf(p, "{\"type\": \"unknown\"}");
+
+            break;
+        }
+        }
+    }
+
+    p += sprintf(p, "]");
+}
+
+bool restart_media_stream(Call *call, MediaEndpoint *me, const pjmedia_sdp_session *local_sdp, const pjmedia_sdp_session *remote_sdp, int idx) {
+	char evt[4096];
+	pjmedia_stream_info stream_info;
+
+    AudioEndpoint *ae = (AudioEndpoint*)me->endpoint.audio;
+
+    pj_status_t status;
+
+    if(ae->master_port){
+        status = pjmedia_master_port_stop(ae->master_port);
+        if(status != PJ_SUCCESS){
+            make_evt_media_update(evt, sizeof(evt), call->id, "setup_failed (pjmedia_master_port_stop failed)", "");
+            dispatch_event(evt);
+            return false;
+        }
+    }
+
+    /*
+    pjmedia_sdp_media *media;
+    int idx = find_sdp_media_by_media_endpt(local_sdp, &media, me);
+    */
+
+    status = pjmedia_stream_info_from_sdp(
+                    &stream_info,
+                    call->inv->dlg->pool,
+                    g_med_endpt,
+                    local_sdp,
+                    remote_sdp,
+                    idx);
+    if(status != PJ_SUCCESS){
+        printf("local  media_count=%d\n", local_sdp->media_count);
+        printf("remote media_count=%d\n", remote_sdp->media_count);
+        printf("pjmedia_stream_info_from_sdp failed idx=%d\n", idx);
+        make_evt_media_update(evt, sizeof(evt), call->id, "setup_failed (pjmedia_stream_info_from_sdp failed)", "");
+        dispatch_event(evt);
+        return false;
+    }
+
+    if(ae->med_stream){
+        status = pjmedia_stream_destroy(ae->med_stream);
+        if(status != PJ_SUCCESS){
+            make_evt_media_update(evt, sizeof(evt), call->id, "setup_failed (pjmedia_destroy failed)", "");
+            dispatch_event(evt);
+            return false;
+        }
+    }
+
+    status = pjmedia_stream_create(
+                g_med_endpt,
+                call->inv->dlg->pool,
+                &stream_info,
+                ae->med_transport, 
+                NULL,
+                &ae->med_stream);
+    if(status != PJ_SUCCESS){
+        make_evt_media_update(evt, sizeof(evt), call->id, "setup_failed (pjmedia_stream_create failed)", "");
+        dispatch_event(evt);
+        return false;
+    }
+
+    status = pjmedia_stream_start(ae->med_stream);
+    if(status != PJ_SUCCESS){
+        make_evt_media_update(evt, sizeof(evt), call->id, "setup_failed (pjmedia_stream_start failed)", "");
+        dispatch_event(evt);
+        return false;
+    }
+
+    status = pjmedia_stream_set_dtmf_callback(ae->med_stream,
+                        &on_dtmf,
+                        call);
+    if(status != PJ_SUCCESS){
+        make_evt_media_update(evt, sizeof(evt), call->id, "setup_failed (pjmedi_stream_set_dtmf_callback)", "");
+        dispatch_event(evt);
+        return false;
+    }
+
+    /* Start the UDP media transport */
+    pjmedia_transport_media_start(ae->med_transport, 0, 0, 0, 0);
+
+    pjmedia_port *stream_port;
+    status = pjmedia_stream_get_port(ae->med_stream, &stream_port);
+    if(status != PJ_SUCCESS){
+        make_evt_media_update(evt, sizeof(evt), call->id, "setup_failed (pjmedia_stream_get_port failed)", "");
+        dispatch_event(evt);
+        return false;
+    }
+
+    if(!init_media_ports(call,
+                ae,
+                PJMEDIA_PIA_SRATE(&stream_port->info),
+                PJMEDIA_PIA_CCNT(&stream_port->info),
+                PJMEDIA_PIA_SPF(&stream_port->info),
+                PJMEDIA_PIA_BITS(&stream_port->info))) {
+        make_evt_media_update(evt, sizeof(evt), call->id, "setup_failed (init_media_ports failed)", "");
+        dispatch_event(evt);
+        return false;
+    }
+
+    if(!set_ports(call, ae, stream_port, (pjmedia_port*)ae->dtmfdet))
+    {
+        make_evt_media_update(evt, sizeof(evt), call->id, "setup_failed (set_ports failed)", "");
+        dispatch_event(evt);
+        return false;
+    }
+
+    return true;
+}
+
+MediaEndpoint *find_media_endpt_by_sdp_media(Call *call, pjmedia_sdp_media *local_media, bool in_use_chart[]) {
+    for(int i=0 ; i<call->media_count ; i++) {
+        MediaEndpoint *me = call->media[i];
+        if(in_use_chart[i]) continue;
+
+        if(pj_strcmp2(&local_media->desc.media, "audio") == 0) {
+            if(ENDPOINT_TYPE_AUDIO == me->type) {
+                in_use_chart[i] = true;
+                return me;
+            }
+        } else if(pj_strcmp2(&local_media->desc.media, "video") == 0) {
+            if(ENDPOINT_TYPE_VIDEO == me->type) {
+                in_use_chart[i] = true;
+                return me;
+            }
+        } else if(pj_strcmp2(&local_media->desc.media, "application") == 0) {
+            if(ENDPOINT_TYPE_MRCP == me->type) {
+                in_use_chart[i] = true;
+                return me;
+            }
+        } else {
+            printf("local_media->desc.media=%.*s\n", local_media->desc.media.slen, local_media->desc.media.ptr);
+            assert(0);
+            // missing media type support implementation
+        }
+    }
+
+    return NULL;
+}
 
 static void on_media_update( pjsip_inv_session *inv, pj_status_t status){
-	addon_log(LOG_LEVEL_DEBUG, "on_media_update\n");
-	char evt[256];
+	addon_log(L_DBG, "on_media_update\n");
+	char evt[4096];
 
 	if(g_shutting_down) return;
 
-	Call *call = (Call*)inv->dlg->mod_data[mod_tester.id];
+    Call *call = (Call*)inv->dlg->mod_data[mod_tester.id];
 
 	long call_id;
 	if( !g_call_ids.get_id((long)call, call_id) ){
-		addon_log(LOG_LEVEL_DEBUG, "on_media_update: Failed to get call_id. Event will not be notified.\n");	
+		addon_log(L_DBG, "on_media_update: Failed to get call_id. Event will not be notified.\n");	
 		return;
 	}
+    printf("call_id=%d\n", call_id);
 
 	pjmedia_stream_info stream_info;
 	const pjmedia_sdp_session *local_sdp;
@@ -3135,178 +4179,147 @@ static void on_media_update( pjsip_inv_session *inv, pj_status_t status){
 	ostringstream oss;
 
 	if(status != PJ_SUCCESS){
-		make_evt_media_status(evt, sizeof(evt), call_id, "negotiation_failed", "", "");
+        // negotiation failed
+		make_evt_media_update(evt, sizeof(evt), call_id, "negotiation_failed", "");
 		dispatch_event(evt);
 		return;
 	}
 
-	if(call->master_port){
-		status = pjmedia_master_port_stop(call->master_port);
-		if(status != PJ_SUCCESS){
-			make_evt_media_status(evt, sizeof(evt), call_id, "setup_failed", "", "");
-			dispatch_event(evt);
-			return;
-		}
-	}
+    if(!stop_master_ports(call)) {
+        make_evt_media_update(evt, sizeof(evt), call->id, "setup_failed (stop_master_port error)", "");
+        dispatch_event(evt);
+        return;
+    }
 
-	status = pjmedia_sdp_neg_get_active_local(inv->neg, &local_sdp);
-	if(status != PJ_SUCCESS){
-		make_evt_media_status(evt, sizeof(evt), call_id, "setup_failed", "", "");
-		dispatch_event(evt);
-		return;
-	}		
+    status = pjmedia_sdp_neg_get_active_local(inv->neg, &local_sdp);
+    if(status != PJ_SUCCESS){
+        make_evt_media_update(evt, sizeof(evt), call_id, "setup_failed (pjmedia_sdp_neg_get_active_local failed)", "");
+        dispatch_event(evt);
+        return;
+    }
+    
 
-	status = pjmedia_sdp_neg_get_active_remote(inv->neg, &remote_sdp);
-	if(status != PJ_SUCCESS){
-		make_evt_media_status(evt, sizeof(evt), call_id, "setup_failed", "", "");
-		dispatch_event(evt);
-		return;
-	}
+    status = pjmedia_sdp_neg_get_active_remote(inv->neg, &remote_sdp);
+    if(status != PJ_SUCCESS){
+        make_evt_media_update(evt, sizeof(evt), call_id, "setup_failed (pjmedia_sdp_neg_get_active_remote failed)", "");
+        dispatch_event(evt);
+        return;
+    }
 
-	status = pjmedia_stream_info_from_sdp(
-					&stream_info,
-					inv->dlg->pool,
-					g_med_endpt,
-					local_sdp,
-					remote_sdp,
-					0);
-	if(status != PJ_SUCCESS){
-		make_evt_media_status(evt, sizeof(evt), call_id, "setup_failed", "", "");
-		dispatch_event(evt);
-		return;
-	}
 
-	if(call->med_stream){
-		status = pjmedia_stream_destroy(call->med_stream);
-		if(status != PJ_SUCCESS){
-			make_evt_media_status(evt, sizeof(evt), call_id, "setup_failed", "", "");
-			dispatch_event(evt);
-			return;
-		}
-	}
+    char b[2048];
+    pjmedia_sdp_print(local_sdp, b, sizeof(b));
+    addon_log(L_DBG, "on_media_update call_id=%d active local_sdp: %s\n", call->id, b); 
 
-	status = pjmedia_stream_create(
-				g_med_endpt,
-				inv->dlg->pool,
-				&stream_info,
-				call->med_transport, 
-				NULL,
-				&call->med_stream);
-	if(status != PJ_SUCCESS){
-		make_evt_media_status(evt, sizeof(evt), call_id, "setup_failed", "", "");
-		dispatch_event(evt);
-		return;
-	}
+    pjmedia_sdp_print(remote_sdp, b, sizeof(b));
+    addon_log(L_DBG, "on_media_update call_id=%d active remote_sdp: %s\n", call->id, b); 
 
-	status = pjmedia_stream_start(call->med_stream);
-	if(status != PJ_SUCCESS){
-		make_evt_media_status(evt, sizeof(evt), call_id, "setup_failed", "", "");
-		dispatch_event(evt);
-		return;
-	}
+    // update media endpoint based on sdp media
 
-	status = pjmedia_stream_set_dtmf_callback(call->med_stream,
-						&on_dtmf,
-						call);
-	if(status != PJ_SUCCESS){
-		make_evt_media_status(evt, sizeof(evt), call_id, "setup_failed", "", "");
-		dispatch_event(evt);
-		return;
-	}
+    bool in_use_chart[PJMEDIA_MAX_SDP_MEDIA] = {false};
+    MediaEndpoint *active_media[PJMEDIA_MAX_SDP_MEDIA] = {NULL};
+    int active_media_count = 0;
 
-    /* Start the UDP media transport */
-    pjmedia_transport_media_start(call->med_transport, 0, 0, 0, 0);
+    for(int i=0 ; i<local_sdp->media_count ; i++) {
+        pjmedia_sdp_media *media = local_sdp->media[i];
+        if(media->desc.port) {
+            MediaEndpoint *me = find_media_endpt_by_sdp_media(call, media, in_use_chart);
+            if(me) {
+                active_media[active_media_count++] = me;
+            }
+        }
+    }
 
-	pjmedia_port *stream_port;
-	status = pjmedia_stream_get_port(call->med_stream, &stream_port);
-	if(status != PJ_SUCCESS){
-		make_evt_media_status(evt, sizeof(evt), call_id, "setup_failed", "", "");
-		dispatch_event(evt);
-		return;
-	}
+    for(int i=0 ; i<call->media_count ; i++) {
+        MediaEndpoint *me = call->media[i];
+        if(!is_media_in_active_media(me, active_media, active_media_count)) {
+            close_media_endpoint(me); 
+        }
+    }
 
-	if(!init_media_ports(call,
-				PJMEDIA_PIA_SRATE(&stream_port->info),
-				PJMEDIA_PIA_CCNT(&stream_port->info),
-				PJMEDIA_PIA_SPF(&stream_port->info),
-				PJMEDIA_PIA_BITS(&stream_port->info))) {
-		make_evt_media_status(evt, sizeof(evt), call_id, "setup_failed", "", "");
-		dispatch_event(evt);
-		return;
-	}
+    printf("active_media_count=%d\n", active_media_count);
+    call->media_count = 0;
+    for(int i=0 ; i<active_media_count ; i++) {
+        MediaEndpoint *me = active_media[i];
+        call->media[call->media_count++] = me; 
 
-	if(!set_ports(call, stream_port, (pjmedia_port*)call->dtmfdet))
-	{
-		make_evt_media_status(evt, sizeof(evt), call_id, "setup_failed", "", "");
-		dispatch_event(evt);
-		return;
-	}
+        if(me->type != ENDPOINT_TYPE_AUDIO) {
+            printf("not audio. skipping\n");
+            continue;
+        } else {
+            printf("type=%d: will restart_media_stream\n", me->type);
+        }
 
-	int local_media_mode = get_media_mode(local_sdp->media[0]->attr, local_sdp->media[0]->attr_count); 
-	int remote_media_mode = get_media_mode(remote_sdp->media[0]->attr, remote_sdp->media[0]->attr_count); 
+        pjmedia_sdp_media *dummy;
+        int idx = find_sdp_media_by_media_endpt(local_sdp, &dummy, me);
+        printf("idx=%d\n", idx);
+        if(!restart_media_stream(call, me, local_sdp, remote_sdp, idx)) {
+            return;
+        }
+    }
 
-	char *local_mode = get_media_mode_str(local_media_mode);
-	char *remote_mode = get_media_mode_str(remote_media_mode);
+    char media[4096];
+    gen_media_json(media, sizeof(media), call, local_sdp, remote_sdp);
 
-	make_evt_media_status(evt, sizeof(evt), call_id, "setup_ok", local_mode, remote_mode);
-	dispatch_event(evt);
+    make_evt_media_update(evt, sizeof(evt), call_id, "ok", media);
+    dispatch_event(evt);
 }
 
-static pj_bool_t set_ports(Call *call, pjmedia_port *stream_port, pjmedia_port *media_port)
+static pj_bool_t set_ports(Call *call, AudioEndpoint *ae, pjmedia_port *stream_port, pjmedia_port *media_port)
 {
 	pj_status_t status;
 
-	if(!call->master_port)
+	if(!ae->master_port)
 	{
 		status = pjmedia_master_port_create(call->inv->pool,
 						stream_port,
 						media_port,
 						0,
-						&call->master_port);
+						&ae->master_port);
 		if(status != PJ_SUCCESS){
 			return PJ_FALSE;
 		}
 
-		status = pjmedia_master_port_start(call->master_port);
+		status = pjmedia_master_port_start(ae->master_port);
 		if(status != PJ_SUCCESS){
 			return PJ_FALSE;
 		}
 
-		call->media_port = media_port;
+		ae->media_port = media_port;
 		return PJ_TRUE;
 	}
 
-	status = pjmedia_master_port_stop(call->master_port);
+	status = pjmedia_master_port_stop(ae->master_port);
 	if(status != PJ_SUCCESS){
 		return PJ_FALSE;
 	}
 
-	status = pjmedia_master_port_set_uport(call->master_port,
+	status = pjmedia_master_port_set_uport(ae->master_port,
 					stream_port);
 	if(status != PJ_SUCCESS){
 		return PJ_FALSE;
 	}
 
-	if(call->media_port)
+	if(ae->media_port)
 	{
-		if(call->media_port != media_port){
-			status = pjmedia_port_destroy(call->media_port);
+		if(ae->media_port != media_port){
+			status = pjmedia_port_destroy(ae->media_port);
 			if(status != PJ_SUCCESS){
 				return PJ_FALSE;
 			}
 		}
-		call->media_port = NULL;
+		ae->media_port = NULL;
 	}
 
-	status = pjmedia_master_port_set_dport(call->master_port,
+	status = pjmedia_master_port_set_dport(ae->master_port,
 					media_port);
 	if(status != PJ_SUCCESS){
 		return PJ_FALSE;
 	}
 
-	call->media_port = media_port;
+	ae->media_port = media_port;
 	
-	status = pjmedia_master_port_start(call->master_port);
+	status = pjmedia_master_port_start(ae->master_port);
 	if(status != PJ_SUCCESS){
 		return PJ_FALSE;
 	}
@@ -3316,97 +4329,111 @@ static pj_bool_t set_ports(Call *call, pjmedia_port *stream_port, pjmedia_port *
 
 static void on_state_changed( pjsip_inv_session *inv, 
 				   pjsip_event *e){
-	addon_log(LOG_LEVEL_DEBUG, "on_state_changed\n");
+	addon_log(L_DBG, "on_state_changed\n");
 
 	// The below is just to document know-how for future improvements
 	/*
-	addon_log(LOG_LEVEL_DEBUG, "on_state_changed e->type=%i\n", e->type);
+	addon_log(L_DBG, "on_state_changed e->type=%i\n", e->type);
 	if(e->type == PJSIP_EVENT_TSX_STATE && e->body.tsx_state.type == PJSIP_EVENT_RX_MSG) {
 		// Read http://trac.pjsip.org/repos/wiki/SIP_Message_Buffer_Event
-		addon_log(LOG_LEVEL_DEBUG, "Msg=%s\n", e->body.tsx_state.src.rdata->msg_info.msg_buf);
+		addon_log(L_DBG, "Msg=%s\n", e->body.tsx_state.src.rdata->msg_info.msg_buf);
 	}
 	*/
 
+    printf("e->type=%d\n", e->type);
+
+    /*
+	pj_str_t *method_name = &rdata->msg_info.msg->line.req.method.name;
+	addon_log(L_DBG, "on_rx_request %.*s\n", method_name->slen, method_name->ptr);
+    */
+
+
 	if(g_shutting_down) return;
 
-	if(PJSIP_INV_STATE_DISCONNECTED == inv->state)
-	{
-		Call *call = (Call*)inv->dlg->mod_data[mod_tester.id];
-		//addon_log(LOG_LEVEL_DEBUG, "call will terminate call=%x\n",call);
+    Call *call = (Call*)inv->dlg->mod_data[mod_tester.id];
+
+    printf("inv->state=%d\n", inv->state);
+
+	if(PJSIP_INV_STATE_DISCONNECTED == inv->state) {
+		addon_log(L_DBG, "call will terminate call=%x\n",call);
 		pj_status_t status;
 
 		long call_id;
 		if( !g_call_ids.get_id((long)call, call_id) ){
-			addon_log(LOG_LEVEL_DEBUG, "on_state_changed: Failed to get call_id. Event will not be notified.\n");	
+			addon_log(L_DBG, "on_state_changed: Failed to get call_id. Event will not be notified.\n");	
 			return;
 		}
 
-		if(call->master_port)
-		{
-			status = pjmedia_master_port_stop(call->master_port);
-			if(status != PJ_SUCCESS)
-			{
-				addon_log(LOG_LEVEL_DEBUG, "pjmedia_master_port_stop failed\n");
-			}
+        for(int i=0 ; i<call->media_count ; i++) {
+            MediaEndpoint *me = call->media[i];
+            if(ENDPOINT_TYPE_AUDIO == me->type) {
+                AudioEndpoint *ae = (AudioEndpoint*)me->endpoint.audio;
+                if(ae->master_port)
+                {
+                    status = pjmedia_master_port_stop(ae->master_port);
+                    if(status != PJ_SUCCESS)
+                    {
+                        addon_log(L_DBG, "pjmedia_master_port_stop failed\n");
+                    }
 
-			status = pjmedia_master_port_destroy(call->master_port, PJ_FALSE);
-			if(status != PJ_SUCCESS)
-			{
-				addon_log(LOG_LEVEL_DEBUG, "pjmedia_master_port_destroy failed\n");
-			}
-		}
+                    status = pjmedia_master_port_destroy(ae->master_port, PJ_FALSE);
+                    if(status != PJ_SUCCESS)
+                    {
+                        addon_log(L_DBG, "pjmedia_master_port_destroy failed\n");
+                    }
+                }
 
-		if(call->media_port)
-		{
-			status = pjmedia_port_destroy(call->media_port);
-			if(status != PJ_SUCCESS)
-			{
-				addon_log(LOG_LEVEL_DEBUG, "pjmedia_port_destroy failed\n");
-			}
-		}
+                if(ae->media_port)
+                {
+                    status = pjmedia_port_destroy(ae->media_port);
+                    if(status != PJ_SUCCESS)
+                    {
+                        addon_log(L_DBG, "pjmedia_port_destroy failed\n");
+                    }
+                }
 
-		if(call->med_stream)
-		{
-			status = pjmedia_stream_destroy(call->med_stream);
-			if(status != PJ_SUCCESS)
-			{
-				addon_log(LOG_LEVEL_DEBUG, "pjmedia_stream_destroy failed\n");
-			}
-		}
+                if(ae->med_stream)
+                {
+                    status = pjmedia_stream_destroy(ae->med_stream);
+                    if(status != PJ_SUCCESS)
+                    {
+                        addon_log(L_DBG, "pjmedia_stream_destroy failed\n");
+                    }
+                }
+            }
 
-		if(call->med_transport)
-		{
-			close_media_transport(call->med_transport);
-		}
+            close_media(call);
 
-		long val;
-		if(!g_call_ids.remove(call_id, val))
-		{
-			addon_log(LOG_LEVEL_DEBUG, "g_call_ids.remove failed\n");
-		}
-		
-		Pair_Call_CallId pcc;
-		pcc.pCall = call;
-		pcc.id = call_id;
-		g_LastCalls.push_back(pcc);	
+            long val;
+            if(!g_call_ids.remove(call_id, val))
+            {
+                addon_log(L_DBG, "g_call_ids.remove failed\n");
+            }
+            
+            Pair_Call_CallId pcc;
+            pcc.pCall = call;
+            pcc.id = call_id;
+            g_LastCalls.push_back(pcc);	
 
-		//delete call->last_responses;
-	
-		/*
-		ostringstream oss;
-		oss << "event=termination" << EVT_DATA_SEP << "call=" << call_id;
-		dispatch_event(oss.str().c_str());
-		*/
+            //delete call->last_responses;
+        
+            /*
+            ostringstream oss;
+            oss << "event=termination" << EVT_DATA_SEP << "call=" << call_id;
+            dispatch_event(oss.str().c_str());
+            */
+        }
 
-		char evt[2048];
-		int sip_msg_len = 0;
-		char *sip_msg = (char*)"";
-		if(e->type == PJSIP_EVENT_TSX_STATE) {
-			sip_msg_len = e->body.rx_msg.rdata->msg_info.len;
-			sip_msg = e->body.rx_msg.rdata->msg_info.msg_buf;
-		}
-		make_evt_call_ended(evt, sizeof(evt), call_id, sip_msg_len, sip_msg);
-		dispatch_event(evt);
+        char evt[2048];
+        int sip_msg_len = 0;
+        char *sip_msg = (char*)"";
+        if(e->type == PJSIP_EVENT_TSX_STATE) {
+            sip_msg_len = e->body.rx_msg.rdata->msg_info.len;
+            sip_msg = e->body.rx_msg.rdata->msg_info.msg_buf;
+        }
+
+        make_evt_call_ended(evt, sizeof(evt), call_id, sip_msg_len, sip_msg);
+        dispatch_event(evt);
 	}
 }
 
@@ -3414,7 +4441,7 @@ static void on_forked(pjsip_inv_session *inv, pjsip_event *e){
 	if(g_shutting_down) return;
 }
 
-static pjmedia_transport *create_media_transport(const pj_str_t *addr)
+static pjmedia_transport *create_media_transport(const pj_str_t *addr, int *allocated_port)
 {
 	pjmedia_transport *med_transport;
 	pj_status_t status;
@@ -3437,6 +4464,8 @@ static pjmedia_transport *create_media_transport(const pj_str_t *addr)
 				}
 			}
             */
+            printf("create_media_transport created %x\n", med_transport);
+            *allocated_port = port;    
 			return med_transport;
 		}
 	}
@@ -3455,9 +4484,10 @@ static void process_subscribe_request(pjsip_rx_data *rdata) {
 	long subscriber_id;
 	char local_contact[1000];
 	pjsip_tx_data *tdata;
+	pjsip_transport *t = rdata->tp_info.transport;
 
 	memset(&user_cb, 0, sizeof(user_cb));
-	user_cb.on_evsub_state = server_on_evsub_state;
+	//user_cb.on_evsub_state = server_on_evsub_state;
 	user_cb.on_rx_refresh = server_on_evsub_rx_refresh;
 
 	build_local_contact(local_contact, rdata->tp_info.transport, "sip-tester");
@@ -3495,6 +4525,13 @@ static void process_subscribe_request(pjsip_rx_data *rdata) {
 	subscriber->dlg = dlg;
 
 	pjsip_evsub_set_mod_data(evsub, mod_tester.id, subscriber);
+
+	status = dlg_set_transport(t, dlg);
+	if(!status) {
+		make_evt_internal_error(evt, sizeof(evt), "dlg_set_transport failed");
+		dispatch_event(evt);
+        goto out;
+	}
 
 	status = pjsip_evsub_accept(evsub, rdata, 200, NULL);
 	if(status != PJ_SUCCESS) {
@@ -3534,49 +4571,130 @@ out:
 	}
 }
 
+pj_status_t process_invite(Call *call, pjsip_inv_session *inv, pjsip_rx_data *rdata) {
+    pj_status_t status;
+	pj_str_t reason;
+    pjsip_rx_data *cloned_rdata = 0;
+
+    status = pjsip_rx_data_clone(rdata, 0, &cloned_rdata);
+
+    if(status != PJ_SUCCESS) {
+        reason = pj_str((char*)"Internal Server Error (pjsip_rx_data_clone failed)");
+        pjsip_endpt_respond_stateless(g_sip_endpt, rdata, 500, &reason, NULL, NULL);
+        return -1;
+    }
+
+	if(!(g_flags & FLAG_NO_AUTO_100_TRYING)) {
+		pjsip_tx_data *tdata;
+		//First response to an INVITE must be created with pjsip_inv_initial_answer(). Subsequent responses to the same transaction MUST use pjsip_inv_answer().
+		//Create 100 response
+		status = pjsip_inv_initial_answer(inv, rdata,
+						100,
+						NULL, NULL, &tdata);
+		if(status != PJ_SUCCESS) {
+			reason = pj_str((char*)"Internal Server Error (pjsip_inv_initial_answer failed)");
+			pjsip_endpt_respond_stateless(g_sip_endpt, rdata, 500, &reason, NULL, NULL);
+			return -1;
+		}
+
+		//Send 100 response
+		status = pjsip_inv_send_msg(inv, tdata);
+		if(status != PJ_SUCCESS) {
+			reason = pj_str((char*)"Internal Server Error (pjsip_inv_send_msg failed)");
+			pjsip_endpt_respond_stateless(g_sip_endpt, rdata, 500, &reason, NULL, NULL);
+			return -1;
+		}
+
+        call->inv_initial_answer_required = false;
+	} else {
+        /*
+        pjsip_dialog *dlg = pjsip_rdata_get_dlg(rdata);
+        addon_log(L_DBG, "rdata        dlg->ua->id: %d\n", pjsip_rdata_get_tsx(rdata)->mod_data[dlg->ua->id]);
+        addon_log(L_DBG, "cloned_rdata dlg->ua->id: %d\n", pjsip_rdata_get_tsx(cloned_rdata)->mod_data[dlg->ua->id]);
+        */
+
+        call->inv_initial_answer_required = true;
+	}
+
+	call->pending_rdata = cloned_rdata;
+
+    return PJ_SUCCESS;
+}
+
+
 static pj_bool_t on_rx_request( pjsip_rx_data *rdata ){
+    // This is not called for CANCEL
+    printf("on_rx_request\n");
 	char evt[2048];
 
 	pj_str_t *method_name = &rdata->msg_info.msg->line.req.method.name;
-	addon_log(LOG_LEVEL_DEBUG, "on_rx_request %.*s\n", method_name->slen, method_name->ptr);
+	addon_log(L_DBG, "on_rx_request %.*s\n", method_name->slen, method_name->ptr);
 	if(g_shutting_down) return PJ_TRUE;
 
 	pj_status_t status;
 	pj_str_t reason;
 
 	pjsip_dialog *dlg = pjsip_rdata_get_dlg(rdata);
+    //pjsip_dialog *dlg = pjsip_ua_find_dialog(&rdata->msg_info.cid->id, &rdata->msg_info.to->tag, &rdata->msg_info.from->tag, PJ_FALSE);
 
-	addon_log(LOG_LEVEL_DEBUG, "dlg=%x\n", dlg);
-	
 	if(dlg){
-		if(pj_strcmp2(&rdata->msg_info.msg->line.req.method.name, "REFER") != 0){
-			return PJ_TRUE;
-		}
-	}
+        printf("method inside dlg\n");
+        if(rdata->msg_info.msg->line.req.method.id == PJSIP_ACK_METHOD) {
+            return PJ_TRUE;
+        }
 
-	//Just for future reference. The code below prints all headers in the request
-	/*
-	pjsip_hdr *hdr;
-	pjsip_hdr *hdr_list = &rdata->msg_info.msg->hdr;
-	for(hdr=hdr_list->next; hdr!=hdr_list ; hdr=hdr->next){
-		char buf[1000];
-		int len = pjsip_hdr_print_on(hdr, buf, sizeof(buf));
-		buf[len] = 0;
-		addon_log(LOG_LEVEL_DEBUG, "Header: %s\n", buf);
+        void *user_data = (Call*)dlg->mod_data[mod_tester.id];
+
+        long call_id;
+        if( !g_call_ids.get_id((long)user_data, call_id) ){
+            // not CAll. It might be subscriptoin
+            return PJ_TRUE;
+        }
+
+        Call *call = (Call*)user_data;
+
+        if(rdata->msg_info.msg->line.req.method.id != PJSIP_INVITE_METHOD) {
+            pjsip_rx_data *cloned_rdata = 0;
+            if(pjsip_rx_data_clone(rdata, 0, &cloned_rdata) != PJ_SUCCESS) {
+                const pj_str_t reason = pj_str((char*)"Internal Server Error (pjsip_rx_data_clone failed)");
+                pjsip_endpt_respond_stateless(g_sip_endpt, rdata, 500, &reason, NULL, NULL);
+                return PJ_TRUE;
+            }
+
+            call->pending_rdata = cloned_rdata;
+
+            for(int i=0 ; i<PJSIP_MAX_MODULE ; i++) {
+                cloned_rdata->endpt_info.mod_data[i] = rdata->endpt_info.mod_data[i];
+            }
+
+            make_evt_request(evt, sizeof(evt), "call", call->id, rdata->msg_info.len, rdata->msg_info.msg_buf);
+            call->pending_request = rdata->msg_info.msg->line.req.method.id;
+
+            dispatch_event(evt);  
+
+            /*
+            if(pj_strcmp2(&rdata->msg_info.msg->line.req.method.name, "REFER") != 0){
+                return PJ_TRUE;
+            }
+            */
+
+            return PJ_TRUE;
+        }
 	}
-	*/
 
 	if(dlg && (pj_strcmp2(&rdata->msg_info.msg->line.req.method.name, "REFER") == 0)) {
 		//Refer within dialog
 		//We cannot call process_in_dialog_refer from this callback (so we copied the way it is done by pjsua, using on_tsx_state_changed)
 		//process_in_dialog_refer(&oss, dlg, rdata);
-		//addon_log(LOG_LEVEL_DEBUG, "received REFER on_rx_request\n");
+		//addon_log(L_DBG, "received REFER on_rx_request\n");
 		return PJ_TRUE;
 	}
 
+    /*
 	if(dlg && (pj_strcmp2(&rdata->msg_info.msg->line.req.method.name, "INFO") == 0)) {
 		return PJ_TRUE;
 	}
+    */
 
 	if(pj_strcmp2(&rdata->msg_info.msg->line.req.method.name, "SUBSCRIBE") == 0){
 		if(dlg) {
@@ -3587,48 +4705,51 @@ static pj_bool_t on_rx_request( pjsip_rx_data *rdata ){
 		return PJ_TRUE;
 	}
 
-	Transport *transport;
-
 	if(rdata->msg_info.msg->line.req.method.id != PJSIP_INVITE_METHOD)
 	{
-		/*
-		ostringstream oss;
-		build_basic_request_info(&oss, rdata, &transport);
-		*/
-	
-		reason = pj_str((char*)"OK");
+        // Here we handle out-of-dialog requests like REGISTER, OPTIONS, MESSAGE etc.
 
-		pjsip_hdr hdr_list;
-		pj_list_init(&hdr_list);
+        pjsip_transport *t = rdata->tp_info.transport;
+        Request *request = (Request*)pj_pool_zalloc(rdata->tp_info.pool, sizeof(Request));
+        request->is_uac = false;
+        request->pending_rdata = rdata;
 
-		if(rdata->msg_info.msg->line.req.method.id == PJSIP_REGISTER_METHOD) {
-    			pjsip_hdr *hdr_from_request;
+        long request_id;
+        if(!g_request_ids.add((long)request, request_id)){
+            addon_log(L_DBG, "Failed to allocate request_id. Event will not be notified\n");
+            return PJ_TRUE;
+        }
+        request->id = request_id;
 
-			//Add Contact header from Request, if present
-			pj_str_t STR_CONTACT = {(char*)"Contact" , 7 };
-			hdr_from_request = (pjsip_hdr*)pjsip_msg_find_hdr_by_name(rdata->msg_info.msg,
-								&STR_CONTACT,
-								NULL);
-			if(hdr_from_request) {
-				pjsip_hdr *clone_hdr = (pjsip_hdr*) pjsip_hdr_clone(rdata->tp_info.pool, hdr_from_request);
-				pj_list_push_back(&hdr_list, clone_hdr);
-			}
+        char tag[64];
+        build_transport_tag_from_pjsip_transport(tag, t);
 
-			//Add Expires header from Request, if present
-			pj_str_t STR_EXPIRES = {(char*)"Expires" , 7 };
-    			hdr_from_request = (pjsip_hdr*)pjsip_msg_find_hdr_by_name(rdata->msg_info.msg,
-								&STR_EXPIRES,
-								NULL);
-			if(hdr_from_request) {
-				pjsip_hdr *clone_hdr = (pjsip_hdr*) pjsip_hdr_clone(rdata->tp_info.pool, hdr_from_request);
-				pj_list_push_back(&hdr_list, clone_hdr);
-			}
+        long transport_id;
 
-		}
+        //printf("tag=%s\n", tag);
 
-		pjsip_endpt_respond_stateless(g_sip_endpt, rdata, 200, &reason, &hdr_list, NULL);
+        TransportMap::iterator iter = g_TransportMap.find(tag);
+        if( iter != g_TransportMap.end() ){
+            transport_id = iter->second;
+        } else {
+            transport_id = -1;
+        }
 
-		make_evt_non_dialog_request(evt, sizeof(evt), rdata->msg_info.len, rdata->msg_info.msg_buf);
+        pjsip_rx_data *cloned_rdata = 0;
+        if(pjsip_rx_data_clone(rdata, 0, &cloned_rdata) != PJ_SUCCESS) {
+            const pj_str_t reason = pj_str((char*)"Internal Server Error (pjsip_rx_data_clone failed)");
+            pjsip_endpt_respond_stateless(g_sip_endpt, rdata, 500, &reason, NULL, NULL);
+            return PJ_TRUE;
+        }
+        request->pending_rdata = cloned_rdata;
+
+        // Automatically sending a '100 Trying' (but we might add an option when creating transports to disable this)
+        status = pjsip_endpt_respond_stateless(g_sip_endpt, rdata, 100, &trying_reason, NULL, NULL);
+        if(status != PJ_SUCCESS) {
+            addon_log(L_DBG, "on_rx_request pjsip_endpt_respond_stateless failed");
+        }
+
+		make_evt_non_dialog_request(evt, sizeof(evt), transport_id, request_id, rdata->msg_info.len, rdata->msg_info.msg_buf);
 		dispatch_event(evt);
 		return PJ_TRUE;
 	}
@@ -3636,7 +4757,7 @@ static pj_bool_t on_rx_request( pjsip_rx_data *rdata ){
 	unsigned options = 0;
 	status = pjsip_inv_verify_request(rdata, &options, NULL, NULL, g_sip_endpt, NULL);
 	if(status != PJ_SUCCESS) {
-		reason = pj_str((char*)"Unable to handle this INVITE");
+		reason = pj_str((char*)"Unable to handle this REQUEST");
 		pjsip_endpt_respond_stateless(g_sip_endpt, rdata, 500, &reason, NULL, NULL);
 		return PJ_TRUE;
 	}
@@ -3656,108 +4777,41 @@ static pj_bool_t on_rx_request( pjsip_rx_data *rdata ){
 		return PJ_TRUE;
 	}
 
-	pjsip_transport *t = rdata->tp_info.transport;
-	pj_str_t str_addr = pj_str( inet_ntoa( (in_addr&)t->local_addr.ipv4.sin_addr.s_addr ) );
-	pjmedia_transport *med_transport = create_media_transport(&str_addr);
-
-	if(!med_transport)
-	{
-		reason = pj_str((char*)"Internal Server Error (could not create media transport)");
-		pjsip_endpt_respond_stateless(g_sip_endpt, rdata, 500, &reason, NULL, NULL);
-		return PJ_TRUE;
-	}
-
-	pjmedia_transport_info med_tpinfo;
-	pjmedia_transport_info_init(&med_tpinfo);
-	pjmedia_transport_get_info(med_transport, &med_tpinfo);
-
-	pjmedia_sdp_session *sdp;
-	status = pjmedia_endpt_create_sdp( g_med_endpt, rdata->tp_info.pool, 1,
-			&med_tpinfo.sock_info,
-			&sdp);
-	if(status != PJ_SUCCESS) {
-		close_media_transport(med_transport);
-		reason = pj_str((char*)"Internal Server Error (pjmedia_endprt_create_sdp failed)");
-		pjsip_endpt_respond_stateless(g_sip_endpt, rdata, 500, &reason, NULL, NULL);
-		return PJ_TRUE;
-	}
-
 	pjsip_inv_session *inv;
-	status = pjsip_inv_create_uas(dlg, rdata, sdp, 0, &inv);
+	status = pjsip_inv_create_uas(dlg, rdata, NULL, 0, &inv);
 	if(status != PJ_SUCCESS) {
-		close_media_transport(med_transport);
 		reason = pj_str((char*)"Internal Server Error (pjsip_inv_create_uas failed)");
 		pjsip_endpt_respond_stateless(g_sip_endpt, rdata, 500, &reason, NULL, NULL);
 		return PJ_TRUE;
 	}
 
+	pjsip_transport *t = rdata->tp_info.transport;
+	Call *call = (Call*)pj_pool_alloc(inv->pool, sizeof(Call));
+	pj_bzero(call, sizeof(Call));
+
 	if(!dlg_set_transport(t, dlg)) {
-		close_media_transport(med_transport);
 		reason = pj_str((char*)"Internal Server Error (set_transport failed)");
 		pjsip_endpt_respond_stateless(g_sip_endpt, rdata, 500, &reason, NULL, NULL);
 		return PJ_TRUE;
 	}
 
-	pjsip_rx_data *cloned_rdata	= 0;
-
-	if(!(g_flags & FLAG_NO_AUTO_100_TRYING)) {
-		pjsip_tx_data *tdata;
-		//First response to an INVITE must be created with pjsip_inv_initial_answer(). Subsequent responses to the same transaction MUST use pjsip_inv_answer().
-		//Create 100 response
-		status = pjsip_inv_initial_answer(inv, rdata,
-						100,
-						NULL, NULL, &tdata);
-		if(status != PJ_SUCCESS) {
-			close_media_transport(med_transport);
-			reason = pj_str((char*)"Internal Server Error (pjsip_inv_initial_answer failed)");
-			pjsip_endpt_respond_stateless(g_sip_endpt, rdata, 500, &reason, NULL, NULL);
-			return PJ_TRUE;
-		}
-
-		//Send 100 response
-		status = pjsip_inv_send_msg(inv, tdata);
-		if(status != PJ_SUCCESS) {
-			close_media_transport(med_transport);
-			reason = pj_str((char*)"Internal Server Error (pjsip_inv_send_msg failed)");
-			pjsip_endpt_respond_stateless(g_sip_endpt, rdata, 500, &reason, NULL, NULL);
-			return PJ_TRUE;
-		}
-	} else {
-		status = pjsip_rx_data_clone(rdata, 0, &cloned_rdata);
-
-		if(status != PJ_SUCCESS) {
-			close_media_transport(med_transport);
-			reason = pj_str((char*)"Internal Server Error (pjsip_rx_data_clone failed)");
-			pjsip_endpt_respond_stateless(g_sip_endpt, rdata, 500, &reason, NULL, NULL);
-			return PJ_TRUE;
-		}
-	}
-
-	Call *call = (Call*)pj_pool_alloc(inv->pool, sizeof(Call));
-	pj_bzero(call, sizeof(Call));
-
-	call->initial_invite_rdata = cloned_rdata;
-
-	if(status != PJ_SUCCESS) {
-		close_media_transport(med_transport);
-		reason = pj_str((char*)"Internal Server Error (pjsip_rx_data_clone failed)");
-		pjsip_endpt_respond_stateless(g_sip_endpt, rdata, 500, &reason, NULL, NULL);
-		return PJ_TRUE;
-	}
+    status = process_invite(call, inv, rdata);
+    if(status != PJ_SUCCESS) {
+        return PJ_TRUE;
+    }
 
 	call->inv = inv;
-	call->med_transport = med_transport;
 
 	if(!inv->dlg) {
 		return PJ_TRUE;
 	}
 
-	inv->dlg->mod_data[mod_tester.id] = call;
+    // TODO: check if this is really necessary as we are calling pjsip_dlg_add_usage subsequently
+	inv->dlg->mod_data[mod_tester.id] = call; 
 
 	//Without this, on_rx_response will not be called
 	status = pjsip_dlg_add_usage(dlg, &mod_tester, call);
 	if(status != PJ_SUCCESS) {
-		close_media_transport(med_transport);
 		reason = pj_str((char*)"Internal Server Error (pjsip_dlg_add_usage failed)");
 		pjsip_endpt_respond_stateless(g_sip_endpt, rdata, 500, &reason, NULL, NULL);
 		return PJ_TRUE;
@@ -3765,36 +4819,46 @@ static pj_bool_t on_rx_request( pjsip_rx_data *rdata ){
 
 	long call_id;
 	if(!g_call_ids.add((long)call, call_id)){
-		addon_log(LOG_LEVEL_DEBUG, "Failed to allocate call_id. Event will not be notifield\n");
+		addon_log(L_DBG, "Failed to allocate call_id. Event will not be notifield\n");
 		return PJ_TRUE;
 	}
 
-	call->transport = transport; 
-	call->id = call_id;
+    char tag[64];
+    build_transport_tag_from_pjsip_transport(tag, t);
 
-	int transport_id;
+    long transport_id;
 
-	SipTransportMap::iterator iter = g_SipTransportMap.find(t);
-	if( iter != g_SipTransportMap.end() ){
+    //printf("tag=%s\n", tag);
+
+	TransportMap::iterator iter = g_TransportMap.find(tag);
+	if( iter != g_TransportMap.end() ){
 		transport_id = iter->second;
 	} else {
-		if(t->key.type == PJSIP_TRANSPORT_TCP) {
-			transport_id = g_TcpTransportId;
-		} else if(t->key.type == PJSIP_TRANSPORT_TLS) {
-			transport_id = g_TlsTransportId;
-		} else {
-			transport_id = -1;
-		}
+		transport_id = -1;
 	}
+
+    //printf("transport_id=%d\n", transport_id);
+
+    long val;
+    if(g_transport_ids.get(transport_id, val)){
+        Transport *transport = (Transport*)val;
+	    call->transport = transport; 
+    } else {
+        printf("could not resolve transport id=%d\n", transport_id);
+        exit(1);
+    }
 		
+	call->id = call_id;
+
 	make_evt_incoming_call(evt, sizeof(evt), transport_id, call_id, rdata->msg_info.len, rdata->msg_info.msg_buf);
 	dispatch_event(evt);
+    call->pending_request = PJSIP_INVITE_METHOD;
 	
 	return PJ_TRUE;
 }
 
 static pj_bool_t on_rx_response( pjsip_rx_data *rdata ){
-	//addon_log(LOG_LEVEL_DEBUG, "on_rx_response\n");
+	addon_log(L_DBG, "on_rx_response\n");
 	//Very important: this callback notifies reception of any SIP response
 	//received by the endpoint, no matter if the endpoint was the one
 	//that sent the request or not (for example, if the app is running
@@ -3816,12 +4880,16 @@ static pj_bool_t on_rx_response( pjsip_rx_data *rdata ){
 
 	pjsip_dialog *dlg = pjsip_rdata_get_dlg(rdata);
 	if(!dlg){
-		//addon_log(LOG_LEVEL_DEBUG, "No dialog associated with rdata\n");
+		//addon_log(L_DBG, "No dialog associated with rdata\n");
 		return PJ_TRUE;
 	}
 
+    Call *call = (Call*)dlg->mod_data[mod_tester.id];
+
 	if(strcmp(method, "SUBSCRIBE") == 0) { 
-		Subscription *subscription = (Subscription*)dlg->mod_data[mod_tester.id]; 
+        return PJ_TRUE;
+        /*
+		Subscription *subscription = dialog->d.subscription; 
 		int code = rdata->msg_info.msg->line.status.code;
 		if(!subscription->initialized && code >= 200 && code <= 299) {
 			//Status code 2XX will cause pjsip_evsub to be called. 
@@ -3834,17 +4902,13 @@ static pj_bool_t on_rx_response( pjsip_rx_data *rdata ){
 
 		if(subscription) {
 			if( !g_subscription_ids.get_id((long)subscription, subscription_id) ){
-				/*
-				oss.seekp(0);
-				oss << "event=internal_error" << EVT_DATA_SEP << "details=Failed to get subscription_id";
-				*/
 
 				make_evt_internal_error(evt, sizeof(evt), "failed to get subscription_id");
 				dispatch_event(evt); 
 				return true; 
 			}
 		} else {
-			addon_log(LOG_LEVEL_DEBUG, "Ignoring response for mod_data not set to a subscription\n");
+			addon_log(L_DBG, "Ignoring response for mod_data not set to a subscription\n");
 			return PJ_TRUE;
 		}
 
@@ -3853,16 +4917,15 @@ static pj_bool_t on_rx_response( pjsip_rx_data *rdata ){
 		dispatch_event(evt);
 
 		return PJ_TRUE;
+        */
 	}
 
-
-	Call *call = (Call*)dlg->mod_data[mod_tester.id]; 
 	long call_id;
 
 	if(call) {
-		//addon_log(LOG_LEVEL_DEBUG, "call:%x\n",call);
+		//addon_log(L_DBG, "call:%x\n",call);
 		if( !g_call_ids.get_id((long)call, call_id) ){
-			//addon_log(LOG_LEVEL_DEBUG, "The call is not present in g_call_ids.\n");
+			//addon_log(L_DBG, "The call is not present in g_call_ids.\n");
 			// It means the call terminated and was removed from g_call_ids\n");
 			//So let's try to find it at g_LastCalls
 
@@ -3874,13 +4937,13 @@ static pj_bool_t on_rx_response( pjsip_rx_data *rdata ){
 			{
 				oss.seekp(0);
 				oss << "event=internal_error" << EVT_DATA_SEP << "details=Failed to get call_id";
-				addon_log(LOG_LEVEL_DEBUG, "on_rx_response failed to resolve call_id\n");
+				addon_log(L_DBG, "on_rx_response failed to resolve call_id\n");
 				return true; 
 			}
 			call_id = iter->id;
 		}
 	} else {
-		addon_log(LOG_LEVEL_DEBUG, "Ignoring response for mod_data not set to a call\n");
+		addon_log(L_DBG, "Ignoring response for mod_data not set to a call\n");
 		return PJ_TRUE;
 	}
 
@@ -3897,100 +4960,46 @@ static pjsip_redirect_op on_redirected(pjsip_inv_session *inv, const pjsip_uri *
 }
 
 static void on_rx_offer2(pjsip_inv_session *inv, struct pjsip_inv_on_rx_offer_cb_param *param) {
-	addon_log(LOG_LEVEL_DEBUG, "on_rx_offer2\n");
+	addon_log(L_DBG, "on_rx_offer2\n");
 	if(g_shutting_down) return;
-
-    /*
-	bool is_reinvite = false;
-
-	if(inv->state == PJSIP_INV_STATE_CONFIRMED) {
-		is_reinvite = true;
-	}
-    */
 
 	char evt[2048];
 
-	Call *call = (Call*)inv->dlg->mod_data[mod_tester.id];
+    Call *call = (Call*)inv->dlg->mod_data[mod_tester.id];
+
+    printf("on_rx_offer2 call_id=%d\n", call->id);
 
 	pj_status_t status;
 
-    const pjmedia_sdp_session *offer = param->offer;
     const pjsip_rx_data *rdata = param->rdata;
 
-	pjmedia_sdp_conn *conn;
-	conn = offer->media[0]->conn;
-	if(!conn) conn = offer->conn;	
-	
-	pjmedia_transport_info tpinfo;
-	pjmedia_transport_info_init(&tpinfo);
-	pjmedia_transport_get_info(call->med_transport,&tpinfo);
+    pjmedia_sdp_neg_state state = pjmedia_sdp_neg_get_state(inv->neg);
+    printf("neg state: %d\n", state);
+    if(PJMEDIA_SDP_NEG_STATE_NULL == state || PJMEDIA_SDP_NEG_STATE_DONE == state ) {
+        call->remote_sdp = (pjmedia_sdp_session*)param->offer;
+        status = pjmedia_sdp_neg_set_remote_offer(inv->dlg->pool,
+            inv->neg,
+            param->offer
+        );   
+        if (status != PJ_SUCCESS) {
+            printf("error: pjmedia_sdp_neg_set_remote_offer failed\n");
+            exit(1);
+            return;
+        }
+    } else {
+        // this is delayed media scenario
+        // So we must generate SDP answer based on media set when call was created.
 
-	pjmedia_sdp_session *answer;
-	status = pjmedia_endpt_create_sdp(g_med_endpt,
-					inv->pool,
-					1,
-					&tpinfo.sock_info,
-					&answer);
-	if(status != PJ_SUCCESS){
-		make_evt_internal_error(evt, sizeof(evt), "on_rx_offer: pjmedia_endpt_create_sdp failed");
-		dispatch_event(evt); 
-		return; 
-	}
-
-	int remote_mode = get_media_mode(offer->media[0]->attr, offer->media[0]->attr_count);
-	if(remote_mode == SENDONLY) {
-		call->remote_hold = 1;
-	} else if(remote_mode == INACTIVE) {
-		call->remote_hold = 1;
-	} else if(remote_mode == SENDRECV) {
-		call->remote_hold = 0;
-	} else if(remote_mode == RECVONLY) {
-		call->remote_hold = 0;
-	} else {
-		call->remote_hold = 0;
-	}
-
-	//char *mode = get_media_mode_str(remote_mode);
-	
-	pjmedia_sdp_attr *attr;
-
-	// Remove existing directions attributes
-	pjmedia_sdp_media_remove_all_attr(answer->media[0], "sendrecv");
-	pjmedia_sdp_media_remove_all_attr(answer->media[0], "sendonly");
-	pjmedia_sdp_media_remove_all_attr(answer->media[0], "recvonly");
-	pjmedia_sdp_media_remove_all_attr(answer->media[0], "inactive");
-
-	if(call->local_hold) {
-		// Keep call on-hold by setting 'sendonly' attribute.
-		// (See RFC 3264 Section 8.4 and RFC 4317 Section 3.1)
-		if(call->remote_hold) {
-			attr = pjmedia_sdp_attr_create(inv->pool, "inactive", NULL);
-		} else {
-			attr = pjmedia_sdp_attr_create(inv->pool, "sendonly", NULL);
-		}
-	} else if(call->remote_hold) {
-		attr = pjmedia_sdp_attr_create(inv->pool, "recvonly", NULL);
-	} else {
-		attr = pjmedia_sdp_attr_create(inv->pool, "sendrecv", NULL);
-	}
-	pjmedia_sdp_media_add_attr(answer->media[0], attr);
-
-	status = pjsip_inv_set_sdp_answer(inv, answer);
-	if(status != PJ_SUCCESS){
-		make_evt_internal_error(evt, sizeof(evt), "on_rx_offer: pjsip_inv_set_sdp_answer failed");
-		dispatch_event(evt); 
-		return;
-	}
-
-	long call_id;
-	if( !g_call_ids.get_id((long)call, call_id) ){
-		make_evt_internal_error(evt, sizeof(evt), "on_rx_offer: Failed to get call_id.\n");
-		dispatch_event(evt); 
-		return;
-	}
+        status = pjsip_inv_set_sdp_answer(call->inv, call->local_sdp);
+        if(status != PJ_SUCCESS) {
+            set_error("pjsip_inv_set_sdp_answer failed");
+            close_media(call);
+            return; 
+        }
+    }
 
     // The below cannot be used: in case of delayed media scenarios, on_rx_offer and on_rx_offer2 will be called when the '200 OK'
-    // is received for an INVITE without SDP.
+    // is received for an INVITE without SDP. So we will send this event from on_rx_reinvite
     /*
     make_evt_reinvite(evt, sizeof(evt), call_id, rdata->msg_info.len, rdata->msg_info.msg_buf);
     dispatch_event(evt);
@@ -4001,17 +5010,33 @@ static void on_rx_offer2(pjsip_inv_session *inv, struct pjsip_inv_on_rx_offer_cb
 
 static pj_status_t on_rx_reinvite(pjsip_inv_session *inv, const pjmedia_sdp_session *offer, pjsip_rx_data *rdata) {
     printf("on_rx_reinvite\n");
-    return !PJ_SUCCESS;
+
+	char evt[2048];
+
+    Call *call = (Call*)inv->dlg->mod_data[mod_tester.id];
+    printf("on_rx_reinvite call_id=%d\n", call->id);
+
+    pj_status_t status = process_invite(call, inv, rdata);
+    if(status != PJ_SUCCESS) {
+        return PJ_SUCCESS;
+    }
+
+    make_evt_reinvite(evt, sizeof(evt), call->id, rdata->msg_info.len, rdata->msg_info.msg_buf);
+    dispatch_event(evt);
+    call->pending_request = PJSIP_INVITE_METHOD;
+
+    return PJ_SUCCESS;
 }
 
 static void on_dtmf(pjmedia_stream *stream, void *user_data, int digit){
+    printf("on_dtmf %d\n", digit);
 	if(g_shutting_down) return;
 
 	char evt[256];
 
 	long call_id;
 	if( !g_call_ids.get_id((long)user_data, call_id) ){
-		addon_log(LOG_LEVEL_DEBUG, "on_dtmf: Failed to get call_id. Event will not be notified.\n");	
+		addon_log(L_DBG, "on_dtmf: Failed to get call_id. Event will not be notified.\n");	
 		return;
 	}
 
@@ -4019,40 +5044,46 @@ static void on_dtmf(pjmedia_stream *stream, void *user_data, int digit){
 	if(d == '*') d = 'e';
 	if(d == '#') d = 'f';
 
-	Call *c = (Call*)user_data;
+	Call *call = (Call*)user_data;
+
+    int media_id = find_endpoint_by_inband_dtmf_media_stream(call, stream);
+    assert(media_id >= 0);
+
+    MediaEndpoint *me = (MediaEndpoint*)call->media[media_id];
+    AudioEndpoint *ae = (AudioEndpoint*)me->endpoint.audio;
 
 	int mode = DTMF_MODE_RFC2833;
 
 	if(g_dtmf_inter_digit_timer) {
 
 		PJW_LOCK();
-		int *pLen = &c->DigitBufferLength[mode];
+		int *pLen = &ae->DigitBufferLength[mode];
 
 		if(*pLen > MAXDIGITS) {
 			PJW_UNLOCK();
-			addon_log(LOG_LEVEL_DEBUG, "No more space for digits in rfc2833 buffer\n");
+			addon_log(L_DBG, "No more space for digits in rfc2833 buffer\n");
 			return;
 		}
 
-		c->DigitBuffers[mode][*pLen] = d;
+		ae->DigitBuffers[mode][*pLen] = d;
 		(*pLen)++;
-		c->last_digit_timestamp[mode] = ms_timestamp();
+		ae->last_digit_timestamp[mode] = ms_timestamp();
 		PJW_UNLOCK();
 	} else {
-		make_evt_dtmf(evt, sizeof(evt), call_id, 1, &d, mode);
+		make_evt_dtmf(evt, sizeof(evt), call_id, 1, &d, mode, media_id);
 		dispatch_event(evt);
 	}
 }
 
 static void on_registration_status(pjsip_regc_cbparam *param){
-	//addon_log(LOG_LEVEL_DEBUG, "on_registration_status\n");
+	//addon_log(L_DBG, "on_registration_status\n");
 	if(g_shutting_down) return;
 
 	char evt[1024];
 
 	long acc_id;
 	if( !g_account_ids.get_id((long)param->regc, acc_id) ){
-		addon_log(LOG_LEVEL_DEBUG, "on_registration_status: Failed to get account_id. Event will not be notified.\n");	
+		addon_log(L_DBG, "on_registration_status: Failed to get account_id. Event will not be notified.\n");	
 		return;
 	}
 
@@ -4206,7 +5237,7 @@ out:
 
 int __pjw_shutdown()
 {
-	//addon_log(LOG_LEVEL_DEBUG, "pjw_shutdown thread_id=%i\n", syscall(SYS_gettid));
+	//addon_log(L_DBG, "pjw_shutdown thread_id=%i\n", syscall(SYS_gettid));
 	PJW_LOCK();
 
 	g_shutting_down = true;
@@ -4219,7 +5250,7 @@ int __pjw_shutdown()
 	while(iter != g_call_ids.id_map.end()){
 		Call *call = (Call*)iter->second;
 
-		addon_log(LOG_LEVEL_DEBUG, "Terminating call %d\n", iter->first);
+		addon_log(L_DBG, "Terminating call %d\n", iter->first);
 
 		pjsip_tx_data *tdata;
 		pj_status_t status;
@@ -4231,7 +5262,7 @@ int __pjw_shutdown()
 			//ignore 
 			char err[256];
 			pj_strerror(status, err, sizeof(err));
-			addon_log(LOG_LEVEL_DEBUG, "pjsip_inv_end_session failed statut=%i (%s)\n", status, err);
+			addon_log(L_DBG, "pjsip_inv_end_session failed statut=%i (%s)\n", status, err);
 			++iter;
 			continue;
 		}
@@ -4240,13 +5271,13 @@ int __pjw_shutdown()
 		{
 			//if tdata was not set by pjsip_inv_end_session, it means we didn't receive any response yet (100 Trying) and we cannot send CANCEL in this situation. So we just can return here without calling pjsip_inv_send_msg.
 			++iter;
-			addon_log(LOG_LEVEL_DEBUG, "no tdata\n");
+			addon_log(L_DBG, "no tdata\n");
 			continue;
 		}
 
 		status = pjsip_inv_send_msg(call->inv, tdata);
 		if(status != PJ_SUCCESS){
-			addon_log(LOG_LEVEL_DEBUG, "pjsip_inv_send_msg failed\n");
+			addon_log(L_DBG, "pjsip_inv_send_msg failed\n");
 		}
 		++iter;
 	}
@@ -4255,7 +5286,7 @@ int __pjw_shutdown()
 	while(iter != g_account_ids.id_map.end()){
 		pjsip_regc *regc = (pjsip_regc*)iter->second;
 
-		addon_log(LOG_LEVEL_DEBUG, "Unregistering account %d\n", iter->first);
+		addon_log(L_DBG, "Unregistering account %d\n", iter->first);
 
 		pjsip_tx_data *tdata;
 		pj_status_t status;
@@ -4263,13 +5294,13 @@ int __pjw_shutdown()
 		status = pjsip_regc_unregister(regc, &tdata);
 		if(status != PJ_SUCCESS)
 		{
-			addon_log(LOG_LEVEL_DEBUG, "pjsip_regc_unregister failed\n");
+			addon_log(L_DBG, "pjsip_regc_unregister failed\n");
 		}
 
 		status = pjsip_regc_send(regc, tdata);
 		if(status != PJ_SUCCESS)
 		{
-			addon_log(LOG_LEVEL_DEBUG, "pjsip_regc_send failed\n");
+			addon_log(L_DBG, "pjsip_regc_send failed\n");
 		}
 		++iter;
 	}
@@ -4277,11 +5308,11 @@ int __pjw_shutdown()
 	Subscription *subscription;
 	iter = g_subscription_ids.id_map.begin();
 	while(iter != g_subscription_ids.id_map.end()){
-		addon_log(LOG_LEVEL_DEBUG, "Unsubscribing subscription %d\n", iter->first);
+		addon_log(L_DBG, "Unsubscribing subscription %d\n", iter->first);
 
 		subscription = (Subscription*)iter->second;	
 		if(!subscription_subscribe(subscription, 0, NULL)) {
-			addon_log(LOG_LEVEL_DEBUG, "Unsubscription failed failed\n");
+			addon_log(L_DBG, "Unsubscription failed failed\n");
 		}
 		++iter;
 	}
@@ -4447,6 +5478,7 @@ static void build_stream_stat(ostringstream &oss, pjmedia_rtcp_stat *stat, pjmed
 }
 
 void close_media_transport(pjmedia_transport *med_transport) {
+    printf("close_media_transport %x\n", med_transport);
 	pjmedia_transport_info tpinfo;
 	pjmedia_transport_info_init(&tpinfo);
 	pj_status_t status = pjmedia_transport_get_info(med_transport, &tpinfo);
@@ -4461,84 +5493,431 @@ void close_media_transport(pjmedia_transport *med_transport) {
 
     status = pjmedia_transport_media_stop(med_transport);
     if( status != PJ_SUCCESS ) {
-        addon_log(LOG_LEVEL_DEBUG, "Critical Error: pjmedia_transport_media_stop failed. status=%d\n", status);
+        addon_log(L_DBG, "Critical Error: pjmedia_transport_media_stop failed. status=%d\n", status);
     }
 
 	status = pjmedia_transport_close(med_transport);
 	if( status != PJ_SUCCESS ) {
-		addon_log(LOG_LEVEL_DEBUG, "Critical Error: pjmedia_transport_close failed. status=%d\n", status);
+		addon_log(L_DBG, "Critical Error: pjmedia_transport_close failed. status=%d\n", status);
 	}
 }
 
 
-bool init_media_ports(Call *c, unsigned sampling_rate, unsigned channel_count, unsigned samples_per_frame, unsigned bits_per_sample) {
+bool set_streaming_mode(pj_str_t *mode, pj_pool_t *pool, Document &document, Value &descr){
+    if(descr.HasMember("mode")) {
+        if(!descr["mode"].IsString()) {
+            set_error("set_streaming_mode failed. Media param mode must be string");
+            return false;
+        }
+        pj_strdup2(pool, mode, descr["mode"].GetString());
+    } else if(document.HasMember("mode")) {
+        if(!document["mode"].IsString()) {
+            set_error("set_streaming_mode failed. Document param mode must be string");
+            return false;
+        }
+        pj_strdup2(pool, mode, document["mode"].GetString());
+    } else {
+        pj_strdup2(pool, mode, "sendrecv");
+    }
+    return true;
+}
+
+bool create_media_endpoint(Call *call, Document &document, Value &descr, pjsip_dialog *dlg, char *address, MediaEndpoint **out) {
+    printf("create_media_endpoint call_id=%d\n", call->id); 
+    MediaEndpoint *med_endpt = (MediaEndpoint*)pj_pool_zalloc(dlg->pool, sizeof(MediaEndpoint));
+    if(!med_endpt) {
+        set_error("failed to allocate med_endpt");
+        return false;
+    }
+
+    const char *type = (const char*)descr["type"].GetString();
+    const pj_str_t str_addr = pj_str(address);
+
+    if(strcmp("audio", type) == 0) {
+        int allocated_port;
+        pjmedia_transport *med_transport = create_media_transport(&str_addr, &allocated_port);
+
+        if(!med_transport)
+        {
+            set_error("create_media_transport failed");
+            return false;
+        }
+
+        AudioEndpoint *audio_endpt = (AudioEndpoint*)pj_pool_zalloc(dlg->pool, sizeof(AudioEndpoint));
+        audio_endpt->med_transport = med_transport; 
+
+        med_endpt->type = ENDPOINT_TYPE_AUDIO;
+        pj_strdup2(dlg->pool, &med_endpt->media, "audio");
+        pj_strdup(dlg->pool, &med_endpt->addr, &str_addr);
+        pj_strdup2(dlg->pool, &med_endpt->transport, "RTP/AVP");
+        med_endpt->port = allocated_port;
+        med_endpt->endpoint.audio = audio_endpt;
+
+        if(!set_streaming_mode(&audio_endpt->mode, dlg->pool, document, descr)) {
+            return false;
+        }
+    } else if(strcmp("mrcp", type) == 0) {
+        MrcpEndpoint *mrcp_endpt = (MrcpEndpoint*)pj_pool_zalloc(dlg->pool, sizeof(MrcpEndpoint));
+        int allocated_port;
+        if(call->outgoing) {
+            allocated_port = 9; // client must use port 9
+        } else {
+            // TODO: create tcp listening socket
+            allocated_port = 1000;
+        }
+
+        med_endpt->type = ENDPOINT_TYPE_MRCP;
+        pj_strdup2(dlg->pool, &med_endpt->media, "application");
+        pj_strdup(dlg->pool, &med_endpt->addr, &str_addr);
+        pj_strdup2(dlg->pool, &med_endpt->transport, "TCP/MRCPv2");
+        med_endpt->port = allocated_port;
+        med_endpt->endpoint.mrcp = mrcp_endpt;
+    } else {
+        // for all other cases, med_endpt->type will be zero, so wil not be used.
+    }
+
+    *out = med_endpt;
+    printf("create_media_endpoint call_id=%d type=%d\n", call->id, med_endpt->type); 
+
+    return true;
+}
+
+bool update_media_endpoint_streaming_mode(MediaEndpoint *me, pj_pool_t *pool, Document &document, Value &descr) {
+    if(ENDPOINT_TYPE_AUDIO == me->type) {
+        AudioEndpoint *ae = me->endpoint.audio;
+        if(!set_streaming_mode(&ae->mode, pool, document, descr)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+int media_type_name_to_type_id(const char *type_name) {
+    if(strcmp("audio", type_name) == 0) {
+        return ENDPOINT_TYPE_AUDIO;
+    } else if(strcmp("video", type_name) == 0) {
+        return ENDPOINT_TYPE_AUDIO;
+    } else if(strcmp("t38", type_name) == 0) {
+        return ENDPOINT_TYPE_T38;
+    } else if(strcmp("mrcp", type_name) == 0) {
+        return ENDPOINT_TYPE_MRCP;
+    } else if(strcmp("msrp", type_name) == 0) {
+        return ENDPOINT_TYPE_MSRP;
+    }
+
+    return -1;
+} 
+
+MediaEndpoint *find_media_by_json_descr(Call *call, Value &descr, bool in_use_chart[]) {
+    const char *type_name = (const char*)descr["type"].GetString();
+
+    int type_id = media_type_name_to_type_id(type_name);
+
+    for(int i=0 ; i<call->media_count ; i++) {
+        if(in_use_chart[i]) continue;
+        MediaEndpoint *me = call->media[i];
+
+        if(me->type == type_id) {
+            in_use_chart[i] = true;
+            return me;
+        }
+    }
+    
+    return NULL;
+}
+
+MediaEndpoint *find_media_endpt_by_json_descr(Call *call, Value &descr, bool in_use_chart[]) {
+    const char *type = (const char*)descr["type"].GetString();
+
+    for(int i=0 ; i<call->media_count ; i++) {
+        if(in_use_chart[i]) continue;
+        MediaEndpoint *me = call->media[i];
+
+        if(strcmp("audio", type) == 0) {
+            if(ENDPOINT_TYPE_AUDIO == me->type) {
+                in_use_chart[i] = true;
+                return me;
+            }
+        } else if(strcmp("video", type) == 0) {
+            if(ENDPOINT_TYPE_VIDEO == me->type) {
+                in_use_chart[i] = true;
+                return me;
+            }
+        } else if(strcmp("mrcp", type) == 0) {
+            if(ENDPOINT_TYPE_MRCP == me->type) {
+                in_use_chart[i] = true;
+                return me;
+            }
+        } else {
+            assert(0);
+            // missing media type support implementation
+        }
+    }
+
+    return NULL;
+}
+
+pjmedia_sdp_media * create_sdp_media(MediaEndpoint *me, pjsip_dialog *dlg) {
+    pj_status_t status;
+    pjmedia_sdp_media *media;
+
+    if(ENDPOINT_TYPE_AUDIO == me->type) {
+        AudioEndpoint *audio = (AudioEndpoint*)me->endpoint.audio;
+        pjmedia_transport_info med_tpinfo;
+        pjmedia_transport_info_init(&med_tpinfo);
+        pjmedia_transport_get_info(audio->med_transport, &med_tpinfo);
+
+        status = pjmedia_endpt_create_audio_sdp(
+            g_med_endpt,
+            dlg->pool,
+            &med_tpinfo.sock_info,
+            0,
+            &media);
+        if(status != PJ_SUCCESS) {
+            set_error("pjmedia_endpt_create_audio_sdp failed");
+            return NULL;
+        }
+
+        pjmedia_sdp_attr *attr;
+
+        // TODO: need to compute proper mode attribute
+        char mode[1024];
+        sprintf(mode, "%.*s", audio->mode.slen, audio->mode.ptr);
+        attr = pjmedia_sdp_attr_create(dlg->pool, mode, NULL);
+
+        pjmedia_sdp_media_add_attr(media, attr);
+
+    } else if(ENDPOINT_TYPE_MRCP == me->type) {
+        media = (pjmedia_sdp_media*)pj_pool_zalloc(dlg->pool, sizeof(pjmedia_sdp_media));
+        if(!media) {
+            set_error("create pjmedia_sdp_media for mrcp endpoint failed");
+            return NULL; 
+        }
+
+        pj_strdup(dlg->pool, &media->desc.media, &me->media);
+
+        pj_strdup(dlg->pool, &media->desc.transport, &me->transport);
+
+        media->desc.port = me->port;
+        pj_strdup2(dlg->pool, &media->desc.fmt[media->desc.fmt_count++], "1"); //must be "1" (https://www.rfc-editor.org/rfc/rfc6787.html)
+
+        media->conn = (pjmedia_sdp_conn*)pj_pool_zalloc(dlg->pool, sizeof(pjmedia_sdp_conn));
+        pj_strdup2(dlg->pool, &media->conn->net_type, "IN");
+        pj_strdup2(dlg->pool, &media->conn->addr_type, "IP4");
+        pj_strdup(dlg->pool, &media->conn->addr, &me->addr);
+    } else {
+        printf("unsupported me->type %d\n", me->type);
+        assert(0);
+    }
+
+    return media;
+}
+
+bool process_media(Call *call, pjsip_dialog *dlg, Document &document) {
+    printf("process_media call_id=%d\n", call->id);
+  
+    bool in_use_chart[PJMEDIA_MAX_SDP_MEDIA] = {false};
+
+    pjmedia_sdp_session *sdp;
+
+	pj_sockaddr origin;
+    pj_sockaddr_init(pj_AF_INET(), &origin, NULL, 0);
+
+    pj_status_t status = pjmedia_endpt_create_base_sdp(
+        g_med_endpt,
+        dlg->pool,
+        NULL,
+        &origin,
+        &sdp);
+
+    if(status != PJ_SUCCESS) {
+        set_error("pjmedia_endpt_create_base_sdp failed");
+        return false;
+    }
+    
+    Transport *t = call->transport;
+
+    Document::AllocatorType& allocator = document.GetAllocator();
+
+    if(!document.HasMember("media")) {
+        Value audio(kObjectType);
+        audio.AddMember("type", Value().SetString("audio"), allocator);
+
+        Value media(kArrayType);
+        media.PushBack(audio, allocator);
+        document.AddMember("media", media, allocator);
+    } else {
+        if(document["media"].IsString()) {
+            Value media(kArrayType);
+
+            std::string str = document["media"].GetString();
+
+            std::stringstream ss(str);
+            std::string item;
+            while (std::getline(ss, item, ',')) {
+                Value mediaItem(kObjectType);
+                mediaItem.AddMember("type", Value().SetString(item.c_str(), item.length(), allocator), allocator);
+
+                media.PushBack(mediaItem, allocator);
+            }
+
+            document["media"] = media;
+        } else if(document["media"].IsArray()) {
+            Value media = document["media"].GetArray();
+            assert(media.Size() <= PJMEDIA_MAX_SDP_MEDIA);
+
+            for (Value::ValueIterator itr = media.Begin(); itr != media.End(); ++itr) {
+                if(itr->IsString()) {
+                    const char* type = itr->GetString();
+                    int len = itr->GetStringLength();
+                    Value mediaItem(kObjectType);
+                    mediaItem.AddMember("type", Value().SetString(type, len, allocator), allocator);
+
+                    *itr = mediaItem;
+                } else if(itr->IsObject()) {
+                    printf("itr is object\n");
+                    // do nothing
+                } else {
+                    set_error("Param media item must be either object or string");
+                    return false;
+                }
+            }
+            document["media"] = media;
+        } else {
+            set_error("Param media must be either array or string");
+            return false;
+        }
+    }
+
+    Value media = document["media"].GetArray();
+    assert(media.Size() <= PJMEDIA_MAX_SDP_MEDIA);
+
+    for (SizeType i=0; i < media.Size(); i++) {
+        Value descr = media[i].GetObject();
+
+        MediaEndpoint *me = find_media_by_json_descr(call, descr, in_use_chart);
+        if(me) {
+            addon_log(L_DBG, "i=%d media found\n", i);
+            if(!update_media_endpoint_streaming_mode(me, dlg->pool, document, descr)) {
+                return false;
+            }
+        } else {
+            addon_log(L_DBG, "i=%d media not found\n", i);
+            if(!create_media_endpoint(call, document, descr, dlg, t->address, &me)) return false;
+            addon_log(L_DBG, "i=%d media created %x\n", i, me);
+            call->media[call->media_count++] = me;
+            in_use_chart[call->media_count-1] = true; // added elements must be set as in use
+        }
+
+        pjmedia_sdp_media *media = create_sdp_media(me, dlg);
+        if(!media) return false;
+
+        sdp->media[sdp->media_count++] = media;
+    }
+
+    call->local_sdp = sdp;
+
+    char b[2048];
+    pjmedia_sdp_print(call->local_sdp, b, sizeof(b));
+    addon_log(L_DBG, "process_media call_id=%d call->local_sdp: %s\n", call->id, b); 
+
+    return true;
+}
+
+bool is_media_active(Call *c, MediaEndpoint *me) {
+    // check if media from call->media_neg is on call->media
+    for(int i=0 ; i<c->media_count ; ++ i) {
+        if(me == c->media[i]) return true;
+    }
+    return false;
+}
+
+void close_media_endpoint(MediaEndpoint *me) {
+    printf("close_media_endpoint %x\n", me);
+    if(ENDPOINT_TYPE_AUDIO == me->type) {
+        close_media_transport(me->endpoint.audio->med_transport);
+    }
+}
+
+void close_media(Call *c) {
+    printf("close_media call_id=%x\n", c->id);
+    for(int i=0 ; i<c->media_count ; ++ i) {
+        MediaEndpoint *me = c->media[i];
+        close_media_endpoint(me);
+    }
+    c->media_count = 0;
+}
+
+
+bool init_media_ports(Call *call, AudioEndpoint *ae, unsigned sampling_rate, unsigned channel_count, unsigned samples_per_frame, unsigned bits_per_sample) {
 	pj_status_t status;
 
-	if(!c->null_port) {
-		status = pjmedia_null_port_create(c->inv->pool,
+	if(!ae->null_port) {
+		status = pjmedia_null_port_create(call->inv->pool,
 						sampling_rate,
 						channel_count,
 						samples_per_frame,
 						bits_per_sample,
-						&c->null_port);
+						&ae->null_port);
 		if(status != PJ_SUCCESS) return false;
 	}
 
-	if(!c->wav_writer) {
-		if(!prepare_wire(c->inv->pool, &c->wav_writer, sampling_rate, channel_count, samples_per_frame, bits_per_sample)) {
+	if(!ae->wav_writer) {
+		if(!prepare_wire(call->inv->pool, &ae->wav_writer, sampling_rate, channel_count, samples_per_frame, bits_per_sample)) {
 			return false;
 		}
 	}
 
-	if(!c->wav_player) {
-		if(!prepare_wire(c->inv->pool, &c->wav_player, sampling_rate, channel_count, samples_per_frame, bits_per_sample)) {
+	if(!ae->wav_player) {
+		if(!prepare_wire(call->inv->pool, &ae->wav_player, sampling_rate, channel_count, samples_per_frame, bits_per_sample)) {
 			return false;
 		}
 	}
 
-	if(!c->tonegen) {
-		if(!prepare_wire(c->inv->pool, &c->tonegen, sampling_rate, channel_count, samples_per_frame, bits_per_sample)) {
+	if(!ae->tonegen) {
+		if(!prepare_wire(call->inv->pool, &ae->tonegen, sampling_rate, channel_count, samples_per_frame, bits_per_sample)) {
 			return false;
 		}
 	}
 
-	if(!c->dtmfdet) {
-		status = chainlink_dtmfdet_create(c->inv->pool,
+	if(!ae->dtmfdet) {
+		status = chainlink_dtmfdet_create(call->inv->pool,
 						sampling_rate,
 						channel_count,
 						samples_per_frame,
 						bits_per_sample,
 						on_inband_dtmf,
-						c,
-						(pjmedia_port**)&c->dtmfdet);
+						call,
+						(pjmedia_port**)&ae->dtmfdet);
 		if(status != PJ_SUCCESS) return false;
 	}
 
-   if(!c->fax) {
-       if(!prepare_wire(c->inv->pool, &c->fax, sampling_rate, channel_count, samples_per_frame, bits_per_sample)) {
+   if(!ae->fax) {
+       if(!prepare_wire(call->inv->pool, &ae->fax, sampling_rate, channel_count, samples_per_frame, bits_per_sample)) {
            return false;
        }
    }
 
-	connect_media_ports(c);
+	connect_media_ports(ae);
 	return true;
 }
 
-void connect_media_ports(Call *c) {
-	((chainlink*)c->dtmfdet)->next = (pjmedia_port*)c->tonegen;
-	((chainlink*)c->tonegen)->next = (pjmedia_port*)c->wav_player;
-	((chainlink*)c->wav_player)->next = (pjmedia_port*)c->wav_writer;
-    ((chainlink*)c->wav_writer)->next = (pjmedia_port*)c->fax;
-    ((chainlink*)c->fax)->next = c->null_port;
+void connect_media_ports(AudioEndpoint *ae) {
+	((chainlink*)ae->dtmfdet)->next = (pjmedia_port*)ae->tonegen;
+	((chainlink*)ae->tonegen)->next = (pjmedia_port*)ae->wav_player;
+	((chainlink*)ae->wav_player)->next = (pjmedia_port*)ae->wav_writer;
+    ((chainlink*)ae->wav_writer)->next = (pjmedia_port*)ae->fax;
+    ((chainlink*)ae->fax)->next = ae->null_port;
 }
 
-bool prepare_tonegen(Call *c) {
+bool prepare_tonegen(Call *c, AudioEndpoint *ae) {
+    printf("prepare_tonegen\n");
 	pj_status_t status;
 
-	chainlink *link = (chainlink*)c->tonegen;
+	chainlink *link = (chainlink*)ae->tonegen;
 
 	pjmedia_port *stream_port;
-	status = pjmedia_stream_get_port(c->med_stream,
+	status = pjmedia_stream_get_port(ae->med_stream,
 					&stream_port);
 	if(status != PJ_SUCCESS)
 	{
@@ -4552,49 +5931,58 @@ bool prepare_tonegen(Call *c) {
 						PJMEDIA_PIA_SPF(&stream_port->info),
 						PJMEDIA_PIA_BITS(&stream_port->info),
 						0,
-						(pjmedia_port**)&c->tonegen);
+						(pjmedia_port**)&ae->tonegen);
 		if(status != PJ_SUCCESS) return false;
 	}
 	
-	connect_media_ports(c);
+	connect_media_ports(ae);
 	return true;
 }
 
-bool prepare_wav_player(Call *c, const char *file) {
+bool prepare_wav_player(Call *c, AudioEndpoint *ae, const char *file) {
 	pj_status_t status;
 
-	chainlink *link = (chainlink*)c->wav_player;
+	chainlink *link = (chainlink*)ae->wav_player;
 
 	pjmedia_port *stream_port;
-	status = pjmedia_stream_get_port(c->med_stream,
+	status = pjmedia_stream_get_port(ae->med_stream,
 					&stream_port);
-	if(status != PJ_SUCCESS) return false;
+	if(status != PJ_SUCCESS) {
+        set_error("pj_media_stream_get_port failed");    	
+        return false;
+    }
 
 	unsigned wav_ptime;
 	wav_ptime = PJMEDIA_PIA_SPF(&stream_port->info) * 1000 / PJMEDIA_PIA_SRATE(&stream_port->info);
 
 	status = pjmedia_port_destroy((pjmedia_port*)link);
-	if(status != PJ_SUCCESS) return false;
+	if(status != PJ_SUCCESS) {
+            set_error("pjmedia_port_destroy failed");
+            return false;
+    }
 
 	status = chainlink_wav_player_port_create(c->inv->pool,
 						file,
 						wav_ptime,
 						0,
 						-1,
-						(pjmedia_port**)&c->wav_player);
-	if(status != PJ_SUCCESS) return false;
+						(pjmedia_port**)&ae->wav_player);
+	if(status != PJ_SUCCESS) {
+        set_error("chainllink_wav_player_port_create failed");
+        return false;
+    }
 	
-	connect_media_ports(c);
+	connect_media_ports(ae);
 	return true;
 }
 
-bool prepare_wav_writer(Call *c, const char *file) {
+bool prepare_wav_writer(Call *c, AudioEndpoint *ae, const char *file) {
 	pj_status_t status;
 
-	chainlink *link = (chainlink*)c->wav_writer;
+	chainlink *link = (chainlink*)ae->wav_writer;
 
 	pjmedia_port *stream_port;
-	status = pjmedia_stream_get_port(c->med_stream,
+	status = pjmedia_stream_get_port(ae->med_stream,
 					&stream_port);
 	if(status != PJ_SUCCESS) return false;
 
@@ -4609,21 +5997,21 @@ bool prepare_wav_writer(Call *c, const char *file) {
 						PJMEDIA_PIA_BITS(&stream_port->info),
 						PJMEDIA_FILE_WRITE_PCM,
 						0,
-						(pjmedia_port**)&c->wav_writer);
+						(pjmedia_port**)&ae->wav_writer);
 	if(status != PJ_SUCCESS) return false;
 	
-	connect_media_ports(c);
+	connect_media_ports(ae);
 	return true;
 }
 
 
-bool prepare_fax(Call *c, bool is_sender, const char *file, unsigned flags) {
+bool prepare_fax(Call *c, AudioEndpoint *ae, bool is_sender, const char *file, unsigned flags) {
    pj_status_t status;
 
-   chainlink *link = (chainlink*)c->fax;
+   chainlink *link = (chainlink*)ae->fax;
 
    pjmedia_port *stream_port;
-   status = pjmedia_stream_get_port(c->med_stream,
+   status = pjmedia_stream_get_port(ae->med_stream,
                    &stream_port);
    if(status != PJ_SUCCESS) return false;
 
@@ -4640,10 +6028,10 @@ bool prepare_fax(Call *c, bool is_sender, const char *file, unsigned flags) {
                        is_sender,
                        file,
                        flags, 
-                       (pjmedia_port**)&c->fax);
+                       (pjmedia_port**)&ae->fax);
    if(status != PJ_SUCCESS) return false;
 
-   connect_media_ports(c);
+   connect_media_ports(ae);
    return true;
 }
 
@@ -4651,7 +6039,7 @@ bool prepare_wire(pj_pool_t *pool, chainlink **link, unsigned sampling_rate, uns
 	pj_status_t status;
 
 	if(*link) {
-		//addon_log(LOG_LEVEL_DEBUG, "prepare_wire: link is set. It will be destroyed\n");
+		//addon_log(L_DBG, "prepare_wire: link is set. It will be destroyed\n");
 		pjmedia_port *port = (pjmedia_port*)*link;
 		status = pjmedia_port_destroy(port);		
 		*link = NULL;
@@ -4670,7 +6058,7 @@ bool prepare_wire(pj_pool_t *pool, chainlink **link, unsigned sampling_rate, uns
 }
 
 void on_rx_notify(pjsip_evsub *sub, pjsip_rx_data *rdata, int *p_st_code, pj_str_t **p_st_text, pjsip_hdr *res_hdr, pjsip_msg_body **p_body) {
-	//addon_log(LOG_LEVEL_DEBUG, "on_rx_notify\n");
+	//addon_log(L_DBG, "on_rx_notify\n");
 
 	char evt[2048];
 	
@@ -4681,7 +6069,7 @@ void on_rx_notify(pjsip_evsub *sub, pjsip_rx_data *rdata, int *p_st_code, pj_str
 
 	s = (Subscription*)pjsip_evsub_get_mod_data(sub, mod_tester.id);
 	if(!s) {
-		addon_log(LOG_LEVEL_DEBUG, "Subscription not set at mod_data. Ignoring\n");
+		addon_log(L_DBG, "Subscription not set at mod_data. Ignoring\n");
 		return;
 	}	
 
@@ -4704,7 +6092,7 @@ static void on_client_refresh( pjsip_evsub *sub ) {
 		goto out;
 	}
 
-	//addon_log(LOG_LEVEL_DEBUG, "on_client_refresh: SUBSCRIBE dispatched\n");
+	//addon_log(L_DBG, "on_client_refresh: SUBSCRIBE dispatched\n");
 
 out:
 	if(pjw_errorstring[0]) {
@@ -4713,20 +6101,21 @@ out:
 }
 
 static void client_on_evsub_state( pjsip_evsub *sub, pjsip_event *event) {
+    printf("client_on_ev_sub_state\n");
 	if(g_shutting_down) return;
 
 	char evt[2048];
 	pj_str_t mname;
 
-	//addon_log(LOG_LEVEL_DEBUG, "client_on_evsub_state: %s\n", pjsip_evsub_get_state_name(sub));
+	//addon_log(L_DBG, "client_on_evsub_state: %s\n", pjsip_evsub_get_state_name(sub));
 
 	PJ_UNUSED_ARG(event);
 
 	pjsip_rx_data *rdata;
 	Subscription *subscription = (Subscription*)pjsip_evsub_get_mod_data(sub, mod_tester.id);
 	if(!subscription) {
-		//addon_log(LOG_LEVEL_DEBUG, "mod_data set to NULL (it means subscription doesn't exist anymore). Ignoring\n");
-		addon_log(LOG_LEVEL_DEBUG, "mod_data set to NULL (we don't know what this means yet. Ignoring\n");
+		//addon_log(L_DBG, "mod_data set to NULL (it means subscription doesn't exist anymore). Ignoring\n");
+		addon_log(L_DBG, "mod_data set to NULL (we don't know what this means yet. Ignoring\n");
 		return;
 	}
 
@@ -4762,10 +6151,11 @@ static void client_on_evsub_state( pjsip_evsub *sub, pjsip_event *event) {
 		pjsip_evsub_get_state(sub) == PJSIP_EVSUB_STATE_TERMINATED) {
 		//Here we catch incoming NOTIFY 
 
-		//addon_log(LOG_LEVEL_DEBUG, "NOTIFY\n");
+		//addon_log(L_DBG, "NOTIFY\n");
 	
 		//When subscription is terminated
 		if(pjsip_evsub_get_state(sub) == PJSIP_EVSUB_STATE_TERMINATED) {
+            printf("PJSIP_EVSUB_STATE_TERMINATED\n");
 			pjsip_evsub_set_mod_data(sub, mod_tester.id, NULL);
 		}		
 
@@ -4779,7 +6169,7 @@ static void client_on_evsub_state( pjsip_evsub *sub, pjsip_event *event) {
 		long subscription_id;
 		if( !g_subscription_ids.get_id((long)subscription, subscription_id) ){
 			/*
-			addon_log(LOG_LEVEL_DEBUG, "FAILURE\n");
+			addon_log(L_DBG, "FAILURE\n");
 			oss.seekp(0);
 			oss << "event=internal_error" << EVT_DATA_SEP << "details=Failed to get call_id";	
 			dispatch_event(oss.str().c_str());
@@ -4791,13 +6181,14 @@ static void client_on_evsub_state( pjsip_evsub *sub, pjsip_event *event) {
 			return;
 		} 
 
-		//addon_log(LOG_LEVEL_DEBUG, "dispatching NOTIFY event\n");
+		//addon_log(L_DBG, "dispatching NOTIFY event\n");
 		//dispatch_event(oss.str().c_str());
 
 		make_evt_request(evt, sizeof(evt), "subscription", subscription_id, rdata->msg_info.len, rdata->msg_info.msg_buf);
 		dispatch_event(evt);
 
 		if(pjsip_evsub_get_state(sub) == PJSIP_EVSUB_STATE_TERMINATED) {
+            printf("PJSIP_EVSUB_STATE_TERMINATED\n");
 			pjsip_evsub_set_mod_data(sub, mod_tester.id, NULL);
 		}
 		
@@ -4809,17 +6200,18 @@ static void client_on_evsub_state( pjsip_evsub *sub, pjsip_event *event) {
 
 static void server_on_evsub_state( pjsip_evsub *sub, pjsip_event *event)
 {
+    printf("server_on_evsub_state\n");
 	Subscriber *s;
 	//pj_status_t status;
 	//pjsip_tx_data *tdata;
 	
-	//addon_log(LOG_LEVEL_DEBUG, "server_on_evsub_state\n");
+	//addon_log(L_DBG, "server_on_evsub_state\n");
 	if(!sub) {
-		addon_log(LOG_LEVEL_DEBUG, "server_on_evesub_state: sub not set. Ignoring\n");
+		addon_log(L_DBG, "server_on_evesub_state: sub not set. Ignoring\n");
 		return;
 	}
-	//addon_log(LOG_LEVEL_DEBUG, "state= %d\n", pjsip_evsub_get_state(sub));
-	//addon_log(LOG_LEVEL_DEBUG, "server_on_evsub_state %s\n", pjsip_evsub_get_state_name(sub));
+	//addon_log(L_DBG, "state= %d\n", pjsip_evsub_get_state(sub));
+	//addon_log(L_DBG, "server_on_evsub_state %s\n", pjsip_evsub_get_state_name(sub));
 
 	if(g_shutting_down) return; 
 
@@ -4827,7 +6219,7 @@ static void server_on_evsub_state( pjsip_evsub *sub, pjsip_event *event)
 
         s = (Subscriber*)pjsip_evsub_get_mod_data(sub, mod_tester.id);
         if (!s) {
-		addon_log(LOG_LEVEL_DEBUG, "server_on_evsub_state: Subscriber not set as mod_data. Ignoring\n");
+		addon_log(L_DBG, "server_on_evsub_state: Subscriber not set as mod_data. Ignoring\n");
 		return;
 	}
 
@@ -4837,6 +6229,7 @@ static void server_on_evsub_state( pjsip_evsub *sub, pjsip_event *event)
 	*/
 
 	if (pjsip_evsub_get_state(sub) == PJSIP_EVSUB_STATE_TERMINATED) {
+        printf("PJSIP_EVSUB_STATE_TERMINATED\n");
 		pjsip_evsub_set_mod_data(sub, mod_tester.id, NULL);
 	}
 }
@@ -4844,6 +6237,7 @@ static void server_on_evsub_state( pjsip_evsub *sub, pjsip_event *event)
 //Called when incoming SUBSCRIBE (or any method taht establishes a subscription like REFER) is received
 static void server_on_evsub_rx_refresh(pjsip_evsub *sub, pjsip_rx_data *rdata, int *p_st_code, pj_str_t **p_st_text, pjsip_hdr *res_hdr, pjsip_msg_body **p_body)
 {
+	addon_log(L_DBG, "server_on_evsub_rx_refresh\n");
 	char evt[2048];
 
 	pjw_errorstring[0] = 0;
@@ -4856,13 +6250,9 @@ static void server_on_evsub_rx_refresh(pjsip_evsub *sub, pjsip_rx_data *rdata, i
 	//Transport *t;
 
 	if(g_shutting_down) return;
-	addon_log(LOG_LEVEL_DEBUG, "server_on_evsub_rx_refresh\n");
 
 	s = (Subscriber*)pjsip_evsub_get_mod_data(sub, mod_tester.id);
-	if(!s) {
-		set_error("pjsip_evsub_get_mod_data failed");	
-		goto out;
-	}
+    assert(s);
 
 	make_evt_request(evt, sizeof(evt), "subscriber", s->id, rdata->msg_info.len, rdata->msg_info.msg_buf);
 	dispatch_event(evt);
@@ -4891,7 +6281,7 @@ static void server_on_evsub_rx_refresh(pjsip_evsub *sub, pjsip_rx_data *rdata, i
 		set_error("pjsip_send_request failed");
 		goto out;
 	}
-	addon_log(LOG_LEVEL_DEBUG, "server_on_evsub_rx_refresh: NOTIFY containing subscription state should have been sent\n");
+	addon_log(L_DBG, "server_on_evsub_rx_refresh: NOTIFY containing subscription state should have been sent\n");
 
 out:
 	if(pjw_errorstring[0]) {
@@ -4904,7 +6294,7 @@ out:
 //Adapted (mostly copied) from pjsua function on_call_transfered
 void process_in_dialog_refer(pjsip_dialog *dlg, pjsip_rx_data *rdata)
 {
-    addon_log(LOG_LEVEL_DEBUG, "process_in_dialog_refer\n");
+    addon_log(L_DBG, "process_in_dialog_refer\n");
 
     char evt[2048];
 
@@ -4924,9 +6314,10 @@ void process_in_dialog_refer(pjsip_dialog *dlg, pjsip_rx_data *rdata)
     pjsip_evsub *sub;
 
     Call *call = (Call*)dlg->mod_data[mod_tester.id]; 
+
     long call_id;
     if( !g_call_ids.get_id((long)call, call_id) ){
-	addon_log(LOG_LEVEL_DEBUG, "process_in_dialog_refer: Failed to get call_id. Event will not be notified.\n");	
+	addon_log(L_DBG, "process_in_dialog_refer: Failed to get call_id. Event will not be notified.\n");	
 	return;
     }
 
@@ -5047,22 +6438,22 @@ void process_in_dialog_refer(pjsip_dialog *dlg, pjsip_rx_data *rdata)
     }
 
     if (sub) {
-    	//If the REFER caused subscription of the referer...
-	Subscriber *subscriber = (Subscriber*)pj_pool_zalloc(dlg->pool, sizeof(Subscriber));
-	subscriber->evsub = sub;
-	subscriber->created_by_refer = true;
-	
-	long subscriber_id;
-	if(!g_subscriber_ids.add((long)subscriber, subscriber_id)) {
-		make_evt_internal_error(evt, sizeof(evt), "Failed to allocate id for subscriber");
-		dispatch_event(evt);
-		return;
-	}
-	subscriber->id = subscriber_id;
-	pjsip_evsub_set_mod_data(sub, mod_tester.id, subscriber);
+            //If the REFER caused subscription of the referer...
+        Subscriber *subscriber = (Subscriber*)pj_pool_zalloc(dlg->pool, sizeof(Subscriber));
+        subscriber->evsub = sub;
+        subscriber->created_by_refer = true;
 
-	make_evt_request(evt, sizeof(evt), "subscriber", subscriber_id, rdata->msg_info.len, rdata->msg_info.msg_buf);	
-	dispatch_event(evt);    
+        long subscriber_id;
+        if(!g_subscriber_ids.add((long)subscriber, subscriber_id)) {
+            make_evt_internal_error(evt, sizeof(evt), "Failed to allocate id for subscriber");
+            dispatch_event(evt);
+            return;
+        }
+        subscriber->id = subscriber_id;
+        pjsip_evsub_set_mod_data(sub, mod_tester.id, subscriber);
+
+        make_evt_request(evt, sizeof(evt), "subscriber", subscriber_id, rdata->msg_info.len, rdata->msg_info.msg_buf);	
+        dispatch_event(evt);    
     }
 }
 
@@ -5070,49 +6461,66 @@ static void on_tsx_state_changed(pjsip_inv_session *inv,
 					    pjsip_transaction *tsx,
 					    pjsip_event *e)
 {
+    addon_log(L_DBG, "on_tsx_state change method=%.*s.\n", tsx->method.name.slen, tsx->method.name.ptr);	
     if(g_shutting_down) return;	
 
     char evt[2048];
 
-    Call *call;
-
     if(!inv->dlg) return;
 
-    call = (Call*) inv->dlg->mod_data[mod_tester.id];
+    Call *call = (Call*)inv->dlg->mod_data[mod_tester.id];
 
     if (call == NULL) {
-	return;
+        return;
     }
 
+    printf("call_id=%d\n", call->id);
+
     if (call->inv == NULL) {
-	/* Shouldn't happen. It happens only when we don't terminate the
-	 * server subscription caused by REFER after the call has been
-	 * transfered (and this call has been disconnected), and we
-	 * receive another REFER for this call.
-	 */
-	return;
+        /* Shouldn't happen. It happens only when we don't terminate the
+         * server subscription caused by REFER after the call has been
+         * transfered (and this call has been disconnected), and we
+         * receive another REFER for this call.
+         */
+        return;
     }
 
     //ostringstream oss;
     //Transport *t;
-    if (tsx->role==PJSIP_ROLE_UAS &&
-	tsx->state==PJSIP_TSX_STATE_TRYING) {
-	if(pjsip_method_cmp(&tsx->method, pjsip_get_refer_method())==0) {
-		/*
-		 * Incoming REFER request.
-		 */
+    if (tsx->role==PJSIP_ROLE_UAS && tsx->state==PJSIP_TSX_STATE_TRYING) {
+        if(pjsip_method_cmp(&tsx->method, pjsip_get_refer_method())==0) {
+            /*
+             * Incoming REFER request.
+             */
 
-		process_in_dialog_refer(call->inv->dlg, e->body.tsx_state.src.rdata);
-	} else {
-		make_evt_request(evt, sizeof(evt), "call", call->id, e->body.tsx_state.src.rdata->msg_info.len, e->body.tsx_state.src.rdata->msg_info.msg_buf);
-    		dispatch_event(evt);    
+            process_in_dialog_refer(call->inv->dlg, e->body.tsx_state.src.rdata);
+        } else {
+            assert(call->inv == inv);
+            addon_log(L_DBG, "call->inv->dlg=%d\n", call->inv->dlg);
+            addon_log(L_DBG, "call->inv->dlg->ua-id=%d\n", pjsip_rdata_get_tsx(e->body.tsx_state.src.rdata)->mod_data[call->inv->dlg->ua->id]);
 
-		pjsip_dlg_respond(call->inv->dlg, e->body.tsx_state.src.rdata, 200, NULL, NULL, NULL);
-	}
+            pjsip_rx_data *cloned_rdata = 0;
+            if(pjsip_rx_data_clone(e->body.tsx_state.src.rdata, 0, &cloned_rdata) != PJ_SUCCESS) {
+                const pj_str_t reason = pj_str((char*)"Internal Server Error (pjsip_rx_data_clone failed)");
+                pjsip_endpt_respond_stateless(g_sip_endpt, e->body.tsx_state.src.rdata, 500, &reason, NULL, NULL);
+                return;
+            }
+            call->pending_rdata = cloned_rdata;
+
+            /*
+            addon_log(L_DBG, "call->inv->dlg=%d\n", call->inv->dlg);
+            addon_log(L_DBG, "call->inv->dlg->ua-id=%d\n", pjsip_rdata_get_tsx(cloned_rdata)->mod_data[call->inv->dlg->ua->id]);
+            */
+
+            make_evt_request(evt, sizeof(evt), "call", call->id, e->body.tsx_state.src.rdata->msg_info.len, e->body.tsx_state.src.rdata->msg_info.msg_buf);
+            dispatch_event(evt);    
+        }
+    } else {
+        addon_log(L_DBG, "doing nothiing");
     }
 }
 
-//int pjw_call_refer(long call_id, const char *dest_uri, const char *additional_headers, long *out_subscription_id)
+/*
 int pjw_call_refer(long call_id, const char *json, long *out_subscription_id)
 {
 	PJW_LOCK();
@@ -5186,6 +6594,7 @@ out:
 	}
 	return 0;
 }
+*/
 
 int pjw_call_get_info(long call_id, const char *required_info, char *out_info)
 {
@@ -5206,6 +6615,8 @@ int pjw_call_get_info(long call_id, const char *required_info, char *out_info)
 	if(strcmp(required_info, "Call-ID") == 0) {
 		strncpy(info, call->inv->dlg->call_id->id.ptr, call->inv->dlg->call_id->id.slen);
 		info[call->inv->dlg->call_id->id.slen] = 0;
+    // TODO: update to use multiple media
+    /*
 	} else if(strcmp(required_info, "RemoteMediaEndPoint") == 0) {
 		if(!call->med_stream) {
 			PJW_UNLOCK();
@@ -5221,6 +6632,7 @@ int pjw_call_get_info(long call_id, const char *required_info, char *out_info)
 		pj_str_t str_addr = pj_str( inet_ntoa( (in_addr&)session_info.rem_addr.ipv4.sin_addr.s_addr ) );
 		pj_uint16_t port = session_info.rem_addr.ipv4.sin_port;
 		sprintf(info, "%.*s:%u", (int)str_addr.slen, str_addr.ptr, ntohs(port));
+    */
 	} else {
 		PJW_UNLOCK();
 		set_error("Unsupported info");
@@ -5309,7 +6721,6 @@ bool notify(pjsip_evsub *evsub, const char *content_type, const char *body, int 
 	return true;
 }
 
-//int pjw_notify(long subscriber_id, const char *content_type, const char *body, int subscription_state, const char *reason, const char *additional_headers)
 int pjw_notify(long subscriber_id, const char *json)
 {
 	PJW_LOCK();
@@ -5349,19 +6760,19 @@ int pjw_notify(long subscriber_id, const char *json)
         goto out;
     }
 
-    if(!json_get_string_param(document, "content_type", false, &content_type)) {
+    if(json_get_string_param(document, "content_type", false, &content_type) <= 0) {
         goto out;
     }
 
-    if(!json_get_string_param(document, "body", false, &body)) {
+    if(json_get_string_param(document, "body", false, &body) <= 0) {
         goto out;
     }
 
-    if(!json_get_int_param(document, "subscription_state", false, &subscription_state)) {
+    if(json_get_int_param(document, "subscription_state", false, &subscription_state) <= 0) {
         goto out;
     }
 
-    if(!json_get_string_param(document, "reason", true, &reason)) {
+    if(json_get_string_param(document, "reason", true, &reason) <= 0) {
         goto out;
     }
 
@@ -5420,15 +6831,15 @@ int pjw_notify_xfer(long subscriber_id, const char *json) {
         goto out;
     }
 
-    if(!json_get_int_param(document, "subscription_state", false, &subscription_state)) {
+    if(json_get_int_param(document, "subscription_state", false, &subscription_state) <= 0) {
         goto out;
     }
 
-    if(!json_get_int_param(document, "code", false, &code)) {
+    if(json_get_int_param(document, "code", false, &code) <= 0) {
         goto out;
     }
 
-    if(!json_get_string_param(document, "reason", false, &reason)) {
+    if(json_get_string_param(document, "reason", false, &reason) <= 0) {
         goto out;
     }
 
@@ -5471,7 +6882,7 @@ pj_bool_t add_additional_headers(pj_pool_t *pool, pjsip_tx_data *tdata, const ch
 		while(token){
 			char *name = strtok(token, ":");
 			char *value = strtok(NULL, "\n"); 
-			//addon_log(LOG_LEVEL_DEBUG, "Adding %s: %s\n", name, value);
+			//addon_log(L_DBG, "Adding %s: %s\n", name, value);
 
 			if(!name || !value) {
 				set_error("Invalid additional_header");
@@ -5513,6 +6924,10 @@ pj_bool_t add_headers(pj_pool_t *pool, pjsip_tx_data *tdata, Document &document)
     Value headers = document["headers"].GetObject();
 
     for (Value::ConstMemberIterator itr = headers.MemberBegin(); itr != headers.MemberEnd(); ++itr) {
+        if(!itr->value.IsString()) {
+            set_error("Value of header must be string");
+            return PJ_FALSE;
+        }
         printf("%s => '%s'\n", itr->name.GetString(), itr->value.GetString());
 
         const char *name = itr->name.GetString();
@@ -5622,7 +7037,7 @@ pj_bool_t get_content_type_and_subtype_from_headers(Document &document, char *ty
 
     strncpy(type, content_type, index-1);
     strcpy(subtype, content_type+index);
-    addon_log(LOG_LEVEL_DEBUG, "Checking parsing of Content-Type. type=%s: subtype=%s\n", type, subtype);
+    addon_log(L_DBG, "Checking parsing of Content-Type. type=%s: subtype=%s\n", type, subtype);
     return PJ_TRUE;
 }
 
@@ -5718,11 +7133,11 @@ int pjw_subscription_create(long transport_id, const char *json, long *out_subsc
         goto out;
     }
 
-    if(!json_get_string_param(document, "event", false, &event)) {
+    if(json_get_string_param(document, "event", false, &event) <= 0) {
         goto out;
     }
 
-    if(!json_get_string_param(document, "accept", false, &accept)) {
+    if(json_get_string_param(document, "accept", false, &accept) <= 0) {
         goto out;
     }
 
@@ -5815,7 +7230,7 @@ int pjw_subscription_create(long transport_id, const char *json, long *out_subsc
 	}
 
 	subscription = (Subscription*)pj_pool_zalloc(dlg->pool, sizeof(Subscription));
-	
+
 	if(!g_subscription_ids.add((long)subscription, subscription_id)){
 		status = pjsip_dlg_terminate(dlg); //ToDo:
 		set_error("Failed to allocate id");
@@ -5826,7 +7241,10 @@ int pjw_subscription_create(long transport_id, const char *json, long *out_subsc
 	subscription->dlg = dlg;
 	strcpy(subscription->event, event);
 	strcpy(subscription->accept, accept);
+
 	pjsip_evsub_set_mod_data(evsub, mod_tester.id, subscription);
+
+    printf("subscription=%x\n", subscription);
 	
 	*out_subscription_id = subscription_id;
 out:
@@ -5931,7 +7349,7 @@ int pjw_subscription_subscribe(long subscription_id, const char *json) {
         goto out;
     }
 
-    if(!json_get_int_param(document, "expires", true, &expires)) {
+    if(json_get_int_param(document, "expires", true, &expires) <= 0) {
         goto out;
     }
 
@@ -5950,18 +7368,7 @@ out:
 void process_in_dialog_subscribe(pjsip_dialog *dlg, pjsip_rx_data *rdata) {
 	char evt[2048];
 
-	Subscriber *s;
-	//Transport *t;
-
-	s = (Subscriber*)dlg->mod_data[mod_tester.id];
-	if(!s) {
-		make_evt_internal_error(evt, sizeof(evt), "no subscriber in mod_data");
-		dispatch_event(evt);
-		return;
-	}
-
-	make_evt_request(evt, sizeof(evt), "subscriber", s->id, rdata->msg_info.len, rdata->msg_info.msg_buf);
-	dispatch_event(evt);
+    return;
 }
 
 int pjw_call_gen_string_replaces(long call_id, char *out_replaces) {
@@ -6037,18 +7444,25 @@ int pjw_set_flags(unsigned flags)
 static int g_now;
 
 
-void check_digit_buffer(Call *c, int mode) {
-	//addon_log(LOG_LEVEL_DEBUG, "check_digit_buffer g_now=%i for call_id=%i and mode=%i timestamp=%i len=%i\n", g_now, c->id, mode, c->last_digit_timestamp[mode], c->DigitBufferLength[mode]);
-	char evt[256];
+void check_digit_buffer(Call *call, int mode) {
+	//addon_log(L_DBG, "check_digit_buffer g_now=%i for call_id=%i and mode=%i timestamp=%i len=%i\n", g_now, c->id, mode, c->last_digit_timestamp[mode], c->DigitBufferLength[mode]);
+	char evt[1024];
 
-	if(c->last_digit_timestamp[mode] > 0 && g_now - c->last_digit_timestamp[mode] > g_dtmf_inter_digit_timer) {
-		int *pLen = &c->DigitBufferLength[mode];
-		c->DigitBuffers[mode][*pLen] = 0;
-		make_evt_dtmf(evt, sizeof(evt), c->id, *pLen, c->DigitBuffers[mode], mode); 
-		dispatch_event(evt);
-		*pLen = 0;
-		c->last_digit_timestamp[mode] = 0;
-	}
+    for(int i=0 ; i<call->media_count ; i++) {
+        MediaEndpoint *me = (MediaEndpoint*)call->media[i];
+        if(ENDPOINT_TYPE_AUDIO != me->type) continue;
+    
+        AudioEndpoint *ae = (AudioEndpoint*)me->endpoint.audio;
+ 
+        if(ae->last_digit_timestamp[mode] > 0 && g_now - ae->last_digit_timestamp[mode] > g_dtmf_inter_digit_timer) {
+            int *pLen = &ae->DigitBufferLength[mode];
+            ae->DigitBuffers[mode][*pLen] = 0;
+            make_evt_dtmf(evt, sizeof(evt), call->id, *pLen, ae->DigitBuffers[mode], mode, i); 
+            dispatch_event(evt);
+            *pLen = 0;
+            ae->last_digit_timestamp[mode] = 0;
+        }
+    }
 }
 
 void check_digit_buffers(long id, long val) {
@@ -6060,7 +7474,7 @@ void check_digit_buffers(long id, long val) {
 
 static int digit_buffer_thread(void *arg)
 {
-	//addon_log(LOG_LEVEL_DEBUG, "Starting digit_buffer_thread\n");
+	//addon_log(L_DBG, "Starting digit_buffer_thread\n");
 
 	pj_thread_set_prio(pj_thread_this(),
 			pj_thread_get_prio_min(pj_thread_this()));
@@ -6088,7 +7502,7 @@ bool start_digit_buffer_thread(){
 	status = pj_thread_create(pool, "digit_buffer_checker", &digit_buffer_thread, NULL, 0, 0, &t);
 	if(status != PJ_SUCCESS)
 	{
-		addon_log(LOG_LEVEL_DEBUG, "start_digit_buffer_thread failed\n");
+		addon_log(L_DBG, "start_digit_buffer_thread failed\n");
 		return false;
 	}
 

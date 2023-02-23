@@ -13,20 +13,20 @@ int make_evt_response(char *dest, int size, const char *entity_type, long id, in
 	return snprintf(dest, size, "{\"event\": \"response\", \"%s_id\": %ld, \"method\": \"%.*s\"}\n%.*s", entity_type, id, mname_len, mname, sip_msg_len, sip_msg);
 }
 
-int make_evt_media_status(char *dest, int size, long call_id, const char *status, const char *local_mode, const char *remote_mode) {
-	if(strcmp(status, "setup_ok") == 0) {
-		return snprintf(dest, size, "{\"event\": \"media_status\", \"call_id\": %ld, \"status\": \"%s\", \"local_mode\": \"%s\", \"remote_mode\": \"%s\"}", call_id, status, local_mode, remote_mode);
+int make_evt_media_update(char *dest, int size, long call_id, const char *status, const char *media) {
+	if(strcmp(status, "ok") == 0) {
+		return snprintf(dest, size, "{\"event\": \"media_update\", \"call_id\": %ld, \"status\": \"%s\", \"media\": %s}", call_id, status, media);
 	} else {
-		return snprintf(dest, size, "{\"event\": \"media_status\", \"call_id\": %ld, \"status\": \"%s\"}", call_id, status);
+		return snprintf(dest, size, "{\"event\": \"media_update\", \"call_id\": %ld, \"status\": \"%s\"}", call_id, status);
 	}
 }
 
-int make_evt_dtmf(char *dest, int size, long call_id, int digits_len, const char *digits, int mode) {
-	return snprintf(dest, size, "{\"event\": \"dtmf\", \"call_id\": %ld, \"digits\": \"%.*s\", \"mode\": %i}", call_id, digits_len, digits, mode);
+int make_evt_dtmf(char *dest, int size, long call_id, int digits_len, const char *digits, int mode, int media_id) {
+	return snprintf(dest, size, "{\"event\": \"dtmf\", \"call_id\": %ld, \"digits\": \"%.*s\", \"mode\": %i, \"media_id\": %i}", call_id, digits_len, digits, mode, media_id);
 }
 
 int make_evt_call_ended(char *dest, int size, long call_id, int sip_msg_len, const char *sip_msg) {
-	printf("sip_msg_len=%i sip_msg=%x\n", sip_msg_len, sip_msg);
+	printf("make_evt_call_ended sip_msg_len=%i sip_msg=%x\n", sip_msg_len, sip_msg);
     if(!sip_msg || sip_msg == (char*)0xc000000000000) {
         // received invalid pointer to sip_msg so do not add the message to the event
 		return snprintf(dest, size, "{\"event\": \"call_ended\", \"call_id\": %ld}", call_id); 
@@ -38,8 +38,8 @@ int make_evt_call_ended(char *dest, int size, long call_id, int sip_msg_len, con
 	}
 }
 
-int make_evt_non_dialog_request(char *dest, int size, int sip_msg_len, const char *sip_msg) {
-	return snprintf(dest, size, "{\"event\": \"non_dialog_request\"}\n%.*s", sip_msg_len, sip_msg);
+int make_evt_non_dialog_request(char *dest, int size, long transport_id, long request_id, int sip_msg_len, const char *sip_msg) {
+	return snprintf(dest, size, "{\"event\": \"non_dialog_request\", \"request_id\": %i, \"transport_id\": %i}\n%.*s", request_id, transport_id, sip_msg_len, sip_msg);
 }
 
 int make_evt_internal_error(char *dest, int size, const char *msg) {

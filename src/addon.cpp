@@ -166,6 +166,74 @@ Napi::Value account_unregister(const Napi::CallbackInfo& info) {
 }
 
 
+Napi::Value request_create(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+
+  if (info.Length() != 2) {
+    Napi::Error::New(env, "Wrong number of arguments. Expected: transport_id, params.").ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
+  if (!info[0].IsNumber()) {
+    Napi::TypeError::New(env, "transport_id must be number.").ThrowAsJavaScriptException();
+    return env.Null();
+  }
+  int transport_id = info[0].As<Napi::Number>().Int32Value();
+
+  if (!info[1].IsString()) {
+    Napi::TypeError::New(env, "params must be a JSON string.").ThrowAsJavaScriptException();
+    return env.Null();
+  }
+  const string json = info[1].As<Napi::String>().Utf8Value();
+
+  long int out_request_id;
+  char out_sip_call_id[256];
+
+  int res = pjw_request_create(transport_id, json.c_str(), &out_request_id, out_sip_call_id);
+
+  if(res != 0) {
+    Napi::Error::New(env, pjw_get_error()).ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
+  Napi::Object obj = Napi::Object::New(env);
+  obj.Set(Napi::String::New(env, "id"), Napi::Number::New(env, out_request_id));
+  obj.Set(Napi::String::New(env, "sip_call_id"), out_sip_call_id);
+
+  return obj;
+}
+
+Napi::Value request_respond(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+
+  if (info.Length() != 2) {
+    Napi::Error::New(env, "Wrong number of arguments. Expected: request_id, params").ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
+  if (!info[0].IsNumber()) {
+    Napi::TypeError::New(env, "request_id must be number.").ThrowAsJavaScriptException();
+    return env.Null();
+  }
+  int request_id = info[0].As<Napi::Number>().Int32Value();
+ 
+  if (!info[1].IsString()) {
+    Napi::TypeError::New(env, "params must be a JSON string.").ThrowAsJavaScriptException();
+    return env.Null();
+  }
+  const string json = info[1].As<Napi::String>().Utf8Value();
+
+  int res = pjw_request_respond(request_id, json.c_str());
+
+  if(res != 0) {
+    Napi::Error::New(env, pjw_get_error()).ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
+  return env.Null();
+}
+
+
 Napi::Value call_create(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
 
@@ -446,8 +514,8 @@ Napi::Value call_start_fax(const Napi::CallbackInfo& info) {
 Napi::Value call_stop_record_wav(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
 
-  if (info.Length() != 1) {
-    Napi::Error::New(env, "Wrong number of arguments. Expected: call_id").ThrowAsJavaScriptException();
+  if (info.Length() != 2) {
+    Napi::Error::New(env, "Wrong number of arguments. Expected: call_id, params").ThrowAsJavaScriptException();
     return env.Null();
   }
 
@@ -456,8 +524,14 @@ Napi::Value call_stop_record_wav(const Napi::CallbackInfo& info) {
     return env.Null();
   }
   int call_id = info[0].As<Napi::Number>().Int32Value();
+ 
+  if (!info[1].IsString()) {
+    Napi::TypeError::New(env, "params must be a JSON string.").ThrowAsJavaScriptException();
+    return env.Null();
+  }
+  const string json = info[1].As<Napi::String>().Utf8Value();
 
-  int res = pjw_call_stop_record_wav(call_id);
+  int res = pjw_call_stop_record_wav(call_id, json.c_str());
 
   if(res != 0) {
     Napi::Error::New(env, pjw_get_error()).ThrowAsJavaScriptException();
@@ -470,8 +544,8 @@ Napi::Value call_stop_record_wav(const Napi::CallbackInfo& info) {
 Napi::Value call_stop_play_wav(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
 
-  if (info.Length() != 1) {
-    Napi::Error::New(env, "Wrong number of arguments. Expected: call_id").ThrowAsJavaScriptException();
+  if (info.Length() != 2) {
+    Napi::Error::New(env, "Wrong number of arguments. Expected: call_id, params").ThrowAsJavaScriptException();
     return env.Null();
   }
 
@@ -480,8 +554,14 @@ Napi::Value call_stop_play_wav(const Napi::CallbackInfo& info) {
     return env.Null();
   }
   int call_id = info[0].As<Napi::Number>().Int32Value();
+ 
+  if (!info[1].IsString()) {
+    Napi::TypeError::New(env, "params must be a JSON string.").ThrowAsJavaScriptException();
+    return env.Null();
+  }
+  const string json = info[1].As<Napi::String>().Utf8Value();
 
-  int res = pjw_call_stop_play_wav(call_id);
+  int res = pjw_call_stop_play_wav(call_id, json.c_str());
 
   if(res != 0) {
     Napi::Error::New(env, pjw_get_error()).ThrowAsJavaScriptException();
@@ -494,7 +574,7 @@ Napi::Value call_stop_play_wav(const Napi::CallbackInfo& info) {
 Napi::Value call_stop_fax(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
 
-  if (info.Length() != 1) {
+  if (info.Length() != 2) {
     Napi::Error::New(env, "Wrong number of arguments. Expected: call_id").ThrowAsJavaScriptException();
     return env.Null();
   }
@@ -505,7 +585,13 @@ Napi::Value call_stop_fax(const Napi::CallbackInfo& info) {
   }
   int call_id = info[0].As<Napi::Number>().Int32Value();
 
-  int res = pjw_call_stop_fax(call_id);
+  if (!info[1].IsString()) {
+    Napi::TypeError::New(env, "params must be a JSON string.").ThrowAsJavaScriptException();
+    return env.Null();
+  }
+  const string json = info[1].As<Napi::String>().Utf8Value();
+
+  int res = pjw_call_stop_fax(call_id, json.c_str());
 
   if(res != 0) {
     Napi::Error::New(env, pjw_get_error()).ThrowAsJavaScriptException();
@@ -518,8 +604,8 @@ Napi::Value call_stop_fax(const Napi::CallbackInfo& info) {
 Napi::Value call_get_stream_stat(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
 
-  if (info.Length() != 1) {
-    Napi::Error::New(env, "Wrong number of arguments. Expected: call_id").ThrowAsJavaScriptException();
+  if (info.Length() != 2) {
+    Napi::Error::New(env, "Wrong number of arguments. Expected: call_id, params").ThrowAsJavaScriptException();
     return env.Null();
   }
 
@@ -529,8 +615,14 @@ Napi::Value call_get_stream_stat(const Napi::CallbackInfo& info) {
   }
   int call_id = info[0].As<Napi::Number>().Int32Value();
 
+  if (!info[1].IsString()) {
+    Napi::TypeError::New(env, "params must be a JSON string.").ThrowAsJavaScriptException();
+    return env.Null();
+  }
+  const string json = info[1].As<Napi::String>().Utf8Value();
+
   char out_stats[4096];
-  int res = pjw_call_get_stream_stat(call_id, out_stats);
+  int res = pjw_call_get_stream_stat(call_id, json.c_str(), out_stats);
 
   if(res != 0) {
     Napi::Error::New(env, pjw_get_error()).ThrowAsJavaScriptException();
@@ -540,6 +632,7 @@ Napi::Value call_get_stream_stat(const Napi::CallbackInfo& info) {
   return Napi::String::New(env, out_stats);
 }
 
+/*
 Napi::Value call_refer(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
 
@@ -571,6 +664,7 @@ Napi::Value call_refer(const Napi::CallbackInfo& info) {
 
   return Napi::Number::New(env, out_subscription_id);
 }
+*/
 
 Napi::Value call_get_info(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
@@ -1047,6 +1141,9 @@ Napi::Object init(Napi::Env env, Napi::Object exports) {
   exports.Set("account_register", Napi::Function::New(env, account_register));
   exports.Set("account_unregister", Napi::Function::New(env, account_unregister));
 
+  exports.Set("request_create", Napi::Function::New(env, request_create));
+  exports.Set("request_respond", Napi::Function::New(env, request_respond));
+
   exports.Set("call_create", Napi::Function::New(env, call_create));
   exports.Set("call_respond", Napi::Function::New(env, call_respond));
   exports.Set("call_terminate", Napi::Function::New(env, call_terminate));
@@ -1060,7 +1157,7 @@ Napi::Object init(Napi::Env env, Napi::Object exports) {
   exports.Set("call_stop_play_wav", Napi::Function::New(env, call_stop_play_wav));
   exports.Set("call_stop_fax", Napi::Function::New(env, call_stop_fax));
   exports.Set("call_get_stream_stat", Napi::Function::New(env, call_get_stream_stat));
-  exports.Set("call_refer", Napi::Function::New(env, call_refer));
+  //exports.Set("call_refer", Napi::Function::New(env, call_refer));
   exports.Set("call_get_info", Napi::Function::New(env, call_get_info));
   exports.Set("call_gen_string_replaces", Napi::Function::New(env, call_gen_string_replaces));
 

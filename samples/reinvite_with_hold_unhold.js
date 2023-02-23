@@ -5,6 +5,8 @@ var m = require('data-matching')
 var sip_msg = require('sip-matching')
 
 async function test() {
+    //sip.set_log_level(9)
+
     //sip.set_log_level(6)
     sip.dtmf_aggregation_on(500)
 
@@ -15,33 +17,18 @@ async function test() {
 
     console.log(sip.start((data) => { console.log(data)} ))
 
-    t1 = sip.transport.create({address: "127.0.0.1", port: 5090, type: 'tcp'})
-    t2 = sip.transport.create({address: "127.0.0.1", port: 5092, type: 'tcp'})
+    t1 = sip.transport.create({address: "127.0.0.1", port: 5090, type: 'udp'})
+    t2 = sip.transport.create({address: "127.0.0.1", port: 5092, type: 'udp'})
 
     console.log("t1", t1)
     console.log("t2", t2)
 
-    oc = sip.call.create(t1.id, {
-        from_uri: '"abc"<sip:alice@test.com>',
-        to_uri: `sip:bob@${t2.address}:${t2.port}`,
-        headers: {
-            'X-MyHeader1': 'abc',
-            'X-MyHeader2': 'def',
-        },
-    })
+    oc = sip.call.create(t1.id, {from_uri: 'sip:alice@test.com', to_uri: `sip:bob@${t2.address}:${t2.port}`})
 
     await z.wait([
         {
             event: "incoming_call",
             call_id: m.collect("call_id"),
-            msg: sip_msg({
-                $rm: 'INVITE',
-                $fU: 'alice',
-                $fd: 'test.com',
-                $tU: 'bob',
-                '$hdr(X-MyHeader1)': 'abc',
-                'hdr_x_myheader2': 'def',
-            }),
         },
         {
             event: 'response',
@@ -51,7 +38,7 @@ async function test() {
                 $rs: '100',
                 $rr: 'Trying',
                 '$(hdrcnt(via))': 1,
-                'hdr_call_id': m.collect('sip_call_id'),
+                '$hdr(call-id)': m.collect('sip_call_id'),
                 $fU: 'alice',
                 $fd: 'test.com',
                 $tU: 'bob',
@@ -65,26 +52,9 @@ async function test() {
         sip_call_id: z.store.sip_call_id,
     }
 
-    sip.call.respond(ic.id, {
-        code: 200,
-        reason:'OK',
-        headers: {
-            'X-MyHeader3': 'ghi',
-            'X-MyHeader4': 'jkl',
-        },
-    })
+    sip.call.respond(ic.id, {code: 200, reason: 'OK'})
 
     await z.wait([
-        {
-            event: 'media_update',
-            call_id: oc.id,
-            status: 'ok',
-        },
-        {
-            event: 'media_update',
-            call_id: ic.id,
-            status: 'ok',
-        },
         {
             event: 'response',
             call_id: oc.id,
@@ -92,20 +62,51 @@ async function test() {
             msg: sip_msg({
                 $rs: '200',
                 $rr: 'OK',
-                '$(hdrcnt(v))': 1,
+                '$(hdrcnt(VIA))': 1,
                 $fU: 'alice',
                 $fd: 'test.com',
                 $tU: 'bob',
                 '$hdr(content-type)': 'application/sdp',
                 $rb: '!{_}a=sendrecv',
-                '$hdr(X-MyHeader3)': 'ghi',
-                '$hdr(X-MyHeader4)': 'jkl',
             }),
         },
+        {
+            event: 'media_update',
+            call_id: oc.id,
+            status: 'ok',
+            media: [
+              {
+                type: 'audio',
+                local: {
+                  port: 10000,
+                  mode: 'sendrecv'
+                },
+                remote: {
+                  port: 10002,
+                  mode: 'sendrecv'
+                }
+              }
+            ],
+        },
+        {
+            event: 'media_update',
+            call_id: ic.id,
+            status: 'ok',
+            media: [
+              {
+                type: 'audio',
+                local: {
+                  port: 10002,
+                  mode: 'sendrecv'
+                },
+                remote: {
+                  port: 10000,
+                  mode: 'sendrecv'
+                }
+              }
+            ],
+        },
     ], 1000)
-
-    sip.call.start_record_wav(oc.id, {file: './oc.wav'})
-    sip.call.start_record_wav(ic.id, {file: './ic.wav'})
 
     sip.call.send_dtmf(oc.id, {digits: '1234', mode: 0})
     sip.call.send_dtmf(ic.id, {digits: '4321', mode: 1})
@@ -116,24 +117,86 @@ async function test() {
             call_id: ic.id,
             digits: '1234',
             mode: 0,
+            media_id: 0
         },
         {
             event: 'dtmf',
             call_id: oc.id,
             digits: '4321',
             mode: 1,
+            media_id: 0
         },
-    ], 2000)
+    ], 1500)
 
-
-    sip.call.reinvite(oc.id)
+    sip.call.reinvite(oc.id, {mode: 'sendonly'}) // this will put the call on hold
 
     await z.wait([
         {
             event: 'reinvite',
-            call_id: ic.id
+            call_id: ic.id,
+            msg: sip_msg({
+                $rb: '!{_}a=sendonly',
+            }),
         },
-    ], 1000)
+    ], 500)
+
+    sip.call.respond(ic.id, {code: 200, reason: 'OK'})
+
+    await z.wait([
+        {
+            event: 'response',
+            call_id: oc.id,
+            method: 'INVITE',
+            msg: sip_msg({
+                $rs: '100',
+            }),
+        },
+        {
+            event: 'response',
+            call_id: oc.id,
+            method: 'INVITE',
+            msg: sip_msg({
+                $rs: '200',
+                $rr: 'OK',
+                $rb: '!{_}a=recvonly',
+            }),
+        },
+        {
+            event: 'media_update',
+            call_id: oc.id,
+            status: 'ok',
+        },
+        {
+            event: 'media_update',
+            call_id: ic.id,
+            status: 'ok',
+        },
+    ], 500)
+
+    sip.call.send_dtmf(oc.id, {digits: '1234', mode: 0})
+    sip.call.send_dtmf(ic.id, {digits: '4321', mode: 1}) // This will not generate event 'dtmf' because this side of the call is on hold
+
+    await z.wait([
+        {
+            event: 'dtmf',
+            call_id: ic.id,
+            digits: '1234',
+            mode: 0,
+            media_id: 0
+        },
+    ], 1500)
+
+    sip.call.reinvite(oc.id) // defaule mode is 'sendrecv' so this will put the call off hold
+
+    await z.wait([
+        {
+            event: 'reinvite',
+            call_id: ic.id,
+            msg: sip_msg({
+                $rb: '!{_}a=sendrecv',
+            }),
+        },
+    ], 500)
 
     sip.call.respond(ic.id, {code: 200, reason: 'OK'})
 
@@ -177,24 +240,86 @@ async function test() {
             call_id: ic.id,
             digits: '1234',
             mode: 0,
+            media_id: 0
         },
         {
             event: 'dtmf',
             call_id: oc.id,
             digits: '4321',
             mode: 1,
+            media_id: 0
         },
-
-    ], 2000)
-
-    sip.call.reinvite(ic.id)
+    ], 1500)
+ 
+    //await z.sleep(100)
+    sip.call.reinvite(ic.id, {mode: 'sendonly'})
 
     await z.wait([
         {
             event: 'reinvite',
-            call_id: oc.id
+            call_id: oc.id,
+            msg: sip_msg({
+                $rb: '!{_}a=sendonly',
+            }),
         },
-    ], 1000)
+    ], 500)
+
+    sip.call.respond(oc.id, {code: 200, reason: 'OK'})
+
+    await z.wait([
+        {
+            event: 'response',
+            call_id: ic.id,
+            method: 'INVITE',
+            msg: sip_msg({
+                $rs: '100',
+            }),
+        },
+        {
+            event: 'response',
+            call_id: ic.id,
+            method: 'INVITE',
+            msg: sip_msg({
+                $rs: '200',
+                $rr: 'OK',
+            }),
+        },
+        {
+            event: 'media_update',
+            call_id: oc.id,
+            status: 'ok',
+        },
+        {
+            event: 'media_update',
+            call_id: ic.id,
+            status: 'ok',
+        },
+    ], 500)
+
+    sip.call.send_dtmf(oc.id, {digits: '1234', mode: 0}) // This will not generate event 'dtmf' because this side of the call is on hold
+    sip.call.send_dtmf(ic.id, {digits: '4321', mode: 1})
+
+    await z.wait([
+        {
+            event: 'dtmf',
+            call_id: oc.id,
+            digits: '4321',
+            mode: 1,
+            media_id: 0
+        },
+    ], 1500)
+
+    sip.call.reinvite(ic.id) // defaule mode is 'sendrecv' so this will put the call off hold
+
+    await z.wait([
+        {
+            event: 'reinvite',
+            call_id: oc.id,
+            msg: sip_msg({
+                $rb: '!{_}a=sendrecv',
+            }),
+        },
+    ], 500)
 
     sip.call.respond(oc.id, {code: 200, reason: 'OK'})
 
@@ -219,12 +344,12 @@ async function test() {
         },
         {
             event: 'media_update',
-            call_id: oc.id,
+            call_id: ic.id,
             status: 'ok',
         },
         {
             event: 'media_update',
-            call_id: ic.id,
+            call_id: oc.id,
             status: 'ok',
         },
     ], 500)
@@ -238,116 +363,17 @@ async function test() {
             call_id: ic.id,
             digits: '1234',
             mode: 0,
+            media_id: 0
         },
         {
             event: 'dtmf',
             call_id: oc.id,
             digits: '4321',
             mode: 1,
+            media_id: 0
         },
-    ], 2000)
-
-    sip.call.send_request(oc.id, {method: 'INFO'})
-
-    await z.wait([
-        {
-            event: 'request',
-            call_id: ic.id,
-            msg: sip_msg({
-                $rm: 'INFO',
-            }),
-        },
-    ], 500)
-
-    sip.call.respond(ic.id, {code: 200, reason: 'OK'})
-
-    await z.wait([
-        {
-            event: 'response',
-            call_id: oc.id,
-            method: 'INFO',
-            msg: sip_msg({
-                $rs: '200',
-                $rr: 'OK',
-            }),
-        },
-    ], 500)
-
-    sip.call.reinvite(oc.id)
-
-    await z.wait([
-        {
-            event: 'reinvite',
-            call_id: ic.id
-        },
-    ], 1000)
-
-    sip.call.respond(ic.id, {code: 200, reason: 'OK'})
-
-    await z.wait([
-        {
-            event: 'response',
-            call_id: oc.id,
-            method: 'INVITE',
-            msg: sip_msg({
-                $rs: '100',
-            }),
-        },
-        {
-            event: 'response',
-            call_id: oc.id,
-            method: 'INVITE',
-            msg: sip_msg({
-                $rs: '200',
-                $rr: 'OK',
-                $rb: '!{_}a=sendrecv',
-            }),
-        },
-        {
-            event: 'media_update',
-            call_id: oc.id,
-            status: 'ok',
-        },
-        {
-            event: 'media_update',
-            call_id: ic.id,
-            status: 'ok',
-        },
-    ], 500)
-
-    sip.call.send_dtmf(oc.id, {digits: '1234', mode: 0})
-    sip.call.send_dtmf(ic.id, {digits: '4321', mode: 1})
-
-    await z.wait([
-        {
-            event: 'dtmf',
-            call_id: ic.id,
-            digits: '1234',
-            mode: 0,
-        },
-        {
-            event: 'dtmf',
-            call_id: oc.id,
-            digits: '4321',
-            mode: 1,
-        },
-    ], 2000)
-
-    sip.call.start_play_wav(oc.id, {file: 'samples/artifacts/yosemitesam.wav'})
-    sip.call.start_play_wav(ic.id, {file: 'samples/artifacts/yosemitesam.wav'})
-
-    await z.sleep(2000)
-
-    stat1 = sip.call.get_stream_stat(oc.id, {media_id: 0})
-    stat2 = sip.call.get_stream_stat(ic.id, {media_id: 0})
-
-    console.log("stat1", stat1)
-    console.log("stat2", stat2)
-
-    sip.call.stop_record_wav(oc.id)
-    sip.call.stop_record_wav(ic.id)
-
-
+    ], 1500)
+ 
     sip.call.terminate(oc.id)
 
     await z.wait([
@@ -369,8 +395,6 @@ async function test() {
             }),
         },
     ], 1000)
-
-    await z.sleep(1000)
 
     console.log("Success")
 
