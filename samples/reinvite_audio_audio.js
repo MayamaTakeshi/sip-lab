@@ -23,7 +23,7 @@ async function test() {
     console.log("t1", t1)
     console.log("t2", t2)
 
-    oc = sip.call.create(t1.id, {from_uri: 'sip:alice@test.com', to_uri: `sip:bob@${t2.address}:${t2.port}`})
+    oc = sip.call.create(t1.id, {from_uri: 'sip:alice@test.com', to_uri: `sip:bob@${t2.address}:${t2.port}`, media: 'audio,audio'})
 
     await z.wait([
         {
@@ -52,7 +52,7 @@ async function test() {
         sip_call_id: z.store.sip_call_id,
     }
 
-    sip.call.respond(ic.id, {code: 200, reason: 'OK'})
+    sip.call.respond(ic.id, {code: 200, reason: 'OK', media: 'audio,audio'})
 
     await z.wait([
         {
@@ -77,15 +77,10 @@ async function test() {
             media: [
               {
                 type: 'audio',
-                local: {
-                  port: 10000,
-                  mode: 'sendrecv'
-                },
-                remote: {
-                  port: 10002,
-                  mode: 'sendrecv'
-                }
-              }
+              },
+              {
+                type: 'audio',
+              },
             ],
         },
         {
@@ -95,20 +90,15 @@ async function test() {
             media: [
               {
                 type: 'audio',
-                local: {
-                  port: 10002,
-                  mode: 'sendrecv'
-                },
-                remote: {
-                  port: 10000,
-                  mode: 'sendrecv'
-                }
-              }
+              },
+              {
+                type: 'audio',
+              },
             ],
         },
     ], 1000)
 
-    sip.call.reinvite(oc.id)
+    sip.call.reinvite(oc.id, {media: 'audio,audio'})
 
     await z.wait([
         {
@@ -117,7 +107,7 @@ async function test() {
         },
     ], 500)
 
-    sip.call.respond(ic.id, {code: 200, reason: 'OK'})
+    sip.call.respond(ic.id, {code: 200, reason: 'OK', media: 'audio,audio'})
 
     await z.wait([
         {
@@ -138,19 +128,36 @@ async function test() {
                 $rb: '!{_}a=sendrecv',
             }),
         },
+
         {
             event: 'media_update',
             call_id: oc.id,
             status: 'ok',
+            media: [
+              {
+                type: 'audio',
+              },
+              {
+                type: 'audio',
+              },
+            ],
         },
         {
             event: 'media_update',
             call_id: ic.id,
             status: 'ok',
+            media: [
+              {
+                type: 'audio',
+              },
+              {
+                type: 'audio',
+              },
+            ],
         },
     ], 500)
 
-    sip.call.reinvite(ic.id)
+    sip.call.reinvite(ic.id, {media: 'audio,audio'})
 
     await z.wait([
         {
@@ -159,7 +166,7 @@ async function test() {
         },
     ], 500)
 
-    sip.call.respond(oc.id, {code: 200, reason: 'OK'})
+    sip.call.respond(oc.id, {code: 200, reason: 'OK', media: 'audio,audio'})
 
     await z.wait([
         {
@@ -183,14 +190,29 @@ async function test() {
             event: 'media_update',
             call_id: oc.id,
             status: 'ok',
+            media: [
+              {
+                type: 'audio',
+              },
+              {
+                type: 'audio',
+              },
+            ],
         },
         {
             event: 'media_update',
             call_id: ic.id,
             status: 'ok',
+            media: [
+              {
+                type: 'audio',
+              },
+              {
+                type: 'audio',
+              },
+            ],
         },
     ], 500)
-
 
     sip.call.terminate(oc.id)
 
