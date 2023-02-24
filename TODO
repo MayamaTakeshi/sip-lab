@@ -106,3 +106,50 @@ Check samples/options.js and samples/register_subscribe.js
 
 I tried to check if on_rx_response was called for them but no, it didn't happen (not even for the final 200 response).
 
+-------------------------
+Remove extra media mode (sendrecv, sendonly, recvonly, inactive) from SDP.
+See in the below SDP that we have both
+a=sendrecv
+and
+a=sendonly
+
+2023/02/24 20:02:57.455109 127.0.0.1:5090 -> 127.0.0.1:5092                                                                                                                                                
+INVITE sip:sip-lab@127.0.0.1:5092 SIP/2.0                                                                                                                                                                  
+Via: SIP/2.0/UDP 127.0.0.1:5090;rport;branch=z9hG4bKPjf41cf482-0016-4f62-9f84-f46f3a2305cf                                                                                                                 
+Max-Forwards: 70                                                                                                                                                                                           
+From: sip:alice@test.com;tag=bf24e8a4-cfa6-4f48-a2c5-c82da8c97512                                                                                                                                          
+To: sip:bob@127.0.0.1;tag=cb247e90-c00d-4a3a-8f95-dc61c7d1813b                                                                                                                                             
+Contact: <sip:sip@127.0.0.1:5090>                                                                                                                                                                          
+Call-ID: 428d7ea1-8f04-4d88-a2bd-ed0b51402a39                                                                                                                                                              
+CSeq: 19113 INVITE                                                                                                                                                                                         
+Allow: MESSAGE, SUBSCRIBE, NOTIFY, REFER, INVITE, ACK, BYE, CANCEL, UPDATE                                                                                                                                 
+Supported: replaces                                                                                                                                                                                        
+Content-Type: application/sdp                                                                                                                                                                              
+Content-Length:   596                                                                                                                                                                                      
+                                                                                                                                                                                                           
+v=0                                                                                                                                                                                                        
+o=- 3886225375 3886225376 IN IP4 0.0.0.0                                                                                                                                                                   
+s=pjmedia                                                                                                                                                                                                  
+t=0 0                                                                                                                                                                                                      
+m=audio 10000 RTP/AVP 0 8 3 96 97 98 99 9 18 120 121 122                                                                                                                                                   
+c=IN IP4 127.0.0.1                                                                                                                                                                                         
+b=TIAS:64000                                                                                                                                                                                               
+a=rtcp:10001 IN IP4 127.0.0.1                                                                                                                                                                              
+a=sendrecv                                                                                                                                                                                                 
+a=rtpmap:0 PCMU/8000                                                                                                                                                                                       
+a=rtpmap:8 PCMA/8000                                                                                                                                                                                       
+a=rtpmap:3 GSM/8000                                                                                                                                                                                        
+a=rtpmap:96 iLBC/8000                                                                                                                                                                                      
+a=fmtp:96 mode=30                                                                                                                                                                                          
+a=rtpmap:97 speex/32000                                                                                                                                                                                    
+a=rtpmap:98 speex/16000                                                                                                                                                                                    
+a=rtpmap:99 speex/8000                                                                                                                                                                                     
+a=rtpmap:9 G722/8000                                                                                                                                                                                       
+a=rtpmap:18 G729/8000                                                                                                                                                                                      
+a=rtpmap:120 telephone-event/8000                                                                                                                                                                          
+a=fmtp:120 0-16                                                                                                                                                                                            
+a=rtpmap:121 telephone-event/32000                                                                                                                                                                         
+a=fmtp:121 0-16                                                                                                                                                                                            
+a=rtpmap:122 telephone-event/16000                                                                                                                                                                         
+a=fmtp:122 0-16                                                                                                                                                                                            
+a=sendonly                                                                                                                                                                                                 
