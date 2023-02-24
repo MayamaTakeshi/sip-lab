@@ -127,7 +127,7 @@ async function test() {
                 },
                 remote: {
                   port: 1000
-                }
+                },
               },
               {
                 type: 'audio',
@@ -205,15 +205,58 @@ async function test() {
             event: 'media_update',
             call_id: oc.id,
             status: 'ok',
+            media: [
+              {
+                type: 'mrcp',
+                local: {
+                  port: 9
+                },
+                remote: {
+                  port: 1000
+                }
+              },
+              {
+                type: 'audio',
+                local: {
+                  port: 10000,
+                  mode: 'recvonly'
+                },
+                remote: {
+                  port: 10002,
+                  mode: 'sendonly'
+                }
+              }
+            ],
         },
         {
             event: 'media_update',
             call_id: ic.id,
             status: 'ok',
+            media: [
+              {
+                type: 'mrcp',
+                local: {
+                  port: 1000
+                },
+                remote: {
+                  port: 9
+                }
+              },
+              {
+                type: 'audio',
+                local: {
+                  port: 10002,
+                  mode: 'sendonly'
+                },
+                remote: {
+                  port: 10000,
+                  mode: 'recvonly'
+                }
+              }
+            ],
         },
     ], 500)
 
-    //await z.sleep(100)
     sip.call.reinvite(ic.id, {media: server_media})
 
     await z.wait([
@@ -248,11 +291,55 @@ async function test() {
             event: 'media_update',
             call_id: oc.id,
             status: 'ok',
+            media: [
+              {
+                type: 'mrcp',
+                local: {
+                  port: 9
+                },
+                remote: {
+                  port: 1000
+                }
+              },
+              {
+                type: 'audio',
+                local: {
+                  port: 10000,
+                  mode: 'recvonly'
+                },
+                remote: {
+                  port: 10002,
+                  mode: 'sendonly'
+                }
+              }
+            ],
         },
         {
             event: 'media_update',
             call_id: ic.id,
             status: 'ok',
+            media: [
+              {
+                type: 'mrcp',
+                local: {
+                  port: 1000
+                },
+                remote: {
+                  port: 9
+                }
+              },
+              {
+                type: 'audio',
+                local: {
+                  port: 10002,
+                  mode: 'sendonly'
+                },
+                remote: {
+                  port: 10000,
+                  mode: 'recvonly'
+                }
+              }
+            ],
         },
     ], 500)
 
