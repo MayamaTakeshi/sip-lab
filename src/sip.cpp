@@ -5527,6 +5527,20 @@ bool set_streaming_mode(pj_str_t *mode, pj_pool_t *pool, Document &document, Val
 }
 */
 
+void remove_mode_attributes(pjmedia_sdp_media *m) {
+    for (int i = 0; i < m->attr_count ; i++) {
+        pjmedia_sdp_attr *attr = m->attr[i];
+        if((pj_strcmp2(&attr->name, "sendrecv") == 0) ||
+           (pj_strcmp2(&attr->name, "sendonly") == 0) ||
+           (pj_strcmp2(&attr->name, "recvonly") == 0) ||
+           (pj_strcmp2(&attr->name, "inactive") == 0)) {
+
+            pj_array_erase(m->attr, sizeof(pjmedia_sdp_attr*), m->attr_count, i);
+            m->attr_count--;
+        }
+    }
+}
+
 bool update_media_attributes(MediaEndpoint *me, pj_pool_t *pool, Value &descr) {
     // first remove all existing attributes
     me->attributes.clear();
@@ -5712,10 +5726,8 @@ pjmedia_sdp_media * create_sdp_media(MediaEndpoint *me, pjsip_dialog *dlg) {
             return NULL;
         }
 
-        for (char *val : me->attributes) {
-            pjmedia_sdp_attr *attr = pjmedia_sdp_attr_create(dlg->pool, val, NULL);
-            pjmedia_sdp_media_add_attr(media, attr);
-        }
+        remove_mode_attributes(media);
+
     } else if(ENDPOINT_TYPE_MRCP == me->type) {
         media = (pjmedia_sdp_media*)pj_pool_zalloc(dlg->pool, sizeof(pjmedia_sdp_media));
         if(!media) {
@@ -5737,6 +5749,11 @@ pjmedia_sdp_media * create_sdp_media(MediaEndpoint *me, pjsip_dialog *dlg) {
     } else {
         printf("unsupported me->type %d\n", me->type);
         assert(0);
+    }
+
+    for (char *val : me->attributes) {
+        pjmedia_sdp_attr *attr = pjmedia_sdp_attr_create(dlg->pool, val, NULL);
+        pjmedia_sdp_media_add_attr(media, attr);
     }
 
     return media;

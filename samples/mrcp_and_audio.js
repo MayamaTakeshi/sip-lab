@@ -17,13 +17,54 @@ async function test() {
 
     console.log(sip.start((data) => { console.log(data)} ))
 
-    t1 = sip.transport.create({address: "127.0.0.1", port: 5090, type: 'udp'})
-    t2 = sip.transport.create({address: "127.0.0.1", port: 5092, type: 'udp'})
+    var t1 = sip.transport.create({address: "127.0.0.1", port: 5090, type: 'udp'})
+    var t2 = sip.transport.create({address: "127.0.0.1", port: 5092, type: 'udp'})
 
     console.log("t1", t1)
     console.log("t2", t2)
 
-    oc = sip.call.create(t1.id, {from_uri: 'sip:alice@test.com', to_uri: `sip:bob@${t2.address}:${t2.port}`, media: [{type: 'mrcp'}, {type: 'audio'}]})
+    var client_media = [
+        {
+            type: 'mrcp', 
+            attributes: [
+                'setup:active',
+                'connection:new',
+                'resource:speechsynth',
+                'cmid:1',
+            ],
+        },
+        {
+            type: 'audio',
+            attributes: [
+                'recvonly',
+                'mid:1',
+            ],
+        },
+    ]
+
+    var server_media = [
+        {
+            type: 'mrcp', 
+            attributes: [
+                'setup:passive',
+                'connection:new',
+                'channel:32AECB234338@speechsynth',
+                'cmid:1',
+            ],
+        },        
+        {
+            type: 'audio',
+            attributes: [
+                'sendonly',
+            ],
+        },
+    ]
+
+    oc = sip.call.create(t1.id, {
+        from_uri: 'sip:alice@test.com',
+        to_uri: `sip:bob@${t2.address}:${t2.port}`,
+        media: client_media,
+    })
 
     await z.wait([
         {
@@ -52,7 +93,11 @@ async function test() {
         sip_call_id: z.store.sip_call_id,
     }
 
-    sip.call.respond(ic.id, {code: 200, reason: 'OK', media: [{type: 'mrcp'}, {type: 'audio'}]})
+    sip.call.respond(ic.id, {
+        code: 200,
+        reason: 'OK',
+        media: server_media,
+    })
 
     await z.wait([
         {
@@ -67,7 +112,7 @@ async function test() {
                 $fd: 'test.com',
                 $tU: 'bob',
                 '$hdr(content-type)': 'application/sdp',
-                $rb: '!{_}a=sendrecv',
+                $rb: '!{_}a=sendonly',
             }),
         },
         {
@@ -88,11 +133,11 @@ async function test() {
                 type: 'audio',
                 local: {
                   port: 10000,
-                  mode: 'sendrecv'
+                  mode: 'recvonly'
                 },
                 remote: {
                   port: 10002,
-                  mode: 'sendrecv'
+                  mode: 'sendonly'
                 }
               }
             ],
@@ -115,125 +160,101 @@ async function test() {
                 type: 'audio',
                 local: {
                   port: 10002,
-                  mode: 'sendrecv'
+                  mode: 'sendonly'
                 },
                 remote: {
                   port: 10000,
-                  mode: 'sendrecv'
+                  mode: 'recvonly'
                 }
               }
             ],
         },
     ], 1000)
 
-    sip.call.send_dtmf(oc.id, {digits: '1234', mode: 0})
-    sip.call.send_dtmf(ic.id, {digits: '4321', mode: 1})
+    sip.call.reinvite(oc.id, {media: client_media})
 
     await z.wait([
         {
-            event: 'dtmf',
+            event: 'reinvite',
             call_id: ic.id,
-            digits: '1234',
-            mode: 0,
-            media_id: 1
+        },
+    ], 500)
+
+    sip.call.respond(ic.id, {code: 200, reason: 'OK', media: server_media})
+
+    await z.wait([
+        {
+            event: 'response',
+            call_id: oc.id,
+            method: 'INVITE',
+            msg: sip_msg({
+                $rs: '100',
+            }),
         },
         {
-            event: 'dtmf',
+            event: 'response',
             call_id: oc.id,
-            digits: '4321',
-            mode: 1,
-            media_id: 1
+            method: 'INVITE',
+            msg: sip_msg({
+                $rs: '200',
+                $rr: 'OK',
+                $rb: '!{_}a=sendonly',
+            }),
         },
-    ], 1500)
+        {
+            event: 'media_update',
+            call_id: oc.id,
+            status: 'ok',
+        },
+        {
+            event: 'media_update',
+            call_id: ic.id,
+            status: 'ok',
+        },
+    ], 500)
 
-    for(i=0 ;i< 1; i++) {
-        //await z.sleep(100)
-        sip.call.reinvite(oc.id, {media: [{type: 'mrcp'}, {type: 'audio'}]})
+    //await z.sleep(100)
+    sip.call.reinvite(ic.id, {media: server_media})
 
-        await z.wait([
-            {
-                event: 'reinvite',
-                call_id: ic.id,
-            },
-        ], 500)
+    await z.wait([
+        {
+            event: 'reinvite',
+            call_id: oc.id,
+        },
+    ], 500)
 
-        sip.call.respond(ic.id, {code: 200, reason: 'OK', media: [{type: 'mrcp'}, {type: 'audio'}]})
+    sip.call.respond(oc.id, {code: 200, reason: 'OK', media: client_media})
 
-        await z.wait([
-            {
-                event: 'response',
-                call_id: oc.id,
-                method: 'INVITE',
-                msg: sip_msg({
-                    $rs: '100',
-                }),
-            },
-            {
-                event: 'response',
-                call_id: oc.id,
-                method: 'INVITE',
-                msg: sip_msg({
-                    $rs: '200',
-                    $rr: 'OK',
-                    $rb: '!{_}a=sendrecv',
-                }),
-            },
-            {
-                event: 'media_update',
-                call_id: oc.id,
-                status: 'ok',
-            },
-            {
-                event: 'media_update',
-                call_id: ic.id,
-                status: 'ok',
-            },
-        ], 500)
-
-        //await z.sleep(100)
-        sip.call.reinvite(ic.id, {media: [{type: 'mrcp'}, {type: 'audio'}]})
-
-        await z.wait([
-            {
-                event: 'reinvite',
-                call_id: oc.id,
-            },
-        ], 500)
-
-        sip.call.respond(oc.id, {code: 200, reason: 'OK', media: [{type: 'mrcp'}, {type: 'audio'}]})
-
-        await z.wait([
-            {
-                event: 'response',
-                call_id: ic.id,
-                method: 'INVITE',
-                msg: sip_msg({
-                    $rs: '100',
-                }),
-            },
-            {
-                event: 'response',
-                call_id: ic.id,
-                method: 'INVITE',
-                msg: sip_msg({
-                    $rs: '200',
-                    $rr: 'OK',
-                }),
-            },
-            {
-                event: 'media_update',
-                call_id: oc.id,
-                status: 'ok',
-            },
-            {
-                event: 'media_update',
-                call_id: ic.id,
-                status: 'ok',
-            },
-        ], 500)
-
-        //await z.sleep(100)
-    }
+    await z.wait([
+        {
+            event: 'response',
+            call_id: ic.id,
+            method: 'INVITE',
+            msg: sip_msg({
+                $rs: '100',
+            }),
+        },
+        {
+            event: 'response',
+            call_id: ic.id,
+            method: 'INVITE',
+            msg: sip_msg({
+                $rs: '200',
+                $rr: 'OK',
+                $rb: '!{_}a=recvonly',
+            }),
+        },
+        {
+            event: 'media_update',
+            call_id: oc.id,
+            status: 'ok',
+        },
+        {
+            event: 'media_update',
+            call_id: ic.id,
+            status: 'ok',
+        },
+    ], 500)
 
     await z.sleep(1000) // we need this delay otherwise, frequently the app will crash after this point.
 
