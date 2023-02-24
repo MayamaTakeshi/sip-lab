@@ -5527,6 +5527,18 @@ bool set_streaming_mode(pj_str_t *mode, pj_pool_t *pool, Document &document, Val
 }
 */
 
+bool has_attribute_mode(MediaEndpoint *me) {
+    for (char *val : me->attributes) {
+        if((strcmp(val, "sendrecv") == 0) ||
+           (strcmp(val, "sendonly") == 0) ||
+           (strcmp(val, "recvonly") == 0) ||
+           (strcmp(val, "inactive") == 0)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void remove_mode_attributes(pjmedia_sdp_media *m) {
     for (int i = 0; i < m->attr_count ; i++) {
         pjmedia_sdp_attr *attr = m->attr[i];
@@ -5726,7 +5738,9 @@ pjmedia_sdp_media * create_sdp_media(MediaEndpoint *me, pjsip_dialog *dlg) {
             return NULL;
         }
 
-        remove_mode_attributes(media);
+        if(has_attribute_mode(me)) {
+            remove_mode_attributes(media);
+        }
 
     } else if(ENDPOINT_TYPE_MRCP == me->type) {
         media = (pjmedia_sdp_media*)pj_pool_zalloc(dlg->pool, sizeof(pjmedia_sdp_media));
