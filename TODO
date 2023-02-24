@@ -5,6 +5,43 @@ Then, when they are finished, move them to devjournal so that they get registere
 
 
 -------------------------
+We added support for media "mode".
+However, reviewing some drafts in devjournal I found this showing we were planning to permit to specify an array "attributes":
+
+"media": [
+    {
+        "type": "audio"
+    },
+    {
+        "type": "video"
+    },
+    {
+        "type": "t38",
+        "attributes": [
+            "T38FaxVersion:0",
+            "T38MaxBitRate:14400",
+            "T38FaxFillBitRemoval:0",
+            "T38FaxTranscodingMMR:0",
+            "T38FaxTranscodingJBIG:0"
+        ]
+    },
+    {
+        "type": "mrcp",
+        "attributes": ["resource:speechsynth", "recvonly"]
+    },
+    {
+        "type": "msrp",
+        "attributes": ["accept-types:text/plain"]
+    }
+]
+
+The above is better as it is a generic way to insert any attribute.
+So we should remove "mode" and switch to the above.
+And the "mode" from the root of the object should be removed (in practice we will not use it as we don't expect to see calls with multiple audio streams for example).
+But if need arrives we can replace it with an "attributes" array.
+
+
+-------------------------
 we need to clone the active local/remote media for each MediaEndpoint of type audio/video using inv->pool_prov.
 (we might use this also to update AudioEndpoint mode)
 
