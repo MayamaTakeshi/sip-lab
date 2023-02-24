@@ -11,6 +11,8 @@
 
 #include <boost/circular_buffer.hpp>
 #include <algorithm>
+#include <vector>
+
 
 #include <pthread.h>
 
@@ -358,6 +360,7 @@ struct MediaEndpoint {
     pj_str_t transport;
     pj_str_t addr;
     int port;
+    std::vector<char*> attributes;
 
     union {
         AudioEndpoint *audio;
@@ -2949,7 +2952,7 @@ int pjw_call_reinvite(long call_id, const char *json) {
 
     Document document;
     
-    const char *valid_params[] = {"delayed_media", "media", "mode", ""};
+    const char *valid_params[] = {"delayed_media", "media", ""};
 
 	if(!g_call_ids.get(call_id, val)){
 	    set_error("Invalid call_id");
@@ -5503,6 +5506,7 @@ void close_media_transport(pjmedia_transport *med_transport) {
 }
 
 
+/*
 bool set_streaming_mode(pj_str_t *mode, pj_pool_t *pool, Document &document, Value &descr){
     if(descr.HasMember("mode")) {
         if(!descr["mode"].IsString()) {
@@ -5521,6 +5525,34 @@ bool set_streaming_mode(pj_str_t *mode, pj_pool_t *pool, Document &document, Val
     }
     return true;
 }
+*/
+
+bool update_media_attributes(MediaEndpoint *me, pj_pool_t *pool, Value &descr) {
+    // first remove all existing attributes
+    me->attributes.clear();
+
+    if(descr.HasMember("attributes")) {
+        if(!descr["attributes"].IsArray()) {
+            set_error("update_media_attributes failed. Media param attributes must be array");
+            return false;
+        }
+        const Value& attrs = descr["attributes"];
+        for (rapidjson::SizeType i = 0; i < attrs.Size(); i++) {
+            if(!attrs[i].IsString()) {
+                set_error("Invalid attributes item at idx=%i. It must be a string", i);
+                return false;
+            }
+            const char *s = attrs[i].GetString();
+
+            char *val = (char*)pj_pool_alloc(pool, strlen(s) + 1);
+            strcpy(val, s);
+
+            me->attributes.push_back(val);
+        }
+    }
+    return true;
+}
+
 
 bool create_media_endpoint(Call *call, Document &document, Value &descr, pjsip_dialog *dlg, char *address, MediaEndpoint **out) {
     printf("create_media_endpoint call_id=%d\n", call->id); 
@@ -5552,10 +5584,6 @@ bool create_media_endpoint(Call *call, Document &document, Value &descr, pjsip_d
         pj_strdup2(dlg->pool, &med_endpt->transport, "RTP/AVP");
         med_endpt->port = allocated_port;
         med_endpt->endpoint.audio = audio_endpt;
-
-        if(!set_streaming_mode(&audio_endpt->mode, dlg->pool, document, descr)) {
-            return false;
-        }
     } else if(strcmp("mrcp", type) == 0) {
         MrcpEndpoint *mrcp_endpt = (MrcpEndpoint*)pj_pool_zalloc(dlg->pool, sizeof(MrcpEndpoint));
         int allocated_port;
@@ -5579,9 +5607,14 @@ bool create_media_endpoint(Call *call, Document &document, Value &descr, pjsip_d
     *out = med_endpt;
     printf("create_media_endpoint call_id=%d type=%d\n", call->id, med_endpt->type); 
 
+    if(!update_media_attributes(med_endpt, dlg->pool, descr)) {
+        return false;
+    }
+
     return true;
 }
 
+/*
 bool update_media_endpoint_streaming_mode(MediaEndpoint *me, pj_pool_t *pool, Document &document, Value &descr) {
     if(ENDPOINT_TYPE_AUDIO == me->type) {
         AudioEndpoint *ae = me->endpoint.audio;
@@ -5591,6 +5624,7 @@ bool update_media_endpoint_streaming_mode(MediaEndpoint *me, pj_pool_t *pool, Do
     }
     return true;
 }
+*/
 
 int media_type_name_to_type_id(const char *type_name) {
     if(strcmp("audio", type_name) == 0) {
@@ -5678,15 +5712,10 @@ pjmedia_sdp_media * create_sdp_media(MediaEndpoint *me, pjsip_dialog *dlg) {
             return NULL;
         }
 
-        pjmedia_sdp_attr *attr;
-
-        // TODO: need to compute proper mode attribute
-        char mode[1024];
-        sprintf(mode, "%.*s", audio->mode.slen, audio->mode.ptr);
-        attr = pjmedia_sdp_attr_create(dlg->pool, mode, NULL);
-
-        pjmedia_sdp_media_add_attr(media, attr);
-
+        for (char *val : me->attributes) {
+            pjmedia_sdp_attr *attr = pjmedia_sdp_attr_create(dlg->pool, val, NULL);
+            pjmedia_sdp_media_add_attr(media, attr);
+        }
     } else if(ENDPOINT_TYPE_MRCP == me->type) {
         media = (pjmedia_sdp_media*)pj_pool_zalloc(dlg->pool, sizeof(pjmedia_sdp_media));
         if(!media) {
@@ -5798,15 +5827,21 @@ bool process_media(Call *call, pjsip_dialog *dlg, Document &document) {
         MediaEndpoint *me = find_media_by_json_descr(call, descr, in_use_chart);
         if(me) {
             addon_log(L_DBG, "i=%d media found\n", i);
+            /*
             if(!update_media_endpoint_streaming_mode(me, dlg->pool, document, descr)) {
                 return false;
             }
+            */
         } else {
             addon_log(L_DBG, "i=%d media not found\n", i);
             if(!create_media_endpoint(call, document, descr, dlg, t->address, &me)) return false;
             addon_log(L_DBG, "i=%d media created %x\n", i, me);
             call->media[call->media_count++] = me;
             in_use_chart[call->media_count-1] = true; // added elements must be set as in use
+        }
+
+        if(!update_media_attributes(me, dlg->pool, descr)) {
+            return false;
         }
 
         pjmedia_sdp_media *media = create_sdp_media(me, dlg);
