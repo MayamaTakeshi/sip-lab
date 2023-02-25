@@ -78,13 +78,6 @@ static char pjw_errorstring[4096];
 
 void clear_error() { pjw_errorstring[0] = 0; }
 
-/*
-void set_error(char *err) {
-        //printf("set_error: %s\n", err);
-        strcpy(pjw_errorstring, err);
-}
-*/
-
 void set_error(const char *format, ...) {
   va_list args;
   va_start(args, format);
@@ -397,22 +390,6 @@ struct Call {
   pjmedia_sdp_session *active_remote_sdp;
 };
 
-/*
-#define DIALOG_TYPE_CALL 1
-#define DIALOG_TYPE_SUBSCRIPTION 2
-#define DIALOG_TYPE_SUBSCRIBER 3
-
-struct Dialog {
-    int type;
-
-    union {
-        Call *call;
-        Subscription *subscription;
-        //Subscriber *subscriber;
-    } d;
-};
-*/
-
 bool init_media_ports(Call *c, AudioEndpoint *ae, unsigned sampling_rate,
                       unsigned channel_count, unsigned samples_per_frame,
                       unsigned bits_per_sample);
@@ -440,52 +417,10 @@ PackageSet g_PackageSet;
 
 #define DEFAULT_EXPIRES 600
 
-/*
-static void pool_callback(pj_pool_t *pool, pj_size_t size)
-{
-        PJ_CHECK_STACK();
-        PJ_UNUSED_ARG(pool);
-        PJ_UNUSED_ARG(size);
-
-        PJ_THROW(PJ_NO_MEMORY_EXCEPTION);
-}
-*/
-
 void handle_events() {
-  // unsigned count = 0;
-  // pj_time_val tv = {0, 500};
-  // pj_time_val tv = {0,10};
-  // pj_time_val tv = {0,100};
   pj_time_val tv = {0, 1};
-  // pj_time_val_normalize(&tv);
-  // pj_status_t status;
-  // status = pjsip_endpt_handle_events(g_sip_endpt, &tv);
   pjsip_endpt_handle_events(g_sip_endpt, &tv);
 }
-
-/*
-static int worker_thread(void *arg)
-{
-        //addon_log(L_DBG, "Starting worker_thread\n");
-
-        pj_thread_set_prio(pj_thread_this(),
-                        pj_thread_get_prio_min(pj_thread_this()));
-
-        enum { TIMEOUT = 10 };
-
-        PJ_UNUSED_ARG(arg);
-
-        while(!g_thread_quit_flag){
-                PJW_LOCK();
-                //addon_log(L_DBG, ".");
-                handle_events();
-                PJW_UNLOCK();
-
-                usleep(10);
-        }
-        return 0;
-}
-*/
 
 void init_tpselector(Transport *t, pjsip_tpselector *sel) {
   unsigned flag;
@@ -777,14 +712,6 @@ static void on_inband_dtmf(pjmedia_port *port, void *user_data, char digit) {
     ae->last_digit_timestamp[mode] = ms_timestamp();
     PJW_UNLOCK();
   } else {
-    /*
-    ostringstream oss;
-
-    oss << "event=dtmf" << EVT_DATA_SEP << "call=" << call_id << EVT_DATA_SEP <<
-    "digits=" << d << EVT_DATA_SEP << "mode=" << DTMF_MODE_INBAND;
-    dispatch_event(oss.str().c_str());
-    */
-
     char evt[256];
     make_evt_dtmf(evt, sizeof(evt), call_id, 1, &d, mode, media_id);
     dispatch_event(evt);
@@ -1529,12 +1456,6 @@ int pjw_transport_create(const char *json, int *out_t_id, char *out_t_address,
   build_transport_tag(transport->tag, tp, addr, port);
   g_TransportMap.insert(make_pair(transport->tag, t_id));
 
-  /*
-      if(g_PacketDumper) {
-              g_PacketDumper->add_endpoint( inet_addr(addr), htons(port) );
-      }
-  */
-
   *out_t_id = t_id;
   strcpy(out_t_address, addr);
   *out_port = port;
@@ -1984,11 +1905,6 @@ int pjw_call_respond(long call_id, const char *json) {
       call->pending_rdata = 0;
     }
   } else {
-    /*
-    pjmedia_sdp_neg_state state = pjmedia_sdp_neg_get_state(call->inv->neg);
-    printf("neg_state=%d\n", state);
-    */
-
     status = pjsip_inv_answer(call->inv, code, &r,
                               NULL, // local_sdp,
                               &tdata);
@@ -4072,11 +3988,6 @@ bool restart_media_stream(Call *call, MediaEndpoint *me,
     }
   }
 
-  /*
-  pjmedia_sdp_media *media;
-  int idx = find_sdp_media_by_media_endpt(local_sdp, &media, me);
-  */
-
   status =
       pjmedia_stream_info_from_sdp(&stream_info, call->inv->dlg->pool,
                                    g_med_endpt, local_sdp, remote_sdp, idx);
@@ -4447,14 +4358,6 @@ static void on_state_changed(pjsip_inv_session *inv, pjsip_event *e) {
       pcc.pCall = call;
       pcc.id = call_id;
       g_LastCalls.push_back(pcc);
-
-      // delete call->last_responses;
-
-      /*
-      ostringstream oss;
-      oss << "event=termination" << EVT_DATA_SEP << "call=" << call_id;
-      dispatch_event(oss.str().c_str());
-      */
     }
 
     char evt[2048];
@@ -4487,18 +4390,6 @@ static pjmedia_transport *create_media_transport(const pj_str_t *addr,
       pjmedia_transport_info tpinfo;
       pjmedia_transport_info_init(&tpinfo);
       status = pjmedia_transport_get_info(med_transport, &tpinfo);
-      /*
-                  if( status == PJ_SUCCESS ) {
-                          if(g_PacketDumper){
-                                  g_PacketDumper->add_endpoint(
-         tpinfo.sock_info.rtp_addr_name.ipv4.sin_addr.s_addr,
-         tpinfo.sock_info.rtp_addr_name.ipv4.sin_port );
-                                  g_PacketDumper->add_endpoint(
-         tpinfo.sock_info.rtcp_addr_name.ipv4.sin_addr.s_addr,
-         tpinfo.sock_info.rtcp_addr_name.ipv4.sin_port );
-                          }
-                  }
-      */
       printf("create_media_transport created %x\n", med_transport);
       *allocated_port = port;
       return med_transport;
@@ -4643,14 +4534,6 @@ pj_status_t process_invite(Call *call, pjsip_inv_session *inv,
 
     call->inv_initial_answer_required = false;
   } else {
-    /*
-    pjsip_dialog *dlg = pjsip_rdata_get_dlg(rdata);
-    addon_log(L_DBG, "rdata        dlg->ua->id: %d\n",
-    pjsip_rdata_get_tsx(rdata)->mod_data[dlg->ua->id]); addon_log(L_DBG,
-    "cloned_rdata dlg->ua->id: %d\n",
-    pjsip_rdata_get_tsx(cloned_rdata)->mod_data[dlg->ua->id]);
-    */
-
     call->inv_initial_answer_required = true;
   }
 
@@ -4714,12 +4597,6 @@ static pj_bool_t on_rx_request(pjsip_rx_data *rdata) {
 
       dispatch_event(evt);
 
-      /*
-      if(pj_strcmp2(&rdata->msg_info.msg->line.req.method.name, "REFER") != 0){
-          return PJ_TRUE;
-      }
-      */
-
       return PJ_TRUE;
     }
   }
@@ -4733,12 +4610,6 @@ static pj_bool_t on_rx_request(pjsip_rx_data *rdata) {
     // addon_log(L_DBG, "received REFER on_rx_request\n");
     return PJ_TRUE;
   }
-
-  /*
-      if(dlg && (pj_strcmp2(&rdata->msg_info.msg->line.req.method.name, "INFO")
-     == 0)) { return PJ_TRUE;
-      }
-  */
 
   if (pj_strcmp2(&rdata->msg_info.msg->line.req.method.name, "SUBSCRIBE") ==
       0) {
@@ -4946,37 +4817,6 @@ static pj_bool_t on_rx_response(pjsip_rx_data *rdata) {
 
   if (strcmp(method, "SUBSCRIBE") == 0) {
     return PJ_TRUE;
-    /*
-            Subscription *subscription = dialog->d.subscription;
-            int code = rdata->msg_info.msg->line.status.code;
-            if(!subscription->initialized && code >= 200 && code <= 299) {
-                    //Status code 2XX will cause pjsip_evsub to be called.
-                    subscription->initialized = true;
-                    return PJ_FALSE;
-            }
-
-
-            long subscription_id;
-
-            if(subscription) {
-                    if( !g_subscription_ids.get_id((long)subscription,
-       subscription_id) ){
-
-                            make_evt_internal_error(evt, sizeof(evt), "failed to
-       get subscription_id"); dispatch_event(evt); return true;
-                    }
-            } else {
-                    addon_log(L_DBG, "Ignoring response for mod_data not set to
-       a subscription\n"); return PJ_TRUE;
-            }
-
-            mname = rdata->msg_info.cseq->method.name;
-            make_evt_response(evt, sizeof(evt), "subscription", subscription_id,
-       mname.slen, mname.ptr, rdata->msg_info.len, rdata->msg_info.msg_buf);
-            dispatch_event(evt);
-
-            return PJ_TRUE;
-    */
   }
 
   long call_id;
@@ -5168,36 +5008,6 @@ static void on_registration_status(pjsip_regc_cbparam *param) {
   make_evt_registration_status(evt, sizeof(evt), acc_id, param->code, reason,
                                param->expiration);
   dispatch_event(evt);
-}
-
-int pjw_packetdump_start(const char *dev, const char *file) {
-  /*
-      PJW_LOCK();
-
-      if(g_PacketDumper) delete g_PacketDumper;
-
-      g_PacketDumper = new PacketDumper();
-      if(!g_PacketDumper->init(dev, file)){
-              PJW_UNLOCK();
-              set_error("Failed to start packetdumping");
-              return -1;
-      }
-
-      PJW_UNLOCK();
-  */
-  return 0;
-}
-
-int pjw_packetdump_stop() {
-  /*
-      PJW_LOCK();
-
-      if(g_PacketDumper) delete g_PacketDumper;
-      g_PacketDumper = NULL;
-
-      PJW_UNLOCK();
-  */
-  return 0;
 }
 
 int pjw_get_codecs(char *out_codecs) {
@@ -5554,17 +5364,6 @@ void close_media_transport(pjmedia_transport *med_transport) {
   if (status != PJ_SUCCESS)
     return;
 
-  /*
-      if(g_PacketDumper){
-              g_PacketDumper->remove_endpoint(
-     tpinfo.sock_info.rtp_addr_name.ipv4.sin_addr.s_addr,
-     tpinfo.sock_info.rtp_addr_name.ipv4.sin_port );
-              g_PacketDumper->remove_endpoint(
-     tpinfo.sock_info.rtcp_addr_name.ipv4.sin_addr.s_addr,
-     tpinfo.sock_info.rtcp_addr_name.ipv4.sin_port );
-      }
-  */
-
   status = pjmedia_transport_media_stop(med_transport);
   if (status != PJ_SUCCESS) {
     addon_log(
@@ -5580,26 +5379,6 @@ void close_media_transport(pjmedia_transport *med_transport) {
               status);
   }
 }
-
-/*
-bool set_streaming_mode(pj_str_t *mode, pj_pool_t *pool, Document &document,
-Value &descr){ if(descr.HasMember("mode")) { if(!descr["mode"].IsString()) {
-            set_error("set_streaming_mode failed. Media param mode must be
-string"); return false;
-        }
-        pj_strdup2(pool, mode, descr["mode"].GetString());
-    } else if(document.HasMember("mode")) {
-        if(!document["mode"].IsString()) {
-            set_error("set_streaming_mode failed. Document param mode must be
-string"); return false;
-        }
-        pj_strdup2(pool, mode, document["mode"].GetString());
-    } else {
-        pj_strdup2(pool, mode, "sendrecv");
-    }
-    return true;
-}
-*/
 
 bool has_attribute_mode(MediaEndpoint *me) {
   for (int i = 0; i < me->attr_count; i++) {
@@ -5717,18 +5496,6 @@ bool create_media_endpoint(Call *call, Document &document, Value &descr,
 
   return true;
 }
-
-/*
-bool update_media_endpoint_streaming_mode(MediaEndpoint *me, pj_pool_t *pool,
-Document &document, Value &descr) { if(ENDPOINT_TYPE_AUDIO == me->type) {
-        AudioEndpoint *ae = me->endpoint.audio;
-        if(!set_streaming_mode(&ae->mode, pool, document, descr)) {
-            return false;
-        }
-    }
-    return true;
-}
-*/
 
 int media_type_name_to_type_id(const char *type_name) {
   if (strcmp("audio", type_name) == 0) {
@@ -5941,11 +5708,6 @@ bool process_media(Call *call, pjsip_dialog *dlg, Document &document) {
     MediaEndpoint *me = find_media_by_json_descr(call, descr, in_use_chart);
     if (me) {
       addon_log(L_DBG, "i=%d media found\n", i);
-      /*
-      if(!update_media_endpoint_streaming_mode(me, dlg->pool, document, descr))
-      { return false;
-      }
-      */
     } else {
       addon_log(L_DBG, "i=%d media not found\n", i);
       if (!create_media_endpoint(call, document, descr, dlg, t->address, &me))
@@ -6318,21 +6080,11 @@ static void client_on_evsub_state(pjsip_evsub *sub, pjsip_event *event) {
 
     long subscription_id;
     if (!g_subscription_ids.get_id((long)subscription, subscription_id)) {
-      /*
-      addon_log(L_DBG, "FAILURE\n");
-      oss.seekp(0);
-      oss << "event=internal_error" << EVT_DATA_SEP << "details=Failed to get
-      call_id"; dispatch_event(oss.str().c_str());
-      */
-
       char error_msg[] = "failed to get subscription_id";
       make_evt_internal_error(evt, sizeof(evt), error_msg);
       dispatch_event(evt);
       return;
     }
-
-    // addon_log(L_DBG, "dispatching NOTIFY event\n");
-    // dispatch_event(oss.str().c_str());
 
     make_evt_request(evt, sizeof(evt), "subscription", subscription_id,
                      rdata->msg_info.len, rdata->msg_info.msg_buf);
@@ -6388,7 +6140,7 @@ static void server_on_evsub_state(pjsip_evsub *sub, pjsip_event *event) {
   }
 }
 
-// Called when incoming SUBSCRIBE (or any method taht establishes a subscription
+// Called when incoming SUBSCRIBE (or any method that establishes a subscription
 // like REFER) is received
 static void server_on_evsub_rx_refresh(pjsip_evsub *sub, pjsip_rx_data *rdata,
                                        int *p_st_code, pj_str_t **p_st_text,
@@ -6489,19 +6241,6 @@ void process_in_dialog_refer(pjsip_dialog *dlg, pjsip_rx_data *rdata) {
     // dispatch_event("event=broken_refer");
     return;
   }
-
-  /* Find optional Referred-By header (to be copied onto outgoing INVITE
-   * request.
-   */
-  /*
-  ref_by_hdr = (pjsip_hdr*)
-               pjsip_msg_find_hdr_by_name(rdata->msg_info.msg, &str_ref_by,
-                                          NULL);
-  */
-  /* if(ref_by_hdr) {
-      pjsip_generic_string_hdr *referred_by =
-  (pjsip_generic_string_hdr*)ref_by_hdr;
-  } */
 
   /* Find optional Refer-Sub header */
   refer_sub = (pjsip_generic_string_hdr *)pjsip_msg_find_hdr_by_name(
@@ -6669,12 +6408,6 @@ static void on_tsx_state_changed(pjsip_inv_session *inv, pjsip_transaction *tsx,
       }
       call->pending_rdata = cloned_rdata;
 
-      /*
-      addon_log(L_DBG, "call->inv->dlg=%d\n", call->inv->dlg);
-      addon_log(L_DBG, "call->inv->dlg->ua-id=%d\n",
-      pjsip_rdata_get_tsx(cloned_rdata)->mod_data[call->inv->dlg->ua->id]);
-      */
-
       make_evt_request(evt, sizeof(evt), "call", call->id,
                        e->body.tsx_state.src.rdata->msg_info.len,
                        e->body.tsx_state.src.rdata->msg_info.msg_buf);
@@ -6684,82 +6417,6 @@ static void on_tsx_state_changed(pjsip_inv_session *inv, pjsip_transaction *tsx,
     addon_log(L_DBG, "doing nothiing");
   }
 }
-
-/*
-int pjw_call_refer(long call_id, const char *json, long *out_subscription_id)
-{
-        PJW_LOCK();
-        clear_error();
-
-    char *dest_uri;
-
-        long val;
-        Call *call;
-        pj_str_t s_dest_uri;
-
-        long subscription_id;
-        struct pjsip_evsub_user xfer_cb;
-        pjsip_evsub *sub;
-        pjsip_tx_data *tdata;
-        pj_status_t status;
-
-    char buffer[MAX_JSON_INPUT];
-
-    Document document;
-
-    const char *valid_params[] = {"dest_uri", "headers", ""};
-
-        if(!g_call_ids.get(call_id, val)){
-                set_error("Invalid call_id");
-                goto out;
-        }
-        call = (Call*)val;
-
-    if(!parse_json(document, json, buffer, MAX_JSON_INPUT)) {
-        goto out;
-    }
-
-    if(!validate_params(document, valid_params)) {
-        goto out;
-    }
-
-    if(!json_get_and_check_uri(document, "dest_uri", false, &dest_uri)) {
-        goto out;
-    }
-
-        pj_bzero(&xfer_cb, sizeof(xfer_cb));
-        xfer_cb.on_evsub_state = &client_on_evsub_state;
-        xfer_cb.on_rx_notify = &on_rx_notify;
-
-        status = pjsip_xfer_create_uac(call->inv->dlg, &xfer_cb, &sub);
-        if(status != PJ_SUCCESS) {
-                set_error("pjsip_xfer_create_uac failed with status=%i",
-status); goto out;
-        }
-
-        s_dest_uri = pj_str((char*)dest_uri);
-        status = pjsip_xfer_initiate(sub, &s_dest_uri, &tdata);
-
-        if(!add_headers(call->inv->dlg->pool, tdata, document)) {
-                goto out;
-        }
-
-        status = pjsip_xfer_send_request(sub, tdata);
-        if(status != PJ_SUCCESS) {
-                set_error("pjsip_xfer_send_request failed with status=%i",
-status); goto out;
-        }
-
-        *out_subscription_id = subscription_id;
-
-out:
-        PJW_UNLOCK();
-        if(pjw_errorstring[0]) {
-                return -1;
-        }
-        return 0;
-}
-*/
 
 int pjw_call_get_info(long call_id, const char *required_info, char *out_info) {
   PJW_LOCK();
@@ -7041,46 +6698,6 @@ out:
 
   return 0;
 }
-
-/*
-pj_bool_t add_additional_headers(pj_pool_t *pool, pjsip_tx_data *tdata, const
-char *additional_headers) {
-
-        if(additional_headers && additional_headers[0]){
-                char buf[2048];
-                strcpy(buf,additional_headers);
-                char *saved;
-                char *token = strtok_r(buf, "\n", &saved);
-                while(token){
-                        char *name = strtok(token, ":");
-                        char *value = strtok(NULL, "\n");
-                        //addon_log(L_DBG, "Adding %s: %s\n", name, value);
-
-                        if(!name || !value) {
-                                set_error("Invalid additional_header");
-                                return PJ_FALSE;
-                        }
-
-                        pj_str_t hname = pj_str(name);
-                        pjsip_hdr *hdr = (pjsip_hdr*)pjsip_parse_hdr(pool,
-                                                &hname,
-                                                value,
-                                                strlen(value),
-                                                NULL);
-
-                        if(!hdr) {
-                                set_error("Failed to parse additional header to
-INVITE"); return PJ_FALSE;
-                        }
-                        pjsip_hdr *clone_hdr = (pjsip_hdr*)
-pjsip_hdr_clone(pool, hdr); pjsip_msg_add_hdr(tdata->msg, clone_hdr);
-
-                        token = strtok_r(NULL, "\n", &saved);
-                }
-        }
-        return PJ_TRUE;
-}
-*/
 
 pj_bool_t add_headers(pj_pool_t *pool, pjsip_tx_data *tdata,
                       Document &document) {

@@ -850,64 +850,6 @@ Napi::Value dtmf_aggregation_off(const Napi::CallbackInfo &info) {
   return env.Null();
 }
 
-Napi::Value packetdump_start(const Napi::CallbackInfo &info) {
-  Napi::Env env = info.Env();
-
-  if (info.Length() != 2) {
-    Napi::Error::New(env, "Wrong number of arguments. Expected: dev, pcap_file")
-        .ThrowAsJavaScriptException();
-    return env.Null();
-  }
-
-  if (!info[0].IsString()) {
-    Napi::TypeError::New(env, "dev must be string.")
-        .ThrowAsJavaScriptException();
-    return env.Null();
-  }
-  string dev = info[0].As<Napi::String>().Utf8Value();
-
-  if (dev.length() == 0) {
-    Napi::Error::New(env, "dev is invalid (blank string)")
-        .ThrowAsJavaScriptException();
-    return env.Null();
-  }
-
-  if (!info[1].IsString()) {
-    Napi::TypeError::New(env, "pcap_file must be string.")
-        .ThrowAsJavaScriptException();
-    return env.Null();
-  }
-  string pcap_file = info[1].As<Napi::String>().Utf8Value();
-
-  if (pcap_file.length() == 0) {
-    Napi::Error::New(env, "dev is invalid (blank string)")
-        .ThrowAsJavaScriptException();
-    return env.Null();
-  }
-
-  int res = pjw_packetdump_start(dev.c_str(), pcap_file.c_str());
-
-  if (res != 0) {
-    Napi::Error::New(env, pjw_get_error()).ThrowAsJavaScriptException();
-    return env.Null();
-  }
-
-  return env.Null();
-}
-
-Napi::Value packetdump_stop(const Napi::CallbackInfo &info) {
-  Napi::Env env = info.Env();
-
-  int res = pjw_packetdump_stop();
-
-  if (res != 0) {
-    Napi::Error::New(env, pjw_get_error()).ThrowAsJavaScriptException();
-    return env.Null();
-  }
-
-  return env.Null();
-}
-
 Napi::Value get_codecs(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
 
@@ -1281,9 +1223,6 @@ Napi::Object init(Napi::Env env, Napi::Object exports) {
               Napi::Function::New(env, dtmf_aggregation_on));
   exports.Set("dtmf_aggregation_off",
               Napi::Function::New(env, dtmf_aggregation_off));
-
-  exports.Set("packetdump_start", Napi::Function::New(env, packetdump_start));
-  exports.Set("packetdump_stop", Napi::Function::New(env, packetdump_stop));
 
   exports.Set("get_codecs", Napi::Function::New(env, get_codecs));
   exports.Set("set_codecs", Napi::Function::New(env, set_codecs));
