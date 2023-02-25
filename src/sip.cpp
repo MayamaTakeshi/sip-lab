@@ -354,13 +354,16 @@ struct MrcpEndpoint {
 #define ENDPOINT_TYPE_MRCP  4
 #define ENDPOINT_TYPE_MSRP  5
 
+#define MAX_ATTRS 32
+
 struct MediaEndpoint {
     int type;
     pj_str_t media;
     pj_str_t transport;
     pj_str_t addr;
     int port;
-    std::vector<char*> attributes;
+    int attr_count;
+    char *attr[MAX_ATTRS];
 
     union {
         AudioEndpoint *audio;
@@ -5528,7 +5531,8 @@ bool set_streaming_mode(pj_str_t *mode, pj_pool_t *pool, Document &document, Val
 */
 
 bool has_attribute_mode(MediaEndpoint *me) {
-    for (char *val : me->attributes) {
+    for (int i=0 ; i<me->attr_count ; i++) {
+        char *val = me->attr[i];
         if((strcmp(val, "sendrecv") == 0) ||
            (strcmp(val, "sendonly") == 0) ||
            (strcmp(val, "recvonly") == 0) ||
@@ -5554,8 +5558,7 @@ void remove_mode_attributes(pjmedia_sdp_media *m) {
 }
 
 bool update_media_attributes(MediaEndpoint *me, pj_pool_t *pool, Value &descr) {
-    // first remove all existing attributes
-    me->attributes.clear();
+    me->attr_count = 0;
 
     if(descr.HasMember("attributes")) {
         if(!descr["attributes"].IsArray()) {
@@ -5573,7 +5576,7 @@ bool update_media_attributes(MediaEndpoint *me, pj_pool_t *pool, Value &descr) {
             char *val = (char*)pj_pool_alloc(pool, strlen(s) + 1);
             strcpy(val, s);
 
-            me->attributes.push_back(val);
+            me->attr[me->attr_count++] = val;
         }
     }
     return true;
@@ -5765,7 +5768,8 @@ pjmedia_sdp_media * create_sdp_media(MediaEndpoint *me, pjsip_dialog *dlg) {
         assert(0);
     }
 
-    for (char *val : me->attributes) {
+    for (int i=0 ; i<me->attr_count ; i++) {
+        char *val = me->attr[i];
         pjmedia_sdp_attr *attr = pjmedia_sdp_attr_create(dlg->pool, val, NULL);
         pjmedia_sdp_media_add_attr(media, attr);
     }
