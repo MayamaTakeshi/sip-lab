@@ -10,6 +10,6 @@ static int _log_level = L_DBG;
 
 void _addon_log(int level, const char *fmt, ...);
 
-#define addon_log(level, fmt, ...) _addon_log(level, fmt"\n", ##__VA_ARGS__)
+#define addon_log(level, fmt, ...) _addon_log(level, fmt "\n", ##__VA_ARGS__)
 
 #endif
