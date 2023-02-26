@@ -13,7 +13,7 @@ Then a typical usage would be like this:
 ```
 gyp research.gyp --depth=. # this will build the Makefiles (need to be done only once).
 
-cp test.c.sample test.c
+cp tests/test_pjmedia_sdp_parse.c test.c # copy some test file from tests to test.c in the root folder
 
 vim test.c # adjust as necessary for the test you need.
 
@@ -40,4 +40,5 @@ a=rtpmap:8 PCMA/8000
 a=encrypt:1 AES_CM_128_HMAC_SHA1_80 inline:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
-
+## Saving tests
+After you are satisfied with the test, commit the test file at tests so that it can guide us in future development.
