@@ -128,7 +128,7 @@ async function test() {
         },
     ], 1500)
 
-    sip.call.reinvite(oc.id, {media: [{type: 'audio', attributes: ['sendonly', 'fakeattr1:1234', 'fakeattr2: a b c']}]}) // this will put the call on hold
+    sip.call.reinvite(oc.id, {media: [{type: 'audio', fields: ['a=sendonly', 'a=fakeattr1:1234', 'a=fakeattr2: a b c']}]}) // this will put the call on hold
 
     await z.wait([
         {
@@ -252,7 +252,7 @@ async function test() {
     ], 1500)
  
     //await z.sleep(100)
-    sip.call.reinvite(ic.id, {media: [{type: 'audio', attributes: ['sendonly']}]})
+    sip.call.reinvite(ic.id, {media: [{type: 'audio', fields: ['a=sendonly']}]})
 
     await z.wait([
         {

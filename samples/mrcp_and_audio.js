@@ -26,18 +26,18 @@ async function test() {
     var client_media = [
         {
             type: 'mrcp', 
-            attributes: [
-                'setup:active',
-                'connection:new',
-                'resource:speechsynth',
-                'cmid:1',
+            fields: [
+                'a=setup:active',
+                'a=connection:new',
+                'a=resource:speechsynth',
+                'a=cmid:1',
             ],
         },
         {
             type: 'audio',
-            attributes: [
-                'recvonly',
-                'mid:1',
+            fields: [
+                'a=recvonly',
+                'a=mid:1',
             ],
         },
     ]
@@ -45,17 +45,17 @@ async function test() {
     var server_media = [
         {
             type: 'mrcp', 
-            attributes: [
-                'setup:passive',
-                'connection:new',
-                'channel:32AECB234338@speechsynth',
-                'cmid:1',
+            fields: [
+                'a=setup:passive',
+                'a=connection:new',
+                'a=channel:32AECB234338@speechsynth',
+                'a=cmid:1',
             ],
         },        
         {
             type: 'audio',
-            attributes: [
-                'sendonly',
+            fields: [
+                'a=sendonly',
             ],
         },
     ]

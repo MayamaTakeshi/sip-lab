@@ -348,8 +348,8 @@ struct MediaEndpoint {
   pj_str_t transport;
   pj_str_t addr;
   int port;
-  int attr_count;
-  char *attr[MAX_ATTRS];
+  int field_count;
+  char *field[MAX_ATTRS];
 
   union {
     AudioEndpoint *audio;
@@ -5381,10 +5381,10 @@ void close_media_transport(pjmedia_transport *med_transport) {
 }
 
 bool has_attribute_mode(MediaEndpoint *me) {
-  for (int i = 0; i < me->attr_count; i++) {
-    char *val = me->attr[i];
-    if ((strcmp(val, "sendrecv") == 0) || (strcmp(val, "sendonly") == 0) ||
-        (strcmp(val, "recvonly") == 0) || (strcmp(val, "inactive") == 0)) {
+  for (int i = 0; i < me->field_count; i++) {
+    char *val = me->field[i];
+    if ((strcmp(val, "a=sendrecv") == 0) || (strcmp(val, "a=sendonly") == 0) ||
+        (strcmp(val, "a=recvonly") == 0) || (strcmp(val, "a=inactive") == 0)) {
       return true;
     }
   }
@@ -5405,27 +5405,27 @@ void remove_mode_attributes(pjmedia_sdp_media *m) {
   }
 }
 
-bool update_media_attributes(MediaEndpoint *me, pj_pool_t *pool, Value &descr) {
-  me->attr_count = 0;
+bool update_media_fields(MediaEndpoint *me, pj_pool_t *pool, Value &descr) {
+  me->field_count = 0;
 
-  if (descr.HasMember("attributes")) {
-    if (!descr["attributes"].IsArray()) {
-      set_error("update_media_attributes failed. Media param attributes must "
+  if (descr.HasMember("fields")) {
+    if (!descr["fields"].IsArray()) {
+      set_error("update_media_fields failed. Media param fields must "
                 "be array");
       return false;
     }
-    const Value &attrs = descr["attributes"];
-    for (rapidjson::SizeType i = 0; i < attrs.Size(); i++) {
-      if (!attrs[i].IsString()) {
-        set_error("Invalid attributes item at idx=%i. It must be a string", i);
+    const Value &fields = descr["fields"];
+    for (rapidjson::SizeType i = 0; i < fields.Size(); i++) {
+      if (!fields[i].IsString()) {
+        set_error("Invalid fields item at idx=%i. It must be a string", i);
         return false;
       }
-      const char *s = attrs[i].GetString();
+      const char *s = fields[i].GetString();
 
       char *val = (char *)pj_pool_alloc(pool, strlen(s) + 1);
       strcpy(val, s);
 
-      me->attr[me->attr_count++] = val;
+      me->field[me->field_count++] = val;
     }
   }
   return true;
@@ -5490,7 +5490,7 @@ bool create_media_endpoint(Call *call, Document &document, Value &descr,
   printf("create_media_endpoint call_id=%d type=%d\n", call->id,
          med_endpt->type);
 
-  if (!update_media_attributes(med_endpt, dlg->pool, descr)) {
+  if (!update_media_fields(med_endpt, dlg->pool, descr)) {
     return false;
   }
 
@@ -5614,10 +5614,20 @@ pjmedia_sdp_media *create_sdp_media(MediaEndpoint *me, pjsip_dialog *dlg) {
     assert(0);
   }
 
-  for (int i = 0; i < me->attr_count; i++) {
-    char *val = me->attr[i];
-    pjmedia_sdp_attr *attr = pjmedia_sdp_attr_create(dlg->pool, val, NULL);
-    pjmedia_sdp_media_add_attr(media, attr);
+  for (int i = 0; i < me->field_count; i++) {
+    char *val = me->field[i];
+    if(val[1] != '=') {
+      set_error("Invalid media field specification");
+      return NULL; 
+    }
+
+    if(val[0] == 'a') {
+      pjmedia_sdp_attr *attr = pjmedia_sdp_attr_create(dlg->pool, &val[2], NULL);
+      pjmedia_sdp_media_add_attr(media, attr);
+    } else {
+      set_error("unsupported media field");
+      return NULL;
+    }
   }
 
   return media;
@@ -5719,7 +5729,7 @@ bool process_media(Call *call, pjsip_dialog *dlg, Document &document) {
           true; // added elements must be set as in use
     }
 
-    if (!update_media_attributes(me, dlg->pool, descr)) {
+    if (!update_media_fields(me, dlg->pool, descr)) {
       return false;
     }
 
