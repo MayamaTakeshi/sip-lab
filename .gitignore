@@ -4,3 +4,7 @@ build
 *.so
 *.a
 pjproject
+Makefile
+*.mk
+*.Makefile
+out

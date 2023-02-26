@@ -5,18 +5,18 @@
       'type': 'none',
       'all_dependent_settings': {
           'include_dirs': [
-            "3rdParty/pjproject/pjsip/include",
-            "3rdParty/pjproject/pjlib/include",
-            "3rdParty/pjproject/pjlib-util/include",
-            "3rdParty/pjproject/pjnath/include",
-            "3rdParty/pjproject/pjmedia/include",
+            "../3rdParty/pjproject/pjsip/include",
+            "../3rdParty/pjproject/pjlib/include",
+            "../3rdParty/pjproject/pjlib-util/include",
+            "../3rdParty/pjproject/pjnath/include",
+            "../3rdParty/pjproject/pjmedia/include",
             "include",
             "src",
             "src/pjmedia/include",
             "src/pjmedia/include/pjmedia",
             "src/pjmedia/include/chainlink",	
-            "3rdParty/rapidjson/include",
-            "3rdParty/spandsp/src",
+            "../3rdParty/rapidjson/include",
+            "../3rdParty/spandsp/src",
             "<!@(node -p \"require('node-addon-api').include\")",
           ],
           'conditions': [
@@ -93,32 +93,11 @@
     },
 
     {
-      'target_name': 'addon',
-      'type': 'loadable_module', # this is default for node-gyp but gyp will complain if absent.
+      'target_name': 'research',
+      'type': 'executable',
       'dependencies': ['all-settings'],
-    
-      'actions': [
-        {
-          'action_name': 'build_deps',
-          'message': 'executing build_deps.sh',
-          'inputs': [],
-          'outputs': ['./3rdParty'],
-          'action': ['bash', './build_deps.sh'],
-        },
-      ],
-
       'sources': [
-        'src/log.cpp',
-        'src/event_templates.cpp',
-        'src/idmanager.cpp',
-        'src/sip.cpp',
-        'src/addon.cpp',
-        'src/pjmedia/src/chainlink/chainlink_dtmfdet.c',
-        'src/pjmedia/src/chainlink/chainlink_tonegen.c',
-        'src/pjmedia/src/chainlink/chainlink_wav_player.c',
-        'src/pjmedia/src/chainlink/chainlink_wav_writer.c',
-        'src/pjmedia/src/chainlink/chainlink_wire_port.c',
-        'src/pjmedia/src/chainlink/chainlink_fax.c',
+        'test.c',
       ],
     },
   ],

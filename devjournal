@@ -2159,4 +2159,25 @@ pjw_call_refer was disabled.
 
 Instead REFER will be done by pjw_call_send_request as any other in-dialog request aside from BYE and CANCEL.
 
+-------------------------
+2023/02/25 takeshi:
+
+Adding support for MRCPv2.
+
+We will need to store data till we get a complete MRCP message:
+
+We can use a simple HTTP server as basis for it:
+  https://web.archive.org/web/20140409134855/http://www.ibm.com/developerworks/systems/library/es-nweb/sidefile1.html
+  https://web.archive.org/web/20140905115151/http://www.ibm.com/developerworks/systems/library/es-nweb/
+  https://stackoverflow.com/questions/176409/build-a-simple-http-server-in-c
+
+-------------------------
+2023/02/26 takeshi:
+
+To easily test alternative addons, have modified binding.gyp to have a base project named 'all-settings' that will be used by project 'addon' and eventually by other addons.
+Ref:
+  https://stackoverflow.com/questions/31202931/reuse-build-condition-for-multiple-targets-in-binding-gyp
+
+
+
 

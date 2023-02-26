@@ -5646,6 +5646,7 @@ bool process_media(Call *call, pjsip_dialog *dlg, Document &document) {
   Document::AllocatorType &allocator = document.GetAllocator();
 
   if (!document.HasMember("media")) {
+    // no media. So create a default [{"type": "audio"}]
     Value audio(kObjectType);
     audio.AddMember("type", Value().SetString("audio"), allocator);
 

@@ -1,0 +1,74 @@
+#include <stdio.h>
+#include <pjlib.h>
+#include <pjmedia.h>
+
+
+pj_thread_desc g_main_thread_descriptor;
+pj_thread_t *g_main_thread = NULL;
+
+static pj_caching_pool cp;
+static pj_pool_t *g_pool;
+
+int main() {
+   pj_status_t status = pj_init();
+   if(status != PJ_SUCCESS) {
+    printf("pj_init failed\n");
+   }
+
+   pj_caching_pool_init(&cp, &pj_pool_factory_default_policy, 0);
+
+   g_pool = pj_pool_create(&cp.factory, "tester", 1000, 1000, NULL);
+
+   /*
+   status = pj_thread_register("main", g_main_thread_descriptor, &g_main_thread);
+   if(status != PJ_SUCCESS) {
+    printf("pj_thread_register failed\n");
+   }
+   */
+
+    const char *sdp_str =
+        "m=audio 5004 RTP/AVP 0 8\r\n"
+        "a=rtpmap:0 PCMU/8000\r\n"
+        "a=rtpmap:8 PCMA/8000\r\n"
+        "k=clear:password\r\n"
+        "b=AS:128\r\n"
+        "a=encrypt:1 AES_CM_128_HMAC_SHA1_80 inline:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\r\n";
+
+    pjmedia_sdp_session *sdp = NULL;
+    //pjmedia_sdp_attr *attr = NULL;
+
+    // Parse the SDP string
+    status = pjmedia_sdp_parse(g_pool, sdp_str, strlen(sdp_str), &sdp);
+    if(status != PJ_SUCCESS) {
+      printf("pjmedia_sdp_parse failed\n");
+      return 1;
+    }
+
+    // Check if parsing was successful
+    if (status == PJ_SUCCESS) {
+        char buf[2048];
+        int len = pjmedia_sdp_print(sdp, buf, sizeof(buf));
+        if(len < 0) {
+           printf("pjmedia_sdp_print failed\n");
+           return 1;
+        }
+        buf[len] = 0;
+        printf("sdp:\n%s\n", buf);
+
+        // Find the "a=encrypt" attribute in the media stream description
+        /*
+        attr = pjmedia_sdp_media_find_attr(media, "encrypt");
+        if (attr) {
+            // "a=encrypt" attribute found, get its value
+            const char *encrypt_value = pj_strbuf_ptr(&attr->value);
+            // Do something with the encryption information
+            // ...
+        }
+        */
+    } else {
+        printf("SDP parsing failed\n");
+        return 1;
+    }
+
+    return 0;
+}
