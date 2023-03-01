@@ -47,6 +47,16 @@ Then at node.js side we will have some code to maintain a buffer, parse the mess
     msg: SOME_MRCP_MESSAGE,
 }
 
+However, the send case is more complex as the doc says:
+
+pj_activesock_send
+data The data to be sent. This data must remain valid until the data has been sent.
+
+Let's check for hints here:
+
+https://github.com/pjsip/pjproject/blob/master/pjsip/src/pjsip/sip_transport_tcp.c
+https://github.com/pjsip/pjproject/blob/master/pjnath/src/pjnath/turn_sock.c
+
 -------------------------
 we need to clone the active local/remote media for each MediaEndpoint of type audio/video using inv->pool_prov.
 (we might use this also to update AudioEndpoint mode)
