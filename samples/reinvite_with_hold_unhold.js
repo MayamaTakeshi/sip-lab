@@ -136,6 +136,8 @@ async function test() {
             call_id: ic.id,
             msg: sip_msg({
                 $rb: '!{_}a=sendonly',
+                $rb: '!{_}a=fakeattr1:1234',
+                $rb: '!{_}a=fakeattr2: a b c',
             }),
         },
     ], 500)
