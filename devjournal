@@ -2171,6 +2171,8 @@ We can use a simple HTTP server as basis for it:
   https://web.archive.org/web/20140905115151/http://www.ibm.com/developerworks/systems/library/es-nweb/
   https://stackoverflow.com/questions/176409/build-a-simple-http-server-in-c
 
+UPDATE: no, we will not use an HTTP server. Instead we will notify tcp_data event to node.js that then will accumulate and parse the data and generate events.
+
 -------------------------
 2023/02/26 takeshi:
 
@@ -2178,6 +2180,22 @@ To easily test alternative addons, have modified binding.gyp to have a base proj
 Ref:
   https://stackoverflow.com/questions/31202931/reuse-build-condition-for-multiple-targets-in-binding-gyp
 
+-------------------------
+2023/03/14 takeshi:
 
+Regarding MRCPv2 support.
+Let's start with the receiving part of the TCP socket to generate the tcp_data event.
 
+So, when processing media, in case we are the client side, we should do nothing. But if we are the server, we should allocate a TCP socket to listen to.
+Then once the media_update happens, if the mrcp offer is accepted, the client should connect to the server.
 
+However, since a server TCP socket can receive connections from multiple clients, we should prepare it so that we only accept the first connection and close the listening TCP socket after that.
+This way we don't need to add things like connection_id to events (irrelevant for our tests). 
+Obs: we could try to test things like closing connections during a session to simulate issues but I think this is of minimal value and so I will not spend time supporting this (it could be done instead using node.js module sip-mrcp.
+
+Regarding, sending data, we must allocate memory on the dialog pool as the data must be available till the send operation completes.
+
+Implementation draft:
+  - create function create_tcp_socket("call", "mrcp|msrp|etc", **selected_port). This should return the pj_activesock created or NULL. The function should call pj_activesock_set_user_data(asock, {sock, call, proto}) so that in the callbacks, we will have a reference to the data necessary to generate the event tcp_data.
+  - when activesock accept completes, the asock should be closed (clear user_data first) and its user_data should be passed to the new asock. We also need to update the media_endpoint with reference to the new socket as we will need to close this new one.
+  - when close_media_endpoint is called, call pj_activesock_set_user_data(asock, NULL) so that the callbacks will ignore further data. Then call pj_activesock_close() and this will also close the underlying socket.

@@ -126,7 +126,7 @@ async function test() {
                   port: 9
                 },
                 remote: {
-                  port: 1000
+                  port: m.collect('mrcp_server_port'),
                 },
               },
               {
@@ -150,7 +150,7 @@ async function test() {
               {
                 type: 'mrcp',
                 local: {
-                  port: 1000
+                  port: m.collect('mrcp_server_port'),
                 },
                 remote: {
                   port: 9
@@ -212,7 +212,7 @@ async function test() {
                   port: 9
                 },
                 remote: {
-                  port: 1000
+                  port: m.collect('mrcp_server_port'),
                 }
               },
               {
@@ -236,7 +236,7 @@ async function test() {
               {
                 type: 'mrcp',
                 local: {
-                  port: 1000
+                  port: m.collect('mrcp_server_port'),
                 },
                 remote: {
                   port: 9
@@ -298,7 +298,7 @@ async function test() {
                   port: 9
                 },
                 remote: {
-                  port: 1000
+                  port: m.collect('mrcp_server_port'),
                 }
               },
               {
@@ -322,7 +322,7 @@ async function test() {
               {
                 type: 'mrcp',
                 local: {
-                  port: 1000
+                  port: m.collect('mrcp_server_port'),
                 },
                 remote: {
                   port: 9

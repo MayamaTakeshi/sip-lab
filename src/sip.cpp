@@ -332,13 +332,49 @@ struct VideoEndpoint {
   pjmedia_master_port *master_port;
 };
 
-struct MrcpEndpoint {};
+struct MrcpEndpoint {
+  pj_activesock_t *asock;
+};
 
 #define ENDPOINT_TYPE_AUDIO 1
 #define ENDPOINT_TYPE_VIDEO 2
 #define ENDPOINT_TYPE_T38 3
 #define ENDPOINT_TYPE_MRCP 4
 #define ENDPOINT_TYPE_MSRP 5
+
+int media_type_name_to_type_id(const char *type_name) {
+  if (strcmp("audio", type_name) == 0) {
+    return ENDPOINT_TYPE_AUDIO;
+  } else if (strcmp("video", type_name) == 0) {
+    return ENDPOINT_TYPE_AUDIO;
+  } else if (strcmp("t38", type_name) == 0) {
+    return ENDPOINT_TYPE_T38;
+  } else if (strcmp("mrcp", type_name) == 0) {
+    return ENDPOINT_TYPE_MRCP;
+  } else if (strcmp("msrp", type_name) == 0) {
+    return ENDPOINT_TYPE_MSRP;
+  }
+
+  return -1;
+}
+
+const char *media_type_id_to_media_type_name(int type) {
+  switch(type) {
+  case ENDPOINT_TYPE_AUDIO:
+    return "audio";
+  case ENDPOINT_TYPE_VIDEO:
+    return "video";
+  case ENDPOINT_TYPE_T38:
+    return "t38";
+  case ENDPOINT_TYPE_MRCP:
+    return "mrcp";
+  case ENDPOINT_TYPE_MSRP:
+    return "msrp";
+  default:
+    return "unknown";
+  }
+}
+
 
 #define MAX_ATTRS 32
 
@@ -388,6 +424,12 @@ struct Call {
 
   pjmedia_sdp_session *active_local_sdp;
   pjmedia_sdp_session *active_remote_sdp;
+};
+
+struct AsockUserData {
+  pjsip_endpoint *sip_endpt;
+  MediaEndpoint *media_endpt;
+  Call *call;
 };
 
 bool init_media_ports(Call *c, AudioEndpoint *ae, unsigned sampling_rate,
@@ -505,7 +547,7 @@ bool subscription_subscribe_no_headers(Subscription *s, int expires);
 bool subscription_subscribe(Subscription *s, int expires, Document &document);
 
 static pjmedia_transport *create_media_transport(const pj_str_t *addr,
-                                                 int *allocated_port);
+                                                 pj_uint16_t *allocated_port);
 void close_media_transport(pjmedia_transport *med_transport);
 pjsip_transport *create_udp_transport(pjsip_endpoint *sip_endpt,
                                       pj_str_t *ipaddr, int *allocated_port);
@@ -787,11 +829,19 @@ static pj_bool_t on_data_read(pj_activesock_t *asock, void *data,
                               pj_size_t size, pj_status_t status,
                               pj_size_t *remainder) {
   printf("on_data_read\n");
+  AsockUserData *ud = (AsockUserData*)pj_activesock_get_user_data(asock);
+  if(!ud) return PJ_FALSE;
+
   printf("%.*s\n", size, data);
   if (size == 0) {
     // TODO: destroy the activesock.
     return PJ_FALSE;
   }
+
+  char evt[65536];
+  make_evt_tcp_data(evt, sizeof(evt), ud->call->id, media_type_id_to_media_type_name(ud->media_endpt->type), (char*)data, size);
+  dispatch_event(evt);
+  
   return PJ_TRUE;
 }
 
@@ -808,7 +858,10 @@ static pj_bool_t on_accept_complete(pj_activesock_t *asock, pj_sock_t newsock,
 
   pj_activesock_t *new_asock = NULL;
 
-  pj_ioqueue_t *ioqueue = (pj_ioqueue_t *)pj_activesock_get_user_data(asock);
+  AsockUserData *ud = (AsockUserData*)pj_activesock_get_user_data(asock);
+  if(!ud) return PJ_FALSE;
+
+  pj_ioqueue_t *ioqueue = pjsip_endpt_get_ioqueue(ud->sip_endpt);
 
   pj_status_t rc =
       pj_activesock_create(g_pool, newsock, pj_SOCK_STREAM(), NULL, ioqueue,
@@ -818,19 +871,31 @@ static pj_bool_t on_accept_complete(pj_activesock_t *asock, pj_sock_t newsock,
     return PJ_FALSE;
   }
 
-  rc = pj_activesock_set_user_data(new_asock, ioqueue);
+  rc = pj_activesock_set_user_data(new_asock, ud);
   if (rc != PJ_SUCCESS) {
     printf("pj_activesock_set_user_data failed %d\n", rc);
     return PJ_FALSE;
   }
 
-  rc = pj_activesock_start_read(new_asock, g_pool, 1000, 0);
+  rc = pj_activesock_start_read(new_asock, ud->call->inv->pool, 1000, 0);
   if (rc != PJ_SUCCESS) {
     printf("pj_activesock_start_read() failed with %d\n", rc);
     return PJ_FALSE;
   }
   printf("pj_activesock_start_read() success\n");
-  return PJ_TRUE;
+
+  // Now replace the asock in the media_endpoint
+  if(ud->media_endpt->type == ENDPOINT_TYPE_MRCP) {
+    ud->media_endpt->endpoint.mrcp->asock = new_asock;  
+  }
+
+  // Now close the server asock
+  rc = pj_activesock_close(asock);
+  if (rc != PJ_SUCCESS) {
+    printf("pj_activesock_close failed %d\n", rc);
+  }
+
+  return PJ_FALSE; // we don't want to accept any more connections.
 }
 
 static pj_bool_t on_connect_complete(pj_activesock_t *asock,
@@ -839,9 +904,11 @@ static pj_bool_t on_connect_complete(pj_activesock_t *asock,
   return PJ_TRUE;
 }
 
-static int create_tcp_socket(int port, pj_pool_t *pool) {
+static pj_activesock_t* create_tcp_socket(pjsip_endpoint *sip_endpt, pj_str_t *ipaddr, pj_uint16_t  *out_port, MediaEndpoint *media_endpt, Call *call) {
   pj_ioqueue_key_t **skey;
-  pj_ioqueue_t *ioqueue = pjsip_endpt_get_ioqueue(g_sip_endpt);
+  pj_ioqueue_t *ioqueue = pjsip_endpt_get_ioqueue(sip_endpt);
+
+  pj_pool_t *pool = call->inv->pool; 
 
   skey = (pj_ioqueue_key_t **)pj_pool_alloc(pool, sizeof(pj_ioqueue_key_t *));
   pj_sock_t *sock = (pj_sock_t *)pj_pool_alloc(pool, sizeof(pj_sock_t));
@@ -852,54 +919,68 @@ static int create_tcp_socket(int port, pj_pool_t *pool) {
 
   pj_activesock_t *asock = NULL;
 
+  unsigned allocated_port = 0;
+
+  AsockUserData *ud = NULL;
+
   rc = pj_sock_socket(pj_AF_INET(), pj_SOCK_STREAM(), 0, sock);
   if (rc != PJ_SUCCESS || *sock == PJ_INVALID_SOCKET) {
-    printf("....unable to create socket, rc=%d\n", rc);
+    set_error("....unable to create socket, rc=%d\n", rc);
     goto on_error;
   }
 
+  pj_sockaddr_in_init(&addr, ipaddr, 0);
+
   // Bind server socket.
-  pj_sockaddr_in_init(&addr, 0, port);
-  if ((rc = pj_sock_bind(*sock, &addr, sizeof(addr))) != 0) {
-    printf("...bind error %d\n", rc);
+  for (int port=10000 ; port<65535 ; port++) {
+	pj_sockaddr_in_set_port(&addr, port);
+	rc = pj_sock_bind(*sock, &addr, sizeof(addr));
+	if (rc == PJ_SUCCESS) {
+        allocated_port = port;
+	    break;
+    }
+  }
+
+  if(allocated_port == 0) {
+    set_error("...ERROR could not bind to port\n");
     goto on_error;
   }
 
   // Server socket listen().
   if (pj_sock_listen(*sock, 5)) {
-    printf("...ERROR in pj_sock_listen() %d\n", rc);
+    set_error("...ERROR in pj_sock_listen() %d\n", rc);
     goto on_error;
   }
-
-  // We also need to follow
-  // https://www.pjsip.org/pjlib/docs/html/group__PJ__ACTIVESOCK.htm
-  // https://cpp.hotexamples.com/examples/-/-/pj_sockaddr_in_init/cpp-pj_sockaddr_in_init-function-examples.html
 
   rc = pj_activesock_create(pool, *sock, pj_SOCK_STREAM(), NULL, ioqueue,
                             &activesock_cb, NULL, &asock);
   if (rc != PJ_SUCCESS) {
-    printf("pj_activesock_create failed %d\n", rc);
+    set_error("pj_activesock_create failed %d\n", rc);
     goto on_error;
   }
 
-  rc = pj_activesock_set_user_data(asock, ioqueue);
+  ud = (AsockUserData*)pj_pool_alloc(pool, sizeof(AsockUserData));
+  ud->sip_endpt = sip_endpt;
+  ud->media_endpt = media_endpt;
+  ud->call = call;
+
+  rc = pj_activesock_set_user_data(asock, ud);
   if (rc != PJ_SUCCESS) {
-    printf("pj_activesock_set_user_data failed %d\n", rc);
+    set_error("pj_activesock_set_user_data failed %d\n", rc);
     goto on_error;
   }
 
   rc = pj_activesock_start_accept(asock, pool);
   if (rc != PJ_SUCCESS) {
-    printf("pj_activesock_start_accept failed %d\n", rc);
+    set_error("pj_activesock_start_accept failed %d\n", rc);
     goto on_error;
   }
 
-  printf("create_tcp_socket success\n");
-  return 0;
+  *out_port = allocated_port;
+  return asock;
 
 on_error:
-  printf("create_tcp_socket failure\n");
-  return -1;
+  return 0;
 }
 
 int __pjw_init() {
@@ -1120,8 +1201,6 @@ int __pjw_init() {
     addon_log(L_DBG, "start_digit_buffer_thread() failed\n");
     return 1;
   }
-
-  create_tcp_socket(9000, g_pool);
 
   return 0;
 }
@@ -4379,7 +4458,7 @@ static void on_forked(pjsip_inv_session *inv, pjsip_event *e) {
 }
 
 static pjmedia_transport *create_media_transport(const pj_str_t *addr,
-                                                 int *allocated_port) {
+                                                 pj_uint16_t *allocated_port) {
   pjmedia_transport *med_transport;
   pj_status_t status;
   for (int i = 0; i < 1000; ++i) {
@@ -5446,7 +5525,7 @@ bool create_media_endpoint(Call *call, Document &document, Value &descr,
   const pj_str_t str_addr = pj_str(address);
 
   if (strcmp("audio", type) == 0) {
-    int allocated_port;
+    pj_uint16_t allocated_port;
     pjmedia_transport *med_transport =
         create_media_transport(&str_addr, &allocated_port);
 
@@ -5466,14 +5545,19 @@ bool create_media_endpoint(Call *call, Document &document, Value &descr,
     med_endpt->port = allocated_port;
     med_endpt->endpoint.audio = audio_endpt;
   } else if (strcmp("mrcp", type) == 0) {
-    MrcpEndpoint *mrcp_endpt =
-        (MrcpEndpoint *)pj_pool_zalloc(dlg->pool, sizeof(MrcpEndpoint));
-    int allocated_port;
+    MrcpEndpoint *mrcp_endpt = (MrcpEndpoint *)pj_pool_zalloc(dlg->pool, sizeof(MrcpEndpoint));
+    pj_uint16_t allocated_port;
+    pj_activesock_t *asock = NULL;
     if (call->outgoing) {
       allocated_port = 9; // client must use port 9
     } else {
-      // TODO: create tcp listening socket
-      allocated_port = 1000;
+      pj_str_t ipaddr = pj_str(address);
+      asock = create_tcp_socket(g_sip_endpt, &ipaddr, &allocated_port, med_endpt, call);
+      if(!asock) {
+        set_error("create_media_transport MrcpEndpoint failed");
+        return false;
+      }
+      mrcp_endpt->asock = asock;
     }
 
     med_endpt->type = ENDPOINT_TYPE_MRCP;
@@ -5481,7 +5565,7 @@ bool create_media_endpoint(Call *call, Document &document, Value &descr,
     pj_strdup(dlg->pool, &med_endpt->addr, &str_addr);
     pj_strdup2(dlg->pool, &med_endpt->transport, "TCP/MRCPv2");
     med_endpt->port = allocated_port;
-    med_endpt->endpoint.mrcp = mrcp_endpt;
+    med_endpt->endpoint.mrcp= mrcp_endpt;
   } else {
     // for all other cases, med_endpt->type will be zero, so wil not be used.
   }
@@ -5495,22 +5579,6 @@ bool create_media_endpoint(Call *call, Document &document, Value &descr,
   }
 
   return true;
-}
-
-int media_type_name_to_type_id(const char *type_name) {
-  if (strcmp("audio", type_name) == 0) {
-    return ENDPOINT_TYPE_AUDIO;
-  } else if (strcmp("video", type_name) == 0) {
-    return ENDPOINT_TYPE_AUDIO;
-  } else if (strcmp("t38", type_name) == 0) {
-    return ENDPOINT_TYPE_T38;
-  } else if (strcmp("mrcp", type_name) == 0) {
-    return ENDPOINT_TYPE_MRCP;
-  } else if (strcmp("msrp", type_name) == 0) {
-    return ENDPOINT_TYPE_MSRP;
-  }
-
-  return -1;
 }
 
 MediaEndpoint *find_media_by_json_descr(Call *call, Value &descr,
@@ -5763,6 +5831,22 @@ void close_media_endpoint(MediaEndpoint *me) {
   printf("close_media_endpoint %x\n", me);
   if (ENDPOINT_TYPE_AUDIO == me->type) {
     close_media_transport(me->endpoint.audio->med_transport);
+  } else if (ENDPOINT_TYPE_MRCP == me->type) {
+    if(me->endpoint.mrcp->asock) {
+      pj_activesock_t *asock = me->endpoint.mrcp->asock;
+      pj_status_t status;
+
+      status = pj_activesock_set_user_data(asock, NULL);
+
+      // This is critical so we will force a crash otherwise an activesock callback might access an invalid pointer
+      assert(status == PJ_SUCCESS);
+
+      status = pj_activesock_close(me->endpoint.mrcp->asock);
+      if(status != PJ_SUCCESS) {
+        //Failed but there is nothing to do (but no harm)
+        printf("pj_activesock_close failed\n");
+      }
+    }
   }
 }
 

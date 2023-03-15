@@ -34,4 +34,6 @@ int make_evt_registration_status(char *dest, int size, long account_id,
 
 int make_evt_fax_result(char *dest, int size, long call_id, int result);
 
+int make_evt_tcp_data(char *dest, int size, long call_id, const char *protocol, char *data, int data_len);
+
 #endif
