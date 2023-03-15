@@ -70,6 +70,8 @@ addon.call = {
   //refer: (c_id, params) => { return addon.call_refer(c_id, JSON.stringify(params)) },
   get_info: addon.call_get_info,
   gen_string_replaces: addon.call_gen_string_replaces,
+
+  send_mrcp_msg: (c_id, params) => { return addon.call_send_tcp_msg(c_id, JSON.stringify(params ? params : {})) },
 }
 
 addon.subscriber = {

@@ -66,6 +66,8 @@ int pjw_call_get_info(long call_id, const char *required_info, char *out_info);
 
 int pjw_call_gen_string_replaces(long call_id, char *out_replaces);
 
+int pjw_call_send_tcp_msg(long call_id, const char *json);
+
 int pjw_packetdump_start(const char *dev, const char *file);
 
 int pjw_packetdump_stop();

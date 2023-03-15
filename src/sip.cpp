@@ -4046,6 +4046,32 @@ void gen_media_json(char *dest, int len, Call *call,
   p += sprintf(p, "]");
 }
 
+bool start_tcp_media(Call *call, MediaEndpoint *me,
+                          const pjmedia_sdp_session *local_sdp,
+                          const pjmedia_sdp_session *remote_sdp, int idx) {
+  char evt[4096];
+  pjmedia_stream_info stream_info;
+
+  MrcpEndpoint *e = (MrcpEndpoint *)me->endpoint.mrcp;
+
+  pj_status_t status;
+
+  status =
+      pjmedia_stream_info_from_sdp(&stream_info, call->inv->dlg->pool,
+                                   g_med_endpt, local_sdp, remote_sdp, idx);
+  if (status != PJ_SUCCESS) {
+    printf("local  media_count=%d\n", local_sdp->media_count);
+    printf("remote media_count=%d\n", remote_sdp->media_count);
+    printf("pjmedia_stream_info_from_sdp failed idx=%d\n", idx);
+    make_evt_media_update(evt, sizeof(evt), call->id,
+                          "setup_failed (pjmedia_stream_info_from_sdp failed)",
+                          "");
+    dispatch_event(evt);
+    return false;
+  }
+}
+
+
 bool restart_media_stream(Call *call, MediaEndpoint *me,
                           const pjmedia_sdp_session *local_sdp,
                           const pjmedia_sdp_session *remote_sdp, int idx) {
@@ -4277,18 +4303,18 @@ static void on_media_update(pjsip_inv_session *inv, pj_status_t status) {
     MediaEndpoint *me = active_media[i];
     call->media[call->media_count++] = me;
 
-    if (me->type != ENDPOINT_TYPE_AUDIO) {
-      printf("not audio. skipping\n");
-      continue;
-    } else {
-      printf("type=%d: will restart_media_stream\n", me->type);
-    }
-
     pjmedia_sdp_media *dummy;
     int idx = find_sdp_media_by_media_endpt(local_sdp, &dummy, me);
     printf("idx=%d\n", idx);
-    if (!restart_media_stream(call, me, local_sdp, remote_sdp, idx)) {
-      return;
+
+    if (me->type == ENDPOINT_TYPE_AUDIO) {
+      if (!restart_media_stream(call, me, local_sdp, remote_sdp, idx)) {
+        return;
+      }
+    } else if(me->type == ENDPOINT_TYPE_MRCP) {
+      if(call->outgoing) {
+        start_tcp_media(call, me, local_sdp, remote_sdp, idx);
+      }
     }
   }
 
@@ -7297,6 +7323,127 @@ out:
     return -1;
   }
   strcpy(out_replaces, buf);
+  return 0;
+}
+
+pj_status_t tcp_endpoint_send_msg(Call *call, MediaEndpoint *me, char *msg, pj_ssize_t size) {
+  pj_status_t status;
+  pj_activesock_t *asock = NULL;
+
+  if (ENDPOINT_TYPE_MRCP == me->type) {
+    MrcpEndpoint *e = (MrcpEndpoint*)me->endpoint.mrcp;
+    asock = e->asock;
+  } else {
+    set_error("cannot send tcp msg. invalid media");
+    return -1;
+  }
+
+  if(asock) {
+    pj_ioqueue_op_key_t *send_key;
+    send_key = (pj_ioqueue_op_key_t*)pj_pool_alloc(call->inv->pool, sizeof(pj_ioqueue_op_key_t*));
+    char *data = (char*)pj_pool_alloc(call->inv->pool, size);
+    status = pj_activesock_send(asock, send_key, data, &size, NULL); 
+    if (status != PJ_SUCCESS) {
+      return status;
+    }
+    return PJ_SUCCESS;
+  }
+
+  set_error("asock not ready");
+  return -1;
+}
+
+
+pj_status_t call_send_tcp_msg(Call *call, char *msg, pj_ssize_t size) {
+  addon_log(L_DBG, "call_send_tcp_msg=%d\n",
+            call->media_count);
+  pj_status_t status;
+  for (int i = 0; i < call->media_count; i++) {
+    MediaEndpoint *me = (MediaEndpoint *)call->media[i];
+    pj_activesock_t *asock = NULL;
+    if (ENDPOINT_TYPE_MRCP == me->type) {
+      status = tcp_endpoint_send_msg(call, me, msg, size);
+      if(status != PJ_SUCCESS) {
+        return status;
+      }
+    }
+  }
+
+  return PJ_SUCCESS;
+}
+
+int pjw_call_send_tcp_msg(long call_id, const char *json) {
+  PJW_LOCK();
+  clear_error();
+
+  Call *call;
+
+  pj_status_t status;
+
+  long val;
+
+  MediaEndpoint *me;
+  MrcpEndpoint *mrcp_endpt;
+  int res;
+
+  unsigned media_id;
+
+  char buffer[MAX_JSON_INPUT];
+
+  const char *valid_params[] = {"msg", "media_id", ""};
+
+  char *msg;
+  pj_ssize_t size;
+
+  Document document;
+
+  if (!g_call_ids.get(call_id, val)) {
+    set_error("Invalid call_id");
+    goto out;
+  }
+  call = (Call *)val;
+
+  if (!parse_json(document, json, buffer, MAX_JSON_INPUT)) {
+    goto out;
+  }
+
+  if (json_get_string_param(document, "msg", false, &msg) <= 0) {
+    goto out;
+  }
+  size = strlen(msg);
+
+  res = json_get_uint_param(document, "media_id", true, &media_id);
+  if (res <= 0) {
+    goto out;
+  }
+
+  if (NOT_FOUND_OPTIONAL == res) {
+    // Send msg to all TCP endpoints (MRCP, etc)
+    status = call_send_tcp_msg(call, msg, size);
+    if (status != PJ_SUCCESS) {
+      goto out;
+    }
+  } else {
+    // Send msg to specified media_id
+
+    if (media_id >= call->media_count) {
+      set_error("invalid media_id");
+      goto out;
+    }
+
+    me = (MediaEndpoint *)call->media[media_id];
+    status = tcp_endpoint_send_msg(call, me, msg, size);
+    if (status != PJ_SUCCESS) {
+      goto out;
+    }
+  }
+
+out:
+  PJW_UNLOCK();
+  if (pjw_errorstring[0]) {
+    return -1;
+  }
+
   return 0;
 }
 
