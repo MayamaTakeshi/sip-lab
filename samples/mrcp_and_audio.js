@@ -3,6 +3,8 @@ var Zeq = require('@mayama/zeq')
 var z = new Zeq()
 var m = require('data-matching')
 var sip_msg = require('sip-matching')
+var mrcp = require('mrcp')
+var mrcp_msg = require('mrcp-matching')
 
 async function test() {
     sip.set_log_level(9)
@@ -168,6 +170,64 @@ async function test() {
                 }
               }
             ],
+        },
+    ], 1000)
+
+    var request_id = 1;
+    var msg = mrcp.builder.build_request('SPEAK', request_id, {'content-type': 'application/xml'}, "<root>test</root>")
+
+    sip.call.send_mrcp_msg(oc.id, {msg})
+
+    await z.wait([
+        {
+            event: 'mrcp_msg',
+            call_id: ic.id,
+            msg: mrcp_msg({
+                type: 'request',
+                version: '2.0',
+                method: 'SPEAK',
+                request_id: 1,
+                headers: {
+                    'content-type': 'application/xml',
+                },
+                body: '<root>test</root>',
+            }),
+        },
+    ], 1000)
+
+    msg = mrcp.builder.build_response(request_id, 200, 'IN-PROGRESS')
+
+    sip.call.send_mrcp_msg(ic.id, {msg})
+
+    await z.wait([
+        {
+            event: 'mrcp_msg',
+            call_id: oc.id,
+            msg: mrcp_msg({
+                type: 'response',
+                version: '2.0',
+                request_id: 1,
+                status_code: 200,
+                request_state: 'IN-PROGRESS',
+            }),
+        },
+    ], 1000)
+
+    msg = mrcp.builder.build_event('SPEAK-COMPLETE', request_id, 'COMPLETE')
+
+    sip.call.send_mrcp_msg(ic.id, {msg})
+
+    await z.wait([
+        {
+            event: 'mrcp_msg',
+            call_id: oc.id,
+            msg: mrcp_msg({
+                type: 'event',
+                version: '2.0',
+                request_id: 1,
+                event_name: 'SPEAK-COMPLETE',
+                request_state: 'COMPLETE',
+            }),
         },
     ], 1000)
 

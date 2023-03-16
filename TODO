@@ -159,3 +159,15 @@ Check samples/options.js and samples/register_subscribe.js
 
 I tried to check if on_rx_response was called for them but no, it didn't happen (not even for the final 200 response).
 
+-------------------------
+Add suport for TLS media.
+
+It seems this is similar to activesock as there are:
+  pj_ssl_sock_start_accept
+  pj_ssl_sock_start_connect
+  pj_ssl_sock_start_read
+  https://www.pjsip.org/pjlib/docs/html/group__PJ__SSL__SOCK.htm#gac6d1b65855cfff8ce1e36f2312c17d29
+and their callbacks:
+  https://www.pjsip.org/pjlib/docs/html/structpj__ssl__sock__cb.htm
+
+

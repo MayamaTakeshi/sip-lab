@@ -104,8 +104,8 @@ int make_evt_fax_result(char *dest, int size, long call_id, int result) {
       result);
 }
 
-int make_evt_tcp_data(char *dest, int size, long call_id, const char *protocol, char *data, int data_len) {
+int make_evt_tcp_msg(char *dest, int size, long call_id, const char *protocol, char *data, int data_len) {
   return snprintf(
       dest, size,
-      "{\"event\": \"tcp_data\", \"call_id\": %ld, \"protocol\": \"%s\"}\n%.*s", call_id, protocol, data_len, data);
+      "{\"event\": \"%s_msg\", \"call_id\": %ld}\n%.*s", protocol, call_id, data_len, data);
 }

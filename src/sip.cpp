@@ -426,10 +426,15 @@ struct Call {
   pjmedia_sdp_session *active_remote_sdp;
 };
 
+#define MAX_TCP_DATA 4096
+
 struct AsockUserData {
+  pj_sock_t sock;
   pjsip_endpoint *sip_endpt;
   MediaEndpoint *media_endpt;
   Call *call;
+  char buf[MAX_TCP_DATA];
+  char len;
 };
 
 bool init_media_ports(Call *c, AudioEndpoint *ae, unsigned sampling_rate,
@@ -838,9 +843,51 @@ static pj_bool_t on_data_read(pj_activesock_t *asock, void *data,
     return PJ_FALSE;
   }
 
-  char evt[65536];
-  make_evt_tcp_data(evt, sizeof(evt), ud->call->id, media_type_id_to_media_type_name(ud->media_endpt->type), (char*)data, size);
+  assert(size + ud->len < MAX_TCP_DATA);
+
+  memcpy(&ud->buf[ud->len], data, size);
+  ud->len = size + ud->len;
+  ud->buf[ud->len] = '\0';
+  
+  char *sep = strstr(ud->buf, "\r\n\r\n");
+  if(!sep) {
+    // msg incomplete
+    return PJ_TRUE;
+  }
+
+  int msg_size;
+
+  char *hdr_cl = strcasestr(ud->buf, "content-length:");
+  if(!hdr_cl) {
+    // no body, only headers
+    msg_size = sep + 4 - ud->buf;
+  } else {
+    assert(hdr_cl < sep);
+    char *end_of_line = strstr(hdr_cl, "\r\n");
+
+    char num_str[8];
+    char *start = hdr_cl+16;
+    int len = end_of_line - start;
+    strncpy(num_str, start, len);
+    num_str[len] = '\0';
+    int body_len = atoi(num_str);
+
+    if(sep+4+body_len < ud->buf+ud->len) {
+      // msg incomplete
+      return PJ_TRUE;
+    }
+
+    msg_size = sep+4+body_len - ud->buf;
+  }
+
+  char evt[4096];
+  make_evt_tcp_msg(evt, sizeof(evt), ud->call->id, media_type_id_to_media_type_name(ud->media_endpt->type), (char*)ud->buf, msg_size);
   dispatch_event(evt);
+
+  int remain_len = ud->len - msg_size;
+  memcpy(ud->buf, &ud->buf[msg_size], remain_len);
+  ud->len = remain_len;
+  ud->buf[ud->len] = '\0';
   
   return PJ_TRUE;
 }
@@ -871,6 +918,8 @@ static pj_bool_t on_accept_complete(pj_activesock_t *asock, pj_sock_t newsock,
     return PJ_FALSE;
   }
 
+  ud->sock = newsock;
+
   rc = pj_activesock_set_user_data(new_asock, ud);
   if (rc != PJ_SUCCESS) {
     printf("pj_activesock_set_user_data failed %d\n", rc);
@@ -895,12 +944,45 @@ static pj_bool_t on_accept_complete(pj_activesock_t *asock, pj_sock_t newsock,
     printf("pj_activesock_close failed %d\n", rc);
   }
 
+  printf("on_accept_complete finished with success\n");
   return PJ_FALSE; // we don't want to accept any more connections.
 }
 
 static pj_bool_t on_connect_complete(pj_activesock_t *asock,
                                      pj_status_t status) {
   printf("on_connect_complete\n");
+
+  AsockUserData *ud = (AsockUserData*)pj_activesock_get_user_data(asock);
+  if(!ud) return PJ_FALSE;
+
+  pj_sockaddr addr;
+  int salen = sizeof(salen);
+
+  pj_status_t s = pj_sock_getsockname(ud->sock, &addr, &salen);
+  if (s != PJ_SUCCESS) {
+    printf("on_connect_complete pj_sock_getsockname failed %d\n", s);
+  } else {
+    char buf[1024];
+    pj_sockaddr_print(&addr, buf, sizeof(buf), 1);
+    printf("on_connect_complete local: %s\n", buf);
+  }
+
+  s =  pj_sock_getpeername(ud->sock, &addr, &salen);
+  if (s != PJ_SUCCESS) {
+    printf("on_connect_complete pj_sock_getpeername failed %d\n", s);
+  } else {
+    char buf[1024];
+    pj_sockaddr_print(&addr, buf, sizeof(buf), 1);
+    printf("on_connect_complete remote: %s\n", buf);
+  }
+
+  s = pj_activesock_start_read(asock, ud->call->inv->pool, 1000, 0);
+  if (s != PJ_SUCCESS) {
+    printf("pj_activesock_start_read() failed with %d\n", s);
+    return PJ_FALSE;
+  }
+  printf("pj_activesock_start_read() success\n");
+
   return PJ_TRUE;
 }
 
@@ -959,7 +1041,8 @@ static pj_activesock_t* create_tcp_socket(pjsip_endpoint *sip_endpt, pj_str_t *i
     goto on_error;
   }
 
-  ud = (AsockUserData*)pj_pool_alloc(pool, sizeof(AsockUserData));
+  ud = (AsockUserData*)pj_pool_zalloc(pool, sizeof(AsockUserData));
+  ud->sock = *sock;
   ud->sip_endpt = sip_endpt;
   ud->media_endpt = media_endpt;
   ud->call = call;
@@ -4050,25 +4133,83 @@ bool start_tcp_media(Call *call, MediaEndpoint *me,
                           const pjmedia_sdp_session *local_sdp,
                           const pjmedia_sdp_session *remote_sdp, int idx) {
   char evt[4096];
-  pjmedia_stream_info stream_info;
+  pj_status_t status;
+
+  pj_pool_t *pool = call->inv->pool; 
 
   MrcpEndpoint *e = (MrcpEndpoint *)me->endpoint.mrcp;
 
-  pj_status_t status;
+  if(e->asock) {
+     printf("start_tcp_media asock already set\n");
+     return true;
+  }
 
-  status =
-      pjmedia_stream_info_from_sdp(&stream_info, call->inv->dlg->pool,
-                                   g_med_endpt, local_sdp, remote_sdp, idx);
-  if (status != PJ_SUCCESS) {
-    printf("local  media_count=%d\n", local_sdp->media_count);
-    printf("remote media_count=%d\n", remote_sdp->media_count);
-    printf("pjmedia_stream_info_from_sdp failed idx=%d\n", idx);
-    make_evt_media_update(evt, sizeof(evt), call->id,
-                          "setup_failed (pjmedia_stream_info_from_sdp failed)",
-                          "");
+  pjmedia_sdp_media *remote_media = remote_sdp->media[idx];
+  pj_str_t *remote_addr;
+  if(remote_media->conn) {
+    remote_addr = &remote_media->conn->addr;
+  } else {
+    remote_addr = &remote_sdp->conn->addr;
+  }
+  printf("start_tcp_media remote port: %d, remote addr: %.*s\n", remote_media->desc.port, remote_addr->slen, remote_addr->ptr);
+
+  pj_sock_t *sock = (pj_sock_t *)pj_pool_alloc(pool, sizeof(pj_sock_t));
+
+  pj_activesock_t *asock = NULL;
+
+  unsigned allocated_port = 0;
+
+  AsockUserData *ud = NULL;
+
+  status = pj_sock_socket(pj_AF_INET(), pj_SOCK_STREAM(), 0, sock);
+  if (status != PJ_SUCCESS || *sock == PJ_INVALID_SOCKET) {
+    make_evt_media_update(evt, sizeof(evt), call->id, "unable to create tcp socket)", "");
     dispatch_event(evt);
     return false;
   }
+
+  pj_ioqueue_t *ioqueue = pjsip_endpt_get_ioqueue(g_sip_endpt);
+
+  status = pj_activesock_create(pool, *sock, pj_SOCK_STREAM(), NULL, ioqueue, &activesock_cb, NULL, &asock);
+  if (status != PJ_SUCCESS) {
+    make_evt_media_update(evt, sizeof(evt), call->id, "pj_activesock_create failed", "");
+    dispatch_event(evt);
+    return false;
+  }
+
+  ud = (AsockUserData*)pj_pool_zalloc(pool, sizeof(AsockUserData));
+  ud->sock = *sock;
+  ud->sip_endpt = g_sip_endpt;
+  ud->media_endpt = me;
+  ud->call = call;
+
+  status = pj_activesock_set_user_data(asock, ud);
+  if (status != PJ_SUCCESS) {
+    make_evt_media_update(evt, sizeof(evt), call->id, "pj_activesock_set_user_data", "");
+    dispatch_event(evt);
+    return false;
+  }
+
+  pj_sockaddr remaddr;
+
+  status = pj_sockaddr_init(pj_AF_INET(), &remaddr, remote_addr, remote_media->desc.port);
+  if (status != PJ_SUCCESS) {
+    make_evt_media_update(evt, sizeof(evt), call->id, "pj_sockaddr_init failed", "");
+    dispatch_event(evt);
+    return false;
+  }
+
+  status = pj_activesock_start_connect(asock, pool, &remaddr, sizeof(remaddr));
+  if (status != PJ_SUCCESS && status != PJ_EPENDING) {
+    make_evt_media_update(evt, sizeof(evt), call->id, "pj_activesock_start_connect failed", "");
+    dispatch_event(evt);
+    return false;
+  }
+
+  e->asock = asock;
+  printf("start_tcp_media asock set\n");
+
+  return true;
 }
 
 
@@ -4313,7 +4454,9 @@ static void on_media_update(pjsip_inv_session *inv, pj_status_t status) {
       }
     } else if(me->type == ENDPOINT_TYPE_MRCP) {
       if(call->outgoing) {
-        start_tcp_media(call, me, local_sdp, remote_sdp, idx);
+        if(!start_tcp_media(call, me, local_sdp, remote_sdp, idx)) {
+          return;
+        }
       }
     }
   }
@@ -7341,11 +7484,13 @@ pj_status_t tcp_endpoint_send_msg(Call *call, MediaEndpoint *me, char *msg, pj_s
   if(asock) {
     pj_ioqueue_op_key_t *send_key;
     send_key = (pj_ioqueue_op_key_t*)pj_pool_alloc(call->inv->pool, sizeof(pj_ioqueue_op_key_t*));
-    char *data = (char*)pj_pool_alloc(call->inv->pool, size);
+    char *data = (char*)pj_pool_alloc(call->inv->pool, size+1);
+    strncpy(data, msg, size);
     status = pj_activesock_send(asock, send_key, data, &size, NULL); 
     if (status != PJ_SUCCESS) {
       return status;
     }
+    printf("tcp_endpoint_send_msg success for call_id=%d\n", call->id);
     return PJ_SUCCESS;
   }
 
