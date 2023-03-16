@@ -5,6 +5,7 @@ var m = require('data-matching')
 var sip_msg = require('sip-matching')
 var mrcp = require('mrcp')
 var mrcp_msg = require('mrcp-matching')
+var sdp_msg = require('sdp-matching')
 
 async function test() {
     sip.set_log_level(9)
@@ -114,7 +115,9 @@ async function test() {
                 $fd: 'test.com',
                 $tU: 'bob',
                 '$hdr(content-type)': 'application/sdp',
-                $rb: '!{_}a=sendonly',
+                $rb: sdp_msg({
+                    '$.media[?(@.desc.type=="application")].attrs.channel': [m.collect('mrcp_channel')],
+                }),
             }),
         },
         {
@@ -173,8 +176,9 @@ async function test() {
         },
     ], 1000)
 
+    var mrcp_channel = z.store.mrcp_channel
     var request_id = 1;
-    var msg = mrcp.builder.build_request('SPEAK', request_id, {'content-type': 'application/xml'}, "<root>test</root>")
+    var msg = mrcp.builder.build_request('SPEAK', request_id, {'channel-identifier': mrcp_channel, 'content-type': 'application/xml'}, "<root>test</root>")
 
     sip.call.send_mrcp_msg(oc.id, {msg})
 
@@ -195,7 +199,7 @@ async function test() {
         },
     ], 1000)
 
-    msg = mrcp.builder.build_response(request_id, 200, 'IN-PROGRESS')
+    msg = mrcp.builder.build_response(request_id, 200, 'IN-PROGRESS', {'channel-identifier': mrcp_channel})
 
     sip.call.send_mrcp_msg(ic.id, {msg})
 
@@ -213,7 +217,7 @@ async function test() {
         },
     ], 1000)
 
-    msg = mrcp.builder.build_event('SPEAK-COMPLETE', request_id, 'COMPLETE')
+    msg = mrcp.builder.build_event('SPEAK-COMPLETE', request_id, 'COMPLETE', {'channel-identifier': mrcp_channel})
 
     sip.call.send_mrcp_msg(ic.id, {msg})
 
