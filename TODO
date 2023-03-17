@@ -4,60 +4,6 @@ Add here, any pending tasks.
 Then, when they are finished, move them to devjournal so that they get registered.
 
 
--------------------------
-Let's replace media attributes array with a fields array.
-This is to permit for the coder to freely specify any fields (not just attributes a=) like c=, b=, k=, r=, z= lines.
-Also this will make it easy to later permit to specify session fields like this:
-{
-    "fields": [
-        "v=0",
-        "o=user1 123456 789012 IN IP4 192.0.2.1",
-        "s=SIP IMPS session",
-        "c=IN IP4 192.0.2.1",
-        "t=0 0"
-    ],
-    "media": [
-        {
-            "type": "audio",
-            "fields": [
-                "m=message 5060 SIP/2.0",
-                "a=accept-types:text/plain"
-            ]
-        }
-    ]
-}
-
-Obs: 
-  - however, I'm thinking in allowing to allow to pass an SDP string (as full SDP or SDP per media) that would be parsed and converted to MediaEndpoints.
-  - each media could specify if sip-lab should create actual endpoints our leave them to be created by the script.
-
--------------------------
-To implement support for media using TCP/TLS we will create generic code that will simply notify node.js when TCP data is received using event 'tcp_data' like this:
-
-{
-	event: 'tcp_data',
-	protocol: 'mrcp|msrp|etc',
-	call_id: 0,
-}
-
-Then at node.js side we will have some code to maintain a buffer, parse the messages and generate events like:
-{
-    event: 'mrcp_request|mrcp_response|mrcp_event',
-    call_id: 0,
-    msg: SOME_MRCP_MESSAGE,
-}
-
-However, the send case is more complex as the doc says:
-
-pj_activesock_send
-data The data to be sent. This data must remain valid until the data has been sent.
-
-Let's check for hints here:
-
-https://github.com/pjsip/pjproject/blob/master/pjsip/src/pjsip/sip_transport_tcp.c
-https://github.com/pjsip/pjproject/blob/master/pjnath/src/pjnath/turn_sock.c
-
--------------------------
 we need to clone the active local/remote media for each MediaEndpoint of type audio/video using inv->pool_prov.
 (we might use this also to update AudioEndpoint mode)
 
