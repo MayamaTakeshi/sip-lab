@@ -781,7 +781,7 @@ static void on_fax_result(pjmedia_port *port, void *user_data, int result) {
 }
 
 void dispatch_event(const char *evt) {
-  // addon_log(L_DBG, "dispach_event called\n");
+  addon_log(L_DBG, "dispach_event called with evt=%s\n", evt);
   // g_event_sink(evt);
 
   g_events.push_back(evt);
@@ -879,8 +879,11 @@ static pj_bool_t on_data_read(pj_activesock_t *asock, void *data,
     msg_size = sep+4+body_len - ud->buf;
   }
 
+  printf("on_data_read msg_size=%d\n", msg_size);
+
   char evt[4096];
   make_evt_tcp_msg(evt, sizeof(evt), ud->call->id, media_type_id_to_media_type_name(ud->media_endpt->type), (char*)ud->buf, msg_size);
+  printf("on_data_read msg=%s\n", evt);
   dispatch_event(evt);
 
   int remain_len = ud->len - msg_size;
@@ -909,8 +912,10 @@ static pj_bool_t on_accept_complete(pj_activesock_t *asock, pj_sock_t newsock,
 
   pj_ioqueue_t *ioqueue = pjsip_endpt_get_ioqueue(ud->sip_endpt);
 
+  pj_pool_t *pool = ud->call->inv->pool; 
+
   pj_status_t rc =
-      pj_activesock_create(g_pool, newsock, pj_SOCK_STREAM(), NULL, ioqueue,
+      pj_activesock_create(pool, newsock, pj_SOCK_STREAM(), NULL, ioqueue,
                            &activesock_cb, NULL, &new_asock);
   if (rc != PJ_SUCCESS) {
     printf("pj_activesock_create for newsock failed %d\n", rc);
@@ -925,7 +930,7 @@ static pj_bool_t on_accept_complete(pj_activesock_t *asock, pj_sock_t newsock,
     return PJ_FALSE;
   }
 
-  rc = pj_activesock_start_read(new_asock, ud->call->inv->pool, 1000, 0);
+  rc = pj_activesock_start_read(new_asock, pool, 1000, 0);
   if (rc != PJ_SUCCESS) {
     printf("pj_activesock_start_read() failed with %d\n", rc);
     return PJ_FALSE;
@@ -954,6 +959,8 @@ static pj_bool_t on_connect_complete(pj_activesock_t *asock,
   AsockUserData *ud = (AsockUserData*)pj_activesock_get_user_data(asock);
   if(!ud) return PJ_FALSE;
 
+  pj_pool_t *pool = ud->call->inv->pool; 
+
   pj_sockaddr addr;
   int salen = sizeof(salen);
 
@@ -975,7 +982,7 @@ static pj_bool_t on_connect_complete(pj_activesock_t *asock,
     printf("on_connect_complete remote: %s\n", buf);
   }
 
-  s = pj_activesock_start_read(asock, ud->call->inv->pool, 1000, 0);
+  s = pj_activesock_start_read(asock, pool, 1000, 0);
   if (s != PJ_SUCCESS) {
     printf("pj_activesock_start_read() failed with %d\n", s);
     return PJ_FALSE;
@@ -989,7 +996,7 @@ static pj_activesock_t* create_tcp_socket(pjsip_endpoint *sip_endpt, pj_str_t *i
   pj_ioqueue_key_t **skey;
   pj_ioqueue_t *ioqueue = pjsip_endpt_get_ioqueue(sip_endpt);
 
-  pj_pool_t *pool = call->inv->pool; 
+  pj_pool_t *pool = call->inv->dlg->pool; 
 
   skey = (pj_ioqueue_key_t **)pj_pool_alloc(pool, sizeof(pj_ioqueue_key_t *));
   pj_sock_t *sock = (pj_sock_t *)pj_pool_alloc(pool, sizeof(pj_sock_t));
@@ -1306,6 +1313,7 @@ int __pjw_poll(char *out_evt) {
   handle_events();
   if (!g_events.empty()) {
     evt = g_events[0];
+    printf("__pjw_poll got evt=%s\n", evt);
     g_events.pop_front();
   }
   PJW_UNLOCK();

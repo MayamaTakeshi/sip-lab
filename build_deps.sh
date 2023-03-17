@@ -53,7 +53,8 @@ then
     cd pjproject
     #git checkout de3d744c2e1188b59bb907b6ee32ef83740ebc64
     #git checkout 33a3c9e0a5eb84426edef05a9aa98af17d8011c3 # required for bcg729
-    git checkout 797088ed133c98492519b7d042b75735f6f9388c # updated as part of #21
+    #git checkout 797088ed133c98492519b7d042b75735f6f9388c # updated as part of #21
+    git checkout 651df5b50129b7c5a5feec8336dda4468d53d2b0 # updated to latest to see of crash issues improve
 
     cat > user.mak <<EOF
     export CFLAGS += -fPIC -g
