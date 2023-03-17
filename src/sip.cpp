@@ -18,7 +18,6 @@
 #include <ctime>
 
 #include "idmanager.hpp"
-//#include "packetdumper.hpp"
 #include "event_templates.hpp"
 
 // Customized media ports that can be chained
@@ -5184,7 +5183,7 @@ static pj_status_t on_rx_reinvite(pjsip_inv_session *inv,
 }
 
 static void on_dtmf(pjmedia_stream *stream, void *user_data, int digit) {
-  printf("on_dtmf %d\n", digit);
+  //printf("on_dtmf %d\n", digit);
   if (g_shutting_down)
     return;
 

@@ -68,10 +68,6 @@ int pjw_call_gen_string_replaces(long call_id, char *out_replaces);
 
 int pjw_call_send_tcp_msg(long call_id, const char *json);
 
-int pjw_packetdump_start(const char *dev, const char *file);
-
-int pjw_packetdump_stop();
-
 int pjw_get_codecs(char *out_codecs);
 
 int pjw_set_codecs(const char *in_codec_info);
