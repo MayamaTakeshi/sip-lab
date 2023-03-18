@@ -7513,7 +7513,7 @@ pj_status_t tcp_endpoint_send_msg(Call *call, MediaEndpoint *me, char *msg, pj_s
   if(asock) {
     pj_ioqueue_op_key_t *send_key;
     send_key = (pj_ioqueue_op_key_t*)pj_pool_alloc(call->inv->pool, sizeof(pj_ioqueue_op_key_t));
-    char *data = (char*)pj_pool_alloc(call->inv->pool, size+1);
+    char *data = (char*)pj_pool_alloc(call->inv->pool, size);
     memcpy(data, msg, size);
     printf("tcp_endpoint_send_msg send_key %x\n", send_key);
     status = pj_activesock_send(asock, send_key, data, &size, NULL);
