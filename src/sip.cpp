@@ -920,7 +920,7 @@ static pj_bool_t on_accept_complete(pj_activesock_t *asock, pj_sock_t newsock,
 
   pj_ioqueue_t *ioqueue = pjsip_endpt_get_ioqueue(ud->sip_endpt);
 
-  pj_pool_t *pool = ud->call->inv->pool; 
+  pj_pool_t *pool = ud->call->inv->dlg->pool; 
 
   pj_status_t rc =
       pj_activesock_create(pool, newsock, pj_SOCK_STREAM(), NULL, ioqueue,
@@ -948,6 +948,13 @@ static pj_bool_t on_accept_complete(pj_activesock_t *asock, pj_sock_t newsock,
   // Now replace the asock in the media_endpoint
   if(ud->media_endpt->type == ENDPOINT_TYPE_MRCP) {
     ud->media_endpt->endpoint.mrcp->asock = new_asock;  
+  }
+
+  // Now unset user data in asock
+  rc = pj_activesock_set_user_data(asock, NULL);
+  if (rc != PJ_SUCCESS) {
+    printf("pj_activesock_set_user_data failed %d\n", rc);
+    return PJ_FALSE;
   }
 
   // Now close the server asock
@@ -7516,7 +7523,8 @@ pj_status_t tcp_endpoint_send_msg(Call *call, MediaEndpoint *me, char *msg, pj_s
     char *data = (char*)pj_pool_alloc(call->inv->pool, size);
     memcpy(data, msg, size);
     printf("tcp_endpoint_send_msg send_key %x\n", send_key);
-    status = pj_activesock_send(asock, send_key, data, &size, NULL);
+    //status = pj_activesock_send(asock, send_key, data, &size, 0);
+    status = pj_activesock_send(asock, send_key, data, &size, PJ_IOQUEUE_ALWAYS_ASYNC);
     if (status != PJ_SUCCESS) {
       return status;
     }
