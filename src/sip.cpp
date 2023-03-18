@@ -833,6 +833,11 @@ static pj_bool_t on_data_read(pj_activesock_t *asock, void *data,
                               pj_size_t size, pj_status_t status,
                               pj_size_t *remainder) {
   printf("on_data_read\n");
+  if(status != PJ_SUCCESS) {
+    printf("on_data_read failed\n");
+    return PJ_FALSE;
+  }
+ 
   AsockUserData *ud = (AsockUserData*)pj_activesock_get_user_data(asock);
   if(!ud) return PJ_FALSE;
 
@@ -851,6 +856,7 @@ static pj_bool_t on_data_read(pj_activesock_t *asock, void *data,
   char *sep = strstr(ud->buf, "\r\n\r\n");
   if(!sep) {
     // msg incomplete
+    *remainder = 0;
     return PJ_TRUE;
   }
 
@@ -873,6 +879,7 @@ static pj_bool_t on_data_read(pj_activesock_t *asock, void *data,
 
     if(sep+4+body_len < ud->buf+ud->len) {
       // msg incomplete
+      *remainder = 0;
       return PJ_TRUE;
     }
 
@@ -891,6 +898,7 @@ static pj_bool_t on_data_read(pj_activesock_t *asock, void *data,
   ud->len = remain_len;
   ud->buf[ud->len] = '\0';
   
+  *remainder = 0;
   return PJ_TRUE;
 }
 
@@ -1313,7 +1321,7 @@ int __pjw_poll(char *out_evt) {
   handle_events();
   if (!g_events.empty()) {
     evt = g_events[0];
-    printf("__pjw_poll got evt=%s\n", evt);
+    //printf("__pjw_poll got evt=%s\n", evt.c_str());
     g_events.pop_front();
   }
   PJW_UNLOCK();
@@ -4572,15 +4580,19 @@ static void on_state_changed(pjsip_inv_session *inv, pjsip_event *e) {
     }
 
     for (int i = 0; i < call->media_count; i++) {
+      addon_log(L_DBG, "processing media[%d]\n", i);
       MediaEndpoint *me = call->media[i];
       if (ENDPOINT_TYPE_AUDIO == me->type) {
         AudioEndpoint *ae = (AudioEndpoint *)me->endpoint.audio;
+        addon_log(L_DBG, "processing media[%d] as AudioEndpoing\n", i);
         if (ae->master_port) {
+          addon_log(L_DBG, "calling pjmedia_port_stop\n");
           status = pjmedia_master_port_stop(ae->master_port);
           if (status != PJ_SUCCESS) {
             addon_log(L_DBG, "pjmedia_master_port_stop failed\n");
           }
 
+          addon_log(L_DBG, "calling pjmedia_master_port_destroy\n");
           status = pjmedia_master_port_destroy(ae->master_port, PJ_FALSE);
           if (status != PJ_SUCCESS) {
             addon_log(L_DBG, "pjmedia_master_port_destroy failed\n");
@@ -4588,6 +4600,7 @@ static void on_state_changed(pjsip_inv_session *inv, pjsip_event *e) {
         }
 
         if (ae->media_port) {
+          addon_log(L_DBG, "calling pjmedia_port_destroy\n");
           status = pjmedia_port_destroy(ae->media_port);
           if (status != PJ_SUCCESS) {
             addon_log(L_DBG, "pjmedia_port_destroy failed\n");
@@ -4595,14 +4608,13 @@ static void on_state_changed(pjsip_inv_session *inv, pjsip_event *e) {
         }
 
         if (ae->med_stream) {
+          addon_log(L_DBG, "calling pjmedia_stream_destroy");
           status = pjmedia_stream_destroy(ae->med_stream);
           if (status != PJ_SUCCESS) {
             addon_log(L_DBG, "pjmedia_stream_destroy failed\n");
           }
         }
       }
-
-      close_media(call);
 
       long val;
       if (!g_call_ids.remove(call_id, val)) {
@@ -4614,6 +4626,8 @@ static void on_state_changed(pjsip_inv_session *inv, pjsip_event *e) {
       pcc.id = call_id;
       g_LastCalls.push_back(pcc);
     }
+
+    close_media(call);
 
     char evt[2048];
     int sip_msg_len = 0;
