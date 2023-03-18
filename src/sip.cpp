@@ -1019,6 +1019,8 @@ static pj_activesock_t* create_tcp_socket(pjsip_endpoint *sip_endpt, pj_str_t *i
 
   AsockUserData *ud = NULL;
 
+  pj_int32_t optval = 1;
+
   rc = pj_sock_socket(pj_AF_INET(), pj_SOCK_STREAM(), 0, sock);
   if (rc != PJ_SUCCESS || *sock == PJ_INVALID_SOCKET) {
     set_error("....unable to create socket, rc=%d\n", rc);
@@ -1026,6 +1028,12 @@ static pj_activesock_t* create_tcp_socket(pjsip_endpoint *sip_endpt, pj_str_t *i
   }
 
   pj_sockaddr_in_init(&addr, ipaddr, 0);
+
+  rc = pj_sock_setsockopt(*sock, PJ_SOL_SOCKET, PJ_SO_REUSEADDR, &optval, sizeof(optval));
+  if (rc != PJ_SUCCESS) {
+      set_error("pj_sock_setsockopt() failed", rc);
+      goto on_error;
+  }
 
   // Bind server socket.
   for (int port=10000 ; port<65535 ; port++) {
@@ -7504,10 +7512,11 @@ pj_status_t tcp_endpoint_send_msg(Call *call, MediaEndpoint *me, char *msg, pj_s
 
   if(asock) {
     pj_ioqueue_op_key_t *send_key;
-    send_key = (pj_ioqueue_op_key_t*)pj_pool_alloc(call->inv->pool, sizeof(pj_ioqueue_op_key_t*));
+    send_key = (pj_ioqueue_op_key_t*)pj_pool_alloc(call->inv->pool, sizeof(pj_ioqueue_op_key_t));
     char *data = (char*)pj_pool_alloc(call->inv->pool, size+1);
-    strncpy(data, msg, size);
-    status = pj_activesock_send(asock, send_key, data, &size, NULL); 
+    memcpy(data, msg, size);
+    printf("tcp_endpoint_send_msg send_key %x\n", send_key);
+    status = pj_activesock_send(asock, send_key, data, &size, NULL);
     if (status != PJ_SUCCESS) {
       return status;
     }
