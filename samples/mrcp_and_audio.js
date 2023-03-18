@@ -116,7 +116,7 @@ async function test() {
                 $tU: 'bob',
                 '$hdr(content-type)': 'application/sdp',
                 $rb: sdp_msg({
-                    '$.media[?(@.desc.type=="application")].attrs.channel': [m.collect('mrcp_channel')],
+                    '$.media[?(@.desc.type=="application")].val_attrs.channel': [m.collect('mrcp_channel')],
                 }),
             }),
         },
