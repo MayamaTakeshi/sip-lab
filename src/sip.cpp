@@ -1772,6 +1772,10 @@ int pjw_account_create(int t_id, const char *json, int *out_acc_id) {
     goto out;
   }
 
+  if(expires == 0) {
+    expires = PJSIP_REGC_EXPIRATION_NOT_SPECIFIED;
+  }
+
   status = pjsip_regc_create(g_sip_endpt, NULL, on_registration_status, &regc);
   if (status != PJ_SUCCESS) {
     set_error("pjsip_regc_create failed with status=%i", status);

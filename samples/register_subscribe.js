@@ -34,6 +34,7 @@ async function test() {
             'X-MyHeader1': 'aaa',
             'X-MyHeader2': 'bbb',
         },
+        expires: 60,
     })
 
     sip.account.register(a1, {auto_refresh: true})
@@ -49,7 +50,8 @@ async function test() {
                 $tU: 'user1',
                 $td: domain,
                 '$hdr(X-MyHeader1)': 'aaa',
-                'hdr_x_myheader2': 'bbb',
+                hdr_x_myheader2: 'bbb',
+                hdr_expires: '60',
             }),
         },
     ], 1000)
