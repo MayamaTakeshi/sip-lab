@@ -5405,6 +5405,34 @@ out:
   return 0;
 }
 
+int pjw_disable_telephone_event() {
+	PJW_LOCK();
+
+	int val;
+
+	val = PJ_FALSE;
+	pjmedia_endpt_set_flag(g_med_endpt,
+		       PJMEDIA_ENDPT_HAS_TELEPHONE_EVENT_FLAG,
+		       &val);
+
+	PJW_UNLOCK();
+	return 0;
+}
+
+int pjw_enable_telephone_event() {
+	PJW_LOCK();
+
+	int val;
+
+	val = PJ_TRUE;
+	pjmedia_endpt_set_flag(g_med_endpt,
+		       PJMEDIA_ENDPT_HAS_TELEPHONE_EVENT_FLAG,
+		       &val);
+
+	PJW_UNLOCK();
+	return 0;
+}
+
 int __pjw_shutdown() {
   // addon_log(L_DBG, "pjw_shutdown thread_id=%i\n", syscall(SYS_gettid));
   PJW_LOCK();

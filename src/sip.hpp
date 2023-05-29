@@ -92,5 +92,8 @@ int pjw_set_flags(unsigned flags);
 int pjw_dtmf_aggregation_on(int inter_digit_timer);
 int pjw_dtmf_aggregation_off();
 
+int pjw_enable_telephone_event();
+int pjw_disable_telephone_event();
+
 char *pjw_get_error();
 #endif

@@ -1147,6 +1147,35 @@ Napi::Value set_flags(const Napi::CallbackInfo &info) {
   return Napi::Number::New(env, 0);
 }
 
+Napi::Value enable_telephone_event(const Napi::CallbackInfo &info) {
+  Napi::Env env = info.Env();
+
+  if (info.Length() != 0) {
+    Napi::Error::New(env, "Wrong number of arguments. Expected zero arguments")
+        .ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
+  pjw_enable_telephone_event();
+
+  return Napi::Number::New(env, 0);
+}
+
+Napi::Value disable_telephone_event(const Napi::CallbackInfo &info) {
+  Napi::Env env = info.Env();
+
+  if (info.Length() != 0) {
+    Napi::Error::New(env, "Wrong number of arguments. Expected zero arguments")
+        .ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
+  pjw_disable_telephone_event();
+
+  return Napi::Number::New(env, 0);
+}
+
+
 static void CallJs(napi_env napiEnv, napi_value napi_js_cb, void *context,
                    void *data) {
   Napi::Env env = Napi::Env(napiEnv);
@@ -1275,6 +1304,9 @@ Napi::Object init(Napi::Env env, Napi::Object exports) {
               Napi::Function::New(env, subscription_subscribe));
 
   exports.Set("set_flags", Napi::Function::New(env, set_flags));
+
+  exports.Set("disable_telephone_event", Napi::Function::New(env, disable_telephone_event));
+  exports.Set("enable_telephone_event", Napi::Function::New(env, enable_telephone_event));
 
   return exports;
 }
