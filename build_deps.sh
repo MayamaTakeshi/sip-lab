@@ -64,7 +64,6 @@ EOF
     sed -i -r 's/BCG729_LIBS="-lbcg729"/BCG729_LIBS=''/' aconfigure
     LIBS=`pwd`/../bcg729/src/libbcg729.a ./configure --with-bcg729=`pwd`/../bcg729
     cat > pjlib/include/pj/config_site.h <<EOF
-#define PJMEDIA_HAS_SRTP  0
 EOF
     make dep && make clean && make
 fi
