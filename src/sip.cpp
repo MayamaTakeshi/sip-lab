@@ -3294,7 +3294,7 @@ int pjw_call_start_record_wav(long call_id, const char *json) {
   pj_status_t status;
   pjmedia_port *stream_port;
 
-  unsigned media_id;
+  unsigned media_id = 0;
 
   MediaEndpoint *me;
   AudioEndpoint *ae;
@@ -3399,7 +3399,7 @@ int pjw_call_start_play_wav(long call_id, const char *json) {
   AudioEndpoint *ae;
   int ae_count;
 
-  unsigned media_id;
+  unsigned media_id = 0;
 
   char *file;
 
@@ -3527,7 +3527,7 @@ int pjw_call_stop_play_wav(long call_id, const char *json) {
   int ae_count;
   int res;
 
-  unsigned media_id;
+  unsigned media_id = 0;
 
   char buffer[MAX_JSON_INPUT];
 
@@ -3624,7 +3624,7 @@ int pjw_call_stop_record_wav(long call_id, const char *json) {
   int ae_count;
   int res;
 
-  unsigned media_id;
+  unsigned media_id = 0;
 
   char buffer[MAX_JSON_INPUT];
 
@@ -3703,7 +3703,7 @@ int pjw_call_start_fax(long call_id, const char *json) {
   AudioEndpoint *ae;
   int ae_count;
 
-  unsigned media_id;
+  unsigned media_id = 0;
 
   char buffer[MAX_JSON_INPUT];
 
@@ -3841,7 +3841,7 @@ int pjw_call_stop_fax(long call_id, const char *json) {
   int ae_count;
   int res;
 
-  unsigned media_id;
+  unsigned media_id = 0;
 
   char buffer[MAX_JSON_INPUT];
 
@@ -3924,7 +3924,7 @@ int pjw_call_get_stream_stat(long call_id, const char *json, char *out_stats) {
   AudioEndpoint *ae;
   VideoEndpoint *ve;
 
-  unsigned media_id;
+  unsigned media_id = 0;
 
   pjmedia_stream *med_stream = NULL;
 
@@ -7601,7 +7601,7 @@ int pjw_call_send_tcp_msg(long call_id, const char *json) {
   MrcpEndpoint *mrcp_endpt;
   int res;
 
-  unsigned media_id;
+  unsigned media_id = 0;
 
   char buffer[MAX_JSON_INPUT];
 
