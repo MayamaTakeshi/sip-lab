@@ -10,7 +10,7 @@ It permits to:
   - send and receive DTMF inband/RFC2833/INFO.
   - play/record wav file on a call
   - send/receive fax (T.30 only)
-  - send/receive MRCPv2 messages (experimental)
+  - send/receive MRCPv2 messages (TCP only, no TLS)
 
 TODO:
   - add support for video playing/recording from/to file
