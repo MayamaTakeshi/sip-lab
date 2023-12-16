@@ -433,7 +433,7 @@ struct AsockUserData {
   MediaEndpoint *media_endpt;
   Call *call;
   char buf[MAX_TCP_DATA];
-  char len;
+  pj_size_t len;
 };
 
 bool init_media_ports(Call *c, AudioEndpoint *ae, unsigned sampling_rate,
@@ -841,17 +841,27 @@ static pj_bool_t on_data_read(pj_activesock_t *asock, void *data,
   AsockUserData *ud = (AsockUserData*)pj_activesock_get_user_data(asock);
   if(!ud) return PJ_FALSE;
 
-  printf("%.*s\n", size, data);
   if (size == 0) {
     // TODO: destroy the activesock.
     return PJ_FALSE;
   }
 
-  assert(size + ud->len < MAX_TCP_DATA);
+  assert(ud->len >= 0);
 
+  printf("ud->len=%i\n", ud->len);
+  assert(size >= 0);
+  assert(size + ud->len + 1 < MAX_TCP_DATA);
+
+  printf("tcp data: >>%.*s<<\n", size, data);
+  printf("ud->len=%i\n", ud->len);
   memcpy(&ud->buf[ud->len], data, size);
-  ud->len = size + ud->len;
+  printf("ud->len=%i size=%i\n", ud->len, size);
+  ud->len = ud->len + size;
+  printf("ud->len=%i\n", ud->len);
+  assert(ud->len >= 0);
   ud->buf[ud->len] = '\0';
+
+  printf("len=%i buf=>>%.*s<<\n", ud->len, ud->len, ud->buf);
   
   char *sep = strstr(ud->buf, "\r\n\r\n");
   if(!sep) {
@@ -876,9 +886,13 @@ static pj_bool_t on_data_read(pj_activesock_t *asock, void *data,
     strncpy(num_str, start, len);
     num_str[len] = '\0';
     int body_len = atoi(num_str);
+    printf("body_len=%i\n", body_len);
 
-    if(sep+4+body_len < ud->buf+ud->len) {
-      // msg incomplete
+    assert(body_len > 0 && body_len < 4096);
+
+    //if(sep+4+body_len < ud->buf+ud->len) {
+    if(ud->buf+ud->len < sep+4+body_len) {
+      printf("tcp data: msg incomplete %i %i\n", ud->buf+ud->len, sep+4+body_len);
       *remainder = 0;
       return PJ_TRUE;
     }
