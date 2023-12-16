@@ -13,16 +13,19 @@ It permits to:
   - send/receive MRCPv2 messages (experimental)
 
 TODO:
-  - add suport for T.38 fax
-  - add support for WebRTC
   - add support for video playing/recording from/to file
+  - add support for T.38 fax
+  - add support for WebSocket
+  - add support for WebRTC
+  - add support for SRTP
+  - add support for MSRP
 
 ### Installation
 
 This is a node.js addon and it is known to work on Debian 11, Debian 10, Ubuntu 22.04 and Ubuntu 20.04.
 It is distributed with prebuild binaries for node.js 15.0.0 and above (but built for Debian 11. For other Debian versions or for Ubuntu a local built of the addon will be executed. Being the case, be patient as the build process will take several minutes to complete).
 
-To install it, first install some dependencies (you might not need them if your are on Debian 11).
+To install it, first install some build dependencies (you might not need them if your are on Debian 11).
 ```
 apt install build-essential automake autoconf libtool libspeex-dev libopus-dev libsdl2-dev libavdevice-dev libswscale-dev libv4l-dev libopencore-amrnb-dev libopencore-amrwb-dev libvo-amrwbenc-dev libvo-amrwbenc-dev libboost-dev libtiff-dev libpcap-dev libssl-dev uuid-dev cmake
 ```
