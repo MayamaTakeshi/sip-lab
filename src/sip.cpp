@@ -848,21 +848,13 @@ static pj_bool_t on_data_read(pj_activesock_t *asock, void *data,
 
   assert(ud->len >= 0);
 
-  printf("ud->len=%i\n", ud->len);
   assert(size >= 0);
   assert(size + ud->len + 1 < MAX_TCP_DATA);
 
-  printf("tcp data: >>%.*s<<\n", size, data);
-  printf("ud->len=%i\n", ud->len);
   memcpy(&ud->buf[ud->len], data, size);
-  printf("ud->len=%i size=%i\n", ud->len, size);
   ud->len = ud->len + size;
-  printf("ud->len=%i\n", ud->len);
-  assert(ud->len >= 0);
   ud->buf[ud->len] = '\0';
 
-  printf("len=%i buf=>>%.*s<<\n", ud->len, ud->len, ud->buf);
-  
   char *sep = strstr(ud->buf, "\r\n\r\n");
   if(!sep) {
     // msg incomplete
@@ -886,11 +878,9 @@ static pj_bool_t on_data_read(pj_activesock_t *asock, void *data,
     strncpy(num_str, start, len);
     num_str[len] = '\0';
     int body_len = atoi(num_str);
-    printf("body_len=%i\n", body_len);
 
     assert(body_len > 0 && body_len < 4096);
 
-    //if(sep+4+body_len < ud->buf+ud->len) {
     if(ud->buf+ud->len < sep+4+body_len) {
       printf("tcp data: msg incomplete %i %i\n", ud->buf+ud->len, sep+4+body_len);
       *remainder = 0;
