@@ -407,8 +407,6 @@ async function test() {
         },
     ], 500)
 
-    await z.sleep(1000) // we need this delay otherwise, frequently the app will crash after this point.
-
     sip.call.terminate(oc.id)
 
     await z.wait([
