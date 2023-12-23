@@ -1297,6 +1297,14 @@ int __pjw_init() {
   }
 #endif
 
+#if defined(PJMEDIA_HAS_SRTP) && (PJMEDIA_HAS_SRTP != 0)
+  status = pjmedia_srtp_init_lib(g_med_endpt);
+  if (status != PJ_SUCCESS) {
+    addon_log(L_DBG, "Error initializing SRTP library\n");
+    return 1;
+  }
+#endif
+
   status = pjmedia_codec_bcg729_init(g_med_endpt);
   if (status != PJ_SUCCESS) {
     printf("pjmedia_codec_bcg729_init failed\n");
@@ -2952,6 +2960,9 @@ pj_status_t send_dtmf(Call *call, const char *digits, int mode) {
     if (me->type != ENDPOINT_TYPE_AUDIO)
       continue;
 
+    if(me->port == 0)
+      continue;
+
     AudioEndpoint *ae = (AudioEndpoint *)me->endpoint.audio;
 
     pj_status_t status = audio_endpoint_send_dtmf(call, ae, digits, mode);
@@ -4486,14 +4497,16 @@ static void on_media_update(pjsip_inv_session *inv, pj_status_t status) {
     int idx = find_sdp_media_by_media_endpt(local_sdp, &dummy, me);
     printf("idx=%d\n", idx);
 
-    if (me->type == ENDPOINT_TYPE_AUDIO) {
-      if (!restart_media_stream(call, me, local_sdp, remote_sdp, idx)) {
-        return;
-      }
-    } else if(me->type == ENDPOINT_TYPE_MRCP) {
-      if(call->outgoing) {
-        if(!start_tcp_media(call, me, local_sdp, remote_sdp, idx)) {
+    if(me->port != 0) {
+      if (me->type == ENDPOINT_TYPE_AUDIO) {
+        if (!restart_media_stream(call, me, local_sdp, remote_sdp, idx)) {
           return;
+        }
+      } else if(me->type == ENDPOINT_TYPE_MRCP) {
+        if(call->outgoing) {
+          if(!start_tcp_media(call, me, local_sdp, remote_sdp, idx)) {
+            return;
+          }
         }
       }
     }
@@ -5765,14 +5778,30 @@ bool create_media_endpoint(Call *call, Document &document, Value &descr,
   const char *type = (const char *)descr["type"].GetString();
   const pj_str_t str_addr = pj_str(address);
 
+  pj_bool_t must_not_be_used = PJ_FALSE;
+
+  if (descr.HasMember("port")) {
+    if (!descr["port"].IsInt()) {
+      set_error("Parameter port must be an integer");
+      return false;
+    }
+    int port = descr["port"].GetInt();
+    if(port == 0) {
+      must_not_be_used = PJ_TRUE;
+    }
+  }
+
   if (strcmp("audio", type) == 0) {
     pj_uint16_t allocated_port;
-    pjmedia_transport *med_transport =
-        create_media_transport(&str_addr, &allocated_port);
-
-    if (!med_transport) {
-      set_error("create_media_transport failed");
-      return false;
+    pjmedia_transport *med_transport = NULL;
+    if(must_not_be_used) {
+      allocated_port = 0;
+    } else {
+      med_transport = create_media_transport(&str_addr, &allocated_port);
+      if (!med_transport) {
+        set_error("create_media_transport failed");
+        return false;
+      }
     }
 
     AudioEndpoint *audio_endpt =
@@ -5789,16 +5818,20 @@ bool create_media_endpoint(Call *call, Document &document, Value &descr,
     MrcpEndpoint *mrcp_endpt = (MrcpEndpoint *)pj_pool_zalloc(dlg->pool, sizeof(MrcpEndpoint));
     pj_uint16_t allocated_port;
     pj_activesock_t *asock = NULL;
-    if (call->outgoing) {
-      allocated_port = 9; // client must use port 9
+    if(must_not_be_used) {
+      allocated_port = 0;
     } else {
-      pj_str_t ipaddr = pj_str(address);
-      asock = create_tcp_socket(g_sip_endpt, &ipaddr, &allocated_port, med_endpt, call);
-      if(!asock) {
-        set_error("create_media_transport MrcpEndpoint failed");
-        return false;
+      if (call->outgoing) {
+        allocated_port = 9; // client must use port 9
+      } else {
+        pj_str_t ipaddr = pj_str(address);
+        asock = create_tcp_socket(g_sip_endpt, &ipaddr, &allocated_port, med_endpt, call);
+        if(!asock) {
+          set_error("create_media_transport MrcpEndpoint failed");
+          return false;
+        }
+        mrcp_endpt->asock = asock;
       }
-      mrcp_endpt->asock = asock;
     }
 
     med_endpt->type = ENDPOINT_TYPE_MRCP;
@@ -5878,6 +5911,33 @@ MediaEndpoint *find_media_endpt_by_json_descr(Call *call, Value &descr,
 pjmedia_sdp_media *create_sdp_media(MediaEndpoint *me, pjsip_dialog *dlg) {
   pj_status_t status;
   pjmedia_sdp_media *media;
+
+  if(me->port == 0) {
+    // media not in use
+    media = (pjmedia_sdp_media *)pj_pool_zalloc(dlg->pool,
+                                                sizeof(pjmedia_sdp_media));
+    if (!media) {
+      set_error("create pjmedia_sdp_media for mrcp endpoint failed");
+      return NULL;
+    }
+
+    pj_strdup(dlg->pool, &media->desc.media, &me->media);
+
+    pj_strdup(dlg->pool, &media->desc.transport, &me->transport);
+
+    media->desc.port = me->port;
+    pj_strdup2(
+        dlg->pool, &media->desc.fmt[media->desc.fmt_count++],
+        "0");
+
+    media->conn =
+        (pjmedia_sdp_conn *)pj_pool_zalloc(dlg->pool, sizeof(pjmedia_sdp_conn));
+    pj_strdup2(dlg->pool, &media->conn->net_type, "IN");
+    pj_strdup2(dlg->pool, &media->conn->addr_type, "IP4");
+    pj_strdup(dlg->pool, &media->conn->addr, &me->addr);
+
+    return media;
+  }
 
   if (ENDPOINT_TYPE_AUDIO == me->type) {
     AudioEndpoint *audio = (AudioEndpoint *)me->endpoint.audio;
