@@ -5872,7 +5872,7 @@ bool create_media_endpoint(Call *call, Document &document, Value &descr,
 }
 
 MediaEndpoint *find_media_by_json_descr(Call *call, Value &descr,
-                                        bool in_use_chart[]) {
+                                        bool in_use_chart[], int *idx) {
   const char *type_name = (const char *)descr["type"].GetString();
 
   int type_id = media_type_name_to_type_id(type_name);
@@ -5884,6 +5884,7 @@ MediaEndpoint *find_media_by_json_descr(Call *call, Value &descr,
 
     if (me->type == type_id) {
       in_use_chart[i] = true;
+      *idx = i;
       return me;
     }
   }
@@ -6101,9 +6102,21 @@ bool process_media(Call *call, pjsip_dialog *dlg, Document &document) {
   for (SizeType i = 0; i < media.Size(); i++) {
     Value descr = media[i].GetObject();
 
-    MediaEndpoint *me = find_media_by_json_descr(call, descr, in_use_chart);
+    int idx;
+    MediaEndpoint *me = find_media_by_json_descr(call, descr, in_use_chart, &idx);
+
     if (me) {
       addon_log(L_DBG, "i=%d media found\n", i);
+      if (me->port && descr.HasMember("port")) {
+        // me was active but it deactivated now
+        close_media_endpoint(me);
+      } else if(!me->port && !descr.HasMember("port")) {
+        // me was not active but it is activated now
+        if (!create_media_endpoint(call, document, descr, dlg, t->address, &me))
+          return false;
+        addon_log(L_DBG, "i=%d media created %x\n", i, me);
+        call->media[idx] = me;
+      }
     } else {
       addon_log(L_DBG, "i=%d media not found\n", i);
       if (!create_media_endpoint(call, document, descr, dlg, t->address, &me))
@@ -6149,8 +6162,9 @@ void close_media_endpoint(MediaEndpoint *me) {
   if(!me) return;
 
   if (ENDPOINT_TYPE_AUDIO == me->type) {
-    close_media_transport(me->endpoint.audio->med_transport);
-    me->endpoint.audio->med_transport = NULL;
+    AudioEndpoint *ae = (AudioEndpoint *)me->endpoint.audio;
+    close_media_transport(ae->med_transport);
+    ae->med_transport = NULL;
   } else if (ENDPOINT_TYPE_MRCP == me->type) {
     if(me->endpoint.mrcp->asock) {
       pj_activesock_t *asock = me->endpoint.mrcp->asock;
