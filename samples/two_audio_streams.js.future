@@ -70,9 +70,11 @@ async function test() {
             media: [
               {
                 type: 'audio',
+                local: {},
               },
               {
                 type: 'audio',
+                local: {},
               }
             ],
         },
@@ -83,9 +85,11 @@ async function test() {
             media: [
               {
                 type: 'audio',
+                local: {},
               },
               {
                 type: 'audio',
+                local: {},
               }
             ],
         },
@@ -153,13 +157,9 @@ async function test() {
               {
                 type: 'audio',
                 local: {
-                  addr: '127.0.0.1',
-                  port: 10004,
                   mode: 'sendrecv'
                 },
                 remote: {
-                  addr: '127.0.0.1',
-                  port: 10000,
                   mode: 'sendrecv'
                 },
                 fmt: [
@@ -170,13 +170,9 @@ async function test() {
               {
                 type: 'audio',
                 local: {
-                  addr: '127.0.0.1',
-                  port: 10006,
                   mode: 'sendrecv'
                 },
                 remote: {
-                  addr: '127.0.0.1',
-                  port: 10002,
                   mode: 'sendrecv'
                 },
                 fmt: [
@@ -194,13 +190,9 @@ async function test() {
               {
                 type: 'audio',
                 local: {
-                  addr: '127.0.0.1',
-                  port: 10000,
                   mode: 'sendrecv'
                 },
                 remote: {
-                  addr: '127.0.0.1',
-                  port: 10004,
                   mode: 'sendrecv'
                 },
                 fmt: [
@@ -211,13 +203,9 @@ async function test() {
               {
                 type: 'audio',
                 local: {
-                  addr: '127.0.0.1',
-                  port: 10002,
                   mode: 'sendrecv'
                 },
                 remote: {
-                  addr: '127.0.0.1',
-                  port: 10006,
                   mode: 'sendrecv'
                 },
                 fmt: [
@@ -260,19 +248,19 @@ async function test() {
               {
                 type: 'audio',
                 local: {
-                  addr: '127.0.0.1',
-                  port: 10004,
                   mode: 'sendrecv'
                 },
                 remote: {
-                  addr: '127.0.0.1',
-                  port: 10000,
                   mode: 'sendrecv'
                 },
                 fmt: [
                   '0 PCMU/8000',
                   '120 telephone-event/8000'
                 ]
+              },
+              {
+                type: 'audio',
+		port: 0,
               },
             ]
         },
@@ -284,19 +272,19 @@ async function test() {
               {
                 type: 'audio',
                 local: {
-                  addr: '127.0.0.1',
-                  port: 10000,
                   mode: 'sendrecv'
                 },
                 remote: {
-                  addr: '127.0.0.1',
-                  port: 10004,
                   mode: 'sendrecv'
                 },
                 fmt: [
                   '0 PCMU/8000',
                   '120 telephone-event/8000'
                 ]
+              },
+              {
+                type: 'audio',
+		port: 0,
               },
             ]
         },
@@ -351,13 +339,9 @@ async function test() {
               {
                 type: 'audio',
                 local: {
-                  addr: '127.0.0.1',
-                  port: 10004,
                   mode: 'sendrecv'
                 },
                 remote: {
-                  addr: '127.0.0.1',
-                  port: 10000,
                   mode: 'sendrecv'
                 },
                 fmt: [
@@ -368,13 +352,9 @@ async function test() {
               {
                 type: 'audio',
                 local: {
-                  addr: '127.0.0.1',
-                  port: 10006,
                   mode: 'sendrecv'
                 },
                 remote: {
-                  addr: '127.0.0.1',
-                  port: 10002,
                   mode: 'sendrecv'
                 },
                 fmt: [
@@ -392,13 +372,9 @@ async function test() {
               {
                 type: 'audio',
                 local: {
-                  addr: '127.0.0.1',
-                  port: 10000,
                   mode: 'sendrecv'
                 },
                 remote: {
-                  addr: '127.0.0.1',
-                  port: 10004,
                   mode: 'sendrecv'
                 },
                 fmt: [
@@ -409,13 +385,9 @@ async function test() {
               {
                 type: 'audio',
                 local: {
-                  addr: '127.0.0.1',
-                  port: 10002,
                   mode: 'sendrecv'
                 },
                 remote: {
-                  addr: '127.0.0.1',
-                  port: 10006,
                   mode: 'sendrecv'
                 },
                 fmt: [

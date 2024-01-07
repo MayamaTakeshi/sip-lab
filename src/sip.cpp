@@ -4113,6 +4113,20 @@ void gen_media_json(char *dest, int len, Call *call,
     pjmedia_sdp_media *local_media = local_sdp->media[idx];
     pjmedia_sdp_media *remote_media = remote_sdp->media[idx];
 
+    if(!me->port) {
+      switch (me->type) {
+        case ENDPOINT_TYPE_AUDIO:
+          p += sprintf(p, "{\"type\": \"audio\", \"port\": 0}");
+          break;
+        case ENDPOINT_TYPE_MRCP:
+          p += sprintf(p, "{\"type\": \"mrcp\", \"port\": 0}");
+          break;
+        default:  
+          p += sprintf(p, "{\"type\": \"unknown\", \"port\": 0}");
+      } 
+      continue;
+    }
+
     switch (me->type) {
     case ENDPOINT_TYPE_AUDIO: {
       AudioEndpoint *ae = (AudioEndpoint *)me->endpoint.audio;
@@ -4464,29 +4478,30 @@ static void on_media_update(pjsip_inv_session *inv, pj_status_t status) {
             call->id, b);
 
   // update media endpoint based on sdp media
-
   bool in_use_chart[PJMEDIA_MAX_SDP_MEDIA] = {false};
   MediaEndpoint *active_media[PJMEDIA_MAX_SDP_MEDIA] = {NULL};
   int active_media_count = 0;
 
   for (int i = 0; i < local_sdp->media_count; i++) {
-    pjmedia_sdp_media *media = local_sdp->media[i];
-    if (media->desc.port) {
-      MediaEndpoint *me =
-          find_media_endpt_by_sdp_media(call, media, in_use_chart);
-      if (me) {
-        active_media[active_media_count++] = me;
+    MediaEndpoint *me = call->media[i];
+    if (!local_sdp->media[i]->desc.port) {
+      close_media_endpoint(me);
+    } else {
+      if (me->type == ENDPOINT_TYPE_AUDIO) {
+        if (!restart_media_stream(call, me, local_sdp, remote_sdp, i)) {
+          return;
+        }
+      } else if(me->type == ENDPOINT_TYPE_MRCP) {
+        if(call->outgoing) {
+          if(!start_tcp_media(call, me, local_sdp, remote_sdp, i)) {
+            return;
+          }
+        }
       }
     }
   }
 
-  for (int i = 0; i < call->media_count; i++) {
-    MediaEndpoint *me = call->media[i];
-    if (!is_media_in_active_media(me, active_media, active_media_count)) {
-      close_media_endpoint(me);
-    }
-  }
-
+  /*
   printf("active_media_count=%d\n", active_media_count);
   call->media_count = 0;
   for (int i = 0; i < active_media_count; i++) {
@@ -4511,6 +4526,7 @@ static void on_media_update(pjsip_inv_session *inv, pj_status_t status) {
       }
     }
   }
+  */
 
   char media[4096];
   gen_media_json(media, sizeof(media), call, local_sdp, remote_sdp);
@@ -6130,8 +6146,11 @@ bool is_media_active(Call *c, MediaEndpoint *me) {
 
 void close_media_endpoint(MediaEndpoint *me) {
   printf("close_media_endpoint %x\n", me);
+  if(!me) return;
+
   if (ENDPOINT_TYPE_AUDIO == me->type) {
     close_media_transport(me->endpoint.audio->med_transport);
+    me->endpoint.audio->med_transport = NULL;
   } else if (ENDPOINT_TYPE_MRCP == me->type) {
     if(me->endpoint.mrcp->asock) {
       pj_activesock_t *asock = me->endpoint.mrcp->asock;
@@ -6148,7 +6167,9 @@ void close_media_endpoint(MediaEndpoint *me) {
         printf("pj_activesock_close failed\n");
       }
     }
+    me->endpoint.mrcp->asock = NULL;
   }
+  me->port = 0;
 }
 
 void close_media(Call *c) {
