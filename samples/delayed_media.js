@@ -66,15 +66,25 @@ async function test() {
                 $fd: 'test.com',
                 $tU: 'bob',
                 '$hdr(content-type)': 'application/sdp',
-                $rb: '!{_}a=sendrecv',
+                $rb: sdp.matcher({
+                    media: m.full_match([
+                        m.partial_match({
+                            desc: {
+                                type: 'audio',
+                                port: m.nonzero,
+                                protocol: "RTP/AVP",
+                            },
+                        }),
+                    ]),
+                })
             }),
         },
         {
             event: 'media_update',
             call_id: oc.id,
             status: 'ok',
-            media: [
-              {
+            media: m.full_match([
+              m.partial_match({
                 type: 'audio',
                 local: {
                   mode: 'sendrecv'
@@ -82,15 +92,15 @@ async function test() {
                 remote: {
                   mode: 'sendrecv'
                 },
-              }
-            ],
+              }),
+            ]),
         },
         {
             event: 'media_update',
             call_id: ic.id,
             status: 'ok',
-            media: [
-              {
+            media: m.full_match([
+              m.partial_match({
                 type: 'audio',
                 local: {
                   mode: 'sendrecv'
@@ -98,8 +108,8 @@ async function test() {
                 remote: {
                   mode: 'sendrecv'
                 },
-              }
-            ],
+              }),
+            ]),
         },
 
     ], 1000)

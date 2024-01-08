@@ -61,38 +61,42 @@ async function test() {
                 $fd: 'test.com',
                 $tU: 'bob',
                 '$hdr(content-type)': 'application/sdp',
-                $rb: '!{_}a=sendrecv',
+                $rb: sdp.jsonpath_matcher({
+                    '$.media.length': [2],
+                    '$.media[*].desc.type': ['audio','audio'],
+                    '$.media[*].desc.port': [m.nonzero, m.nonzero],
+                }),
             }),
         },
         {
             event: 'media_update',
             call_id: oc.id,
             status: 'ok',
-            media: [
-              {
+            media: m.fm([
+              m.pm({
                 type: 'audio',
                 local: {},
-              },
-              {
+              }),
+              m.pm({
                 type: 'audio',
                 local: {},
-              }
-            ],
+              }),
+            ]),
         },
         {
             event: 'media_update',
             call_id: ic.id,
             status: 'ok',
-            media: [
-              {
+            media: m.fm([
+              m.pm({
                 type: 'audio',
                 local: {},
-              },
-              {
+              }),
+              m.pm({
                 type: 'audio',
                 local: {},
-              }
-            ],
+              }),
+            ]),
         },
     ], 1000)
 
@@ -148,14 +152,19 @@ async function test() {
             method: 'INVITE',
             msg: sip_msg({
                 $rs: '200',
+                $rb: sdp.jsonpath_matcher({
+                    '$.media.length': [2],
+                    '$.media[*].desc.type': ['audio','audio'],
+                    '$.media[*].desc.port': [m.nonzero, m.nonzero],
+                }),
             }),
         },
         {
             event: 'media_update',
             call_id: ic.id,
             status: 'ok',
-            media: [
-              {
+            media: m.fm([
+              m.pm({
                 type: 'audio',
                 local: {
                   mode: 'sendrecv'
@@ -167,8 +176,8 @@ async function test() {
                   '0 PCMU/8000',
                   '120 telephone-event/8000'
                 ]
-              },
-              {
+              }),
+              m.pm({
                 type: 'audio',
                 local: {
                   mode: 'sendrecv'
@@ -180,15 +189,15 @@ async function test() {
                   '0 PCMU/8000',
                   '120 telephone-event/8000'
                 ]
-              }
-            ]
+              }),
+            ]),
         },
         {
             event: 'media_update',
             call_id: oc.id,
             status: 'ok',
-            media: [
-              {
+            media: m.fm([
+              m.pm({
                 type: 'audio',
                 local: {
                   mode: 'sendrecv'
@@ -200,8 +209,8 @@ async function test() {
                   '0 PCMU/8000',
                   '120 telephone-event/8000'
                 ]
-              },
-              {
+              }),
+              m.pm({
                 type: 'audio',
                 local: {
                   mode: 'sendrecv'
@@ -213,8 +222,8 @@ async function test() {
                   '0 PCMU/8000',
                   '120 telephone-event/8000'
                 ]
-              }
-            ]
+              }),
+            ]),
         },
     ], 1000)
 
@@ -239,14 +248,19 @@ async function test() {
             method: 'INVITE',
             msg: sip_msg({
                 $rs: '200',
+                $rb: sdp.jsonpath_matcher({
+                    '$.media.length': [2],
+                    '$.media[*].desc.type': ['audio','audio'],
+                    '$.media[*].desc.port': [m.nonzero, '0'],
+                }),
             }),
         },
         {
             event: 'media_update',
             call_id: ic.id,
             status: 'ok',
-            media: [
-              {
+            media: m.fm([
+              m.pm({
                 type: 'audio',
                 local: {
                   mode: 'sendrecv'
@@ -258,19 +272,19 @@ async function test() {
                   '0 PCMU/8000',
                   '120 telephone-event/8000'
                 ]
-              },
-              {
+              }),
+              m.pm({
                 type: 'audio',
-		port: 0,
-              },
-            ]
+                port: 0,
+              }),
+            ]),
         },
         {
             event: 'media_update',
             call_id: oc.id,
             status: 'ok',
-            media: [
-              {
+            media: m.fm([
+              m.pm({
                 type: 'audio',
                 local: {
                   mode: 'sendrecv'
@@ -282,12 +296,12 @@ async function test() {
                   '0 PCMU/8000',
                   '120 telephone-event/8000'
                 ]
-              },
-              {
+              }),
+              m.pm({
                 type: 'audio',
-		port: 0,
-              },
-            ]
+                port: 0,
+              }),
+            ]),
         },
     ], 1000)
 
@@ -330,14 +344,19 @@ async function test() {
             method: 'INVITE',
             msg: sip_msg({
                 $rs: '200',
+                $rb: sdp.jsonpath_matcher({
+                    '$.media.length': [2],
+                    '$.media[*].desc.type': ['audio','audio'],
+                    '$.media[*].desc.port': [m.nonzero, m.nonzero],
+                }),
             }),
         },
         {
             event: 'media_update',
             call_id: ic.id,
             status: 'ok',
-            media: [
-              {
+            media: m.fm([
+              m.pm({
                 type: 'audio',
                 local: {
                   mode: 'sendrecv'
@@ -349,8 +368,8 @@ async function test() {
                   '0 PCMU/8000',
                   '120 telephone-event/8000'
                 ]
-              },
-              {
+              }),
+              m.pm({
                 type: 'audio',
                 local: {
                   mode: 'sendrecv'
@@ -362,15 +381,15 @@ async function test() {
                   '0 PCMU/8000',
                   '120 telephone-event/8000'
                 ]
-              }
-            ]
+              }),
+            ]),
         },
         {
             event: 'media_update',
             call_id: oc.id,
             status: 'ok',
-            media: [
-              {
+            media: m.fm([
+              m.pm({
                 type: 'audio',
                 local: {
                   mode: 'sendrecv'
@@ -382,8 +401,8 @@ async function test() {
                   '0 PCMU/8000',
                   '120 telephone-event/8000'
                 ]
-              },
-              {
+              }),
+              m.pm({
                 type: 'audio',
                 local: {
                   mode: 'sendrecv'
@@ -395,8 +414,8 @@ async function test() {
                   '0 PCMU/8000',
                   '120 telephone-event/8000'
                 ]
-              }
-            ]
+              })
+            ]),
         },
     ], 1000)
 
