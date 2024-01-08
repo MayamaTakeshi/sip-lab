@@ -3,9 +3,9 @@ var Zeq = require('@mayama/zeq')
 var z = new Zeq()
 var m = require('data-matching')
 var sip_msg = require('sip-matching')
+var sdp = require('sdp-matching')
 var mrcp = require('mrcp')
 var mrcp_msg = require('mrcp-matching')
-var sdp_msg = require('sdp-matching')
 
 async function test() {
     sip.set_log_level(9)
@@ -115,7 +115,7 @@ async function test() {
                 $fd: 'test.com',
                 $tU: 'bob',
                 '$hdr(content-type)': 'application/sdp',
-                $rb: sdp_msg({
+                $rb: sdp.jsonpath_matcher({
                     '$.media[?(@.desc.type=="application")].val_attrs.channel': [m.collect('mrcp_channel')],
                 }),
             }),

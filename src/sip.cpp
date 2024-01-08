@@ -6108,14 +6108,44 @@ bool process_media(Call *call, pjsip_dialog *dlg, Document &document) {
     if (me) {
       addon_log(L_DBG, "i=%d media found\n", i);
       if (me->port && descr.HasMember("port")) {
-        // me was active but it deactivated now
-        close_media_endpoint(me);
+        // me was active but it must be deactivated
+        MediaEndpoint *new_me;
+
+        if(!create_media_endpoint(call, document, descr, dlg, "0.0.0.0", &new_me))
+          return false;
+        addon_log(L_DBG, "i=%d media port=0 created %x\n", i, me);
+
+        pjmedia_sdp_media *media = create_sdp_media(new_me, dlg);
+        if (!media)
+          return false;
+
+        sdp->media[sdp->media_count++] = media;
       } else if(!me->port && !descr.HasMember("port")) {
         // me was not active but it is activated now
         if (!create_media_endpoint(call, document, descr, dlg, t->address, &me))
           return false;
         addon_log(L_DBG, "i=%d media created %x\n", i, me);
         call->media[idx] = me;
+
+        if (!update_media_fields(me, dlg->pool, descr)) {
+          return false;
+        }
+
+        pjmedia_sdp_media *media = create_sdp_media(me, dlg);
+        if (!media)
+          return false;
+
+        sdp->media[sdp->media_count++] = media;
+      } else {
+        if (!update_media_fields(me, dlg->pool, descr)) {
+          return false;
+        }
+
+        pjmedia_sdp_media *media = create_sdp_media(me, dlg);
+        if (!media)
+          return false;
+
+        sdp->media[sdp->media_count++] = media;
       }
     } else {
       addon_log(L_DBG, "i=%d media not found\n", i);
@@ -6125,17 +6155,17 @@ bool process_media(Call *call, pjsip_dialog *dlg, Document &document) {
       call->media[call->media_count++] = me;
       in_use_chart[call->media_count - 1] =
           true; // added elements must be set as in use
+
+      if (!update_media_fields(me, dlg->pool, descr)) {
+        return false;
+      }
+
+      pjmedia_sdp_media *media = create_sdp_media(me, dlg);
+      if (!media)
+        return false;
+
+      sdp->media[sdp->media_count++] = media;
     }
-
-    if (!update_media_fields(me, dlg->pool, descr)) {
-      return false;
-    }
-
-    pjmedia_sdp_media *media = create_sdp_media(me, dlg);
-    if (!media)
-      return false;
-
-    sdp->media[sdp->media_count++] = media;
   }
 
   call->local_sdp = sdp;

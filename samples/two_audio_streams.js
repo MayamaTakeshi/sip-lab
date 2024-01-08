@@ -3,6 +3,7 @@ var Zeq = require('@mayama/zeq')
 var z = new Zeq()
 var m = require('data-matching')
 var sip_msg = require('sip-matching')
+var sdp = require('sdp-matching')
 
 async function test() {
     sip.set_log_level(9)
@@ -229,7 +230,7 @@ async function test() {
         },
     ], 1000)
 
-    sip.call.respond(ic.id, {code: 200, reason: 'OK', media: "audio,audio"})
+    sip.call.respond(ic.id, {code: 200, reason: 'OK', media: "audio"})
 
     await z.wait([
         {
