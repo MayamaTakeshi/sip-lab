@@ -384,6 +384,7 @@ struct MediaEndpoint {
   pj_str_t addr;
   int port;
   int field_count;
+  bool secure;
   char *field[MAX_ATTRS];
 
   union {
@@ -630,7 +631,7 @@ void close_media_endpoint(MediaEndpoint *me);
 
 void close_media(Call *c);
 
-bool process_media(Call *c, pjsip_dialog *dlg, Document &document);
+bool process_media(Call *c, pjsip_dialog *dlg, Document &document, bool answer);
 
 typedef pj_status_t (*audio_endpoint_stop_op_t)(Call *call, AudioEndpoint *ae);
 
@@ -683,6 +684,13 @@ const char *translate_pjsip_inv_state(int state) {
   default:
     return "unknown";
   }
+}
+
+static pj_bool_t create_transport_srtp(pjmedia_transport *med_transport, pjmedia_transport **srtp) {
+	pjmedia_srtp_setting opt;
+	pjmedia_srtp_setting_default(&opt);
+	printf("calling pjmedia_transport_srtp_create\n");
+	return pjmedia_transport_srtp_create(g_med_endpt, med_transport, &opt, srtp);
 }
 
 static int
@@ -2072,17 +2080,21 @@ int pjw_call_respond(long call_id, const char *json) {
   }
 
   if (183 == code || (code >= 200 && code < 300)) {
-    if (!process_media(call, call->inv->dlg, document)) {
-      goto out;
-    }
-
     // process_media above set call->local_sdp based on document.
 
     if (call->pending_rdata && call->pending_rdata->msg_info.msg->body &&
         call->pending_rdata->msg_info.msg->body->len) {
+      if (!process_media(call, call->inv->dlg, document, true)) {
+        goto out;
+      }
+
       status = pjsip_inv_set_sdp_answer(call->inv, call->local_sdp);
     } else {
       // delayed media. we need to sned the offer
+      if (!process_media(call, call->inv->dlg, document, false)) {
+        goto out;
+      }
+
       status = pjmedia_sdp_neg_create_w_local_offer(
           call->inv->dlg->pool, call->local_sdp, &call->inv->neg);
       if (status != PJ_SUCCESS) {
@@ -2824,7 +2836,7 @@ int call_create(Transport *t, unsigned flags, pjsip_dialog *dlg,
 
   pjmedia_sdp_session *sdp = 0;
 
-  if (!process_media(call, dlg, document)) {
+  if (!process_media(call, dlg, document, false)) {
     close_media(call);
     return -1;
   }
@@ -3117,7 +3129,7 @@ int pjw_call_reinvite(long call_id, const char *json) {
     }
   }
 
-  if (!process_media(call, inv->dlg, document)) {
+  if (!process_media(call, inv->dlg, document, false)) {
     goto out;
   }
 
@@ -4064,7 +4076,7 @@ int find_sdp_media_by_media_endpt(const pjmedia_sdp_session *sdp,
   printf("find_sdp_media_by_media_endpt %x\n", me);
   for (int i = 0; i < sdp->media_count; i++) {
     pjmedia_sdp_media *media = sdp->media[i];
-    printf("i=%d media=%x\n", i, media);
+    printf("i=%d me->port=%i media->desc.port=%i me->media=%.*s media->desc.media=%.*s\n", i, me->port, media->desc.port, me->media.slen, me->media.ptr, media->desc.media.slen, media->desc.media.ptr);
 
     if ((me->port == media->desc.port) &&
         (pj_strcmp(&me->media, &media->desc.media) == 0)) {
@@ -4116,10 +4128,10 @@ void gen_media_json(char *dest, int len, Call *call,
     if(!me->port) {
       switch (me->type) {
         case ENDPOINT_TYPE_AUDIO:
-          p += sprintf(p, "{\"type\": \"audio\", \"port\": 0}");
+          p += sprintf(p, "{\"type\": \"audio\", \"transport\": \"%.*s\", \"port\": 0}", me->transport.slen, me->transport.ptr);
           break;
         case ENDPOINT_TYPE_MRCP:
-          p += sprintf(p, "{\"type\": \"mrcp\", \"port\": 0}");
+          p += sprintf(p, "{\"type\": \"mrcp\", \"transport\": \"%.*s\", \"port\": 0}", me->transport.slen, me->transport.ptr);
           break;
         default:  
           p += sprintf(p, "{\"type\": \"unknown\", \"port\": 0}");
@@ -4151,9 +4163,10 @@ void gen_media_json(char *dest, int len, Call *call,
       pj_str_t *remote_addr = &remote_conn->addr;
 
       p += sprintf(p,
-                   "{\"type\": \"audio\", \"local\": {\"addr\": \"%.*s\", "
+                   "{\"type\": \"audio\", \"transport\": \"%.*s\", \"local\": {\"addr\": \"%.*s\", "
                    "\"port\": %d, \"mode\": \"%s\"}, \"remote\": {\"addr\": "
                    "\"%.*s\", \"port\": %d, \"mode\": \"%s\"}, \"fmt\": [",
+                   me->transport.slen, me->transport.ptr,
                    local_addr->slen, local_addr->ptr, local_media->desc.port,
                    local_mode, remote_addr->slen, remote_addr->ptr,
                    remote_media->desc.port, remote_mode);
@@ -4175,8 +4188,9 @@ void gen_media_json(char *dest, int len, Call *call,
     }
     case ENDPOINT_TYPE_MRCP: {
       p += sprintf(p,
-                   "{\"type\": \"mrcp\", \"local\": {\"port\": %d}, "
+                   "{\"type\": \"mrcp\", \"transport\": \"%.*s\", \"local\": {\"port\": %d}, "
                    "\"remote\": {\"port\": %d}}",
+                   me->transport.slen, me->transport.ptr,
                    local_sdp->media[idx]->desc.port,
                    remote_sdp->media[idx]->desc.port);
       break;
@@ -4342,13 +4356,24 @@ bool restart_media_stream(Call *call, MediaEndpoint *me,
   status = pjmedia_stream_set_dtmf_callback(ae->med_stream, &on_dtmf, call);
   if (status != PJ_SUCCESS) {
     make_evt_media_update(evt, sizeof(evt), call->id,
-                          "setup_failed (pjmedi_stream_set_dtmf_callback)", "");
+                          "setup_failed (pjmedia_stream_set_dtmf_callback)", "");
     dispatch_event(evt);
     return false;
   }
 
   /* Start the UDP media transport */
-  pjmedia_transport_media_start(ae->med_transport, 0, 0, 0, 0);
+  status = pjmedia_transport_media_start(ae->med_transport, call->inv->pool, local_sdp, remote_sdp, idx);
+  if (status != PJ_SUCCESS) {
+    printf("status=%i\n", status);
+    char err[1024];
+    pj_strerror(status, err, sizeof(err));
+    printf("pjmedia_transport_media_start status: %s\n", err);
+
+    make_evt_media_update(evt, sizeof(evt), call->id,
+                          "setup_failed (pjmedia_transport_media_start failed)", "");
+    dispatch_event(evt);
+    return false;
+  }
 
   pjmedia_port *stream_port;
   status = pjmedia_stream_get_port(ae->med_stream, &stream_port);
@@ -5827,8 +5852,36 @@ bool create_media_endpoint(Call *call, Document &document, Value &descr,
     med_endpt->type = ENDPOINT_TYPE_AUDIO;
     pj_strdup2(dlg->pool, &med_endpt->media, "audio");
     pj_strdup(dlg->pool, &med_endpt->addr, &str_addr);
-    pj_strdup2(dlg->pool, &med_endpt->transport, "RTP/AVP");
+
+    if (descr.HasMember("secure")) {
+      if (!descr["secure"].IsBool()) {
+        set_error("Parameter secure must be a boolean");
+        return false;
+      }
+      med_endpt->secure = descr["secure"].GetBool();
+    }
+    
+    if(med_endpt->secure){
+      pjmedia_transport *srtp;
+      pj_status_t status = create_transport_srtp(audio_endpt->med_transport, &srtp);
+      if(status != PJ_SUCCESS) {
+        set_error("create_transport_srtp failed");
+        return false;
+      }
+      audio_endpt->med_transport = srtp;
+
+      status = pjmedia_transport_media_create(audio_endpt->med_transport, dlg->pool, NULL, NULL, 0);
+      if(status != PJ_SUCCESS) {
+        set_error("pjmedia_transport_media_create failed"); 
+        return false;
+      }
+      pj_strdup2(dlg->pool, &med_endpt->transport, "RTP/SAVP");
+    } else {
+      pj_strdup2(dlg->pool, &med_endpt->transport, "RTP/AVP");
+    }
+
     med_endpt->port = allocated_port;
+    printf("med_endtp->port=%i\n", med_endpt->port);
     med_endpt->endpoint.audio = audio_endpt;
   } else if (strcmp("mrcp", type) == 0) {
     MrcpEndpoint *mrcp_endpt = (MrcpEndpoint *)pj_pool_zalloc(dlg->pool, sizeof(MrcpEndpoint));
@@ -6019,7 +6072,7 @@ pjmedia_sdp_media *create_sdp_media(MediaEndpoint *me, pjsip_dialog *dlg) {
   return media;
 }
 
-bool process_media(Call *call, pjsip_dialog *dlg, Document &document) {
+bool process_media(Call *call, pjsip_dialog *dlg, Document &document, bool answer) {
   printf("process_media call_id=%d\n", call->id);
 
   bool in_use_chart[PJMEDIA_MAX_SDP_MEDIA] = {false};
@@ -6099,6 +6152,17 @@ bool process_media(Call *call, pjsip_dialog *dlg, Document &document) {
   Value media = document["media"].GetArray();
   assert(media.Size() <= PJMEDIA_MAX_SDP_MEDIA);
 
+  const pjmedia_sdp_session *rem_sdp = NULL;
+  if(answer) {
+    if(call->inv && call->inv->neg) {
+      status = pjmedia_sdp_neg_get_neg_remote(call->inv->neg, &rem_sdp);
+      if(status != PJ_SUCCESS) {
+        addon_log(L_DBG, "Internal Server Error (pjmedia_sdp_neg_get_neg_remote failed)");
+        return false;
+      }
+    }
+  }
+
   for (SizeType i = 0; i < media.Size(); i++) {
     Value descr = media[i].GetObject();
 
@@ -6165,6 +6229,18 @@ bool process_media(Call *call, pjsip_dialog *dlg, Document &document) {
         return false;
 
       sdp->media[sdp->media_count++] = media;
+    }
+
+    if(me->secure && me->endpoint.audio) {
+      pj_status_t status = pjmedia_transport_encode_sdp(me->endpoint.audio->med_transport, dlg->pool, sdp, rem_sdp, i);
+      if(status != PJ_SUCCESS) {
+        addon_log(L_DBG, "pjmedia_transport_encode_sdp failed");
+        return false;
+      }
+
+      // The below must be done after pjmedia_transport_encode_sdp() because although at this point med_transport is a transport_srtp, it calls the transport_encode_sdp of the underlying transpor_udp and it will fail when it sees "RTP/SAVP" instead of "RTP/AVP"
+      // So we change from RTP/AVP to RTP/SAVP after we add the crypto lines.
+      pj_strdup2(dlg->pool, &sdp->media[i]->desc.transport, "RTP/SAVP");
     }
   }
 
