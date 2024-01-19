@@ -4128,10 +4128,10 @@ void gen_media_json(char *dest, int len, Call *call,
     if(!me->port) {
       switch (me->type) {
         case ENDPOINT_TYPE_AUDIO:
-          p += sprintf(p, "{\"type\": \"audio\", \"transport\": \"%.*s\", \"port\": 0}", me->transport.slen, me->transport.ptr);
+          p += sprintf(p, "{\"type\": \"audio\", \"protocol\": \"%.*s\", \"port\": 0}", me->transport.slen, me->transport.ptr);
           break;
         case ENDPOINT_TYPE_MRCP:
-          p += sprintf(p, "{\"type\": \"mrcp\", \"transport\": \"%.*s\", \"port\": 0}", me->transport.slen, me->transport.ptr);
+          p += sprintf(p, "{\"type\": \"mrcp\", \"protocol\": \"%.*s\", \"port\": 0}", me->transport.slen, me->transport.ptr);
           break;
         default:  
           p += sprintf(p, "{\"type\": \"unknown\", \"port\": 0}");
@@ -4163,7 +4163,7 @@ void gen_media_json(char *dest, int len, Call *call,
       pj_str_t *remote_addr = &remote_conn->addr;
 
       p += sprintf(p,
-                   "{\"type\": \"audio\", \"transport\": \"%.*s\", \"local\": {\"addr\": \"%.*s\", "
+                   "{\"type\": \"audio\", \"protocol\": \"%.*s\", \"local\": {\"addr\": \"%.*s\", "
                    "\"port\": %d, \"mode\": \"%s\"}, \"remote\": {\"addr\": "
                    "\"%.*s\", \"port\": %d, \"mode\": \"%s\"}, \"fmt\": [",
                    me->transport.slen, me->transport.ptr,
@@ -4188,7 +4188,7 @@ void gen_media_json(char *dest, int len, Call *call,
     }
     case ENDPOINT_TYPE_MRCP: {
       p += sprintf(p,
-                   "{\"type\": \"mrcp\", \"transport\": \"%.*s\", \"local\": {\"port\": %d}, "
+                   "{\"type\": \"mrcp\", \"protocol\": \"%.*s\", \"local\": {\"port\": %d}, "
                    "\"remote\": {\"port\": %d}}",
                    me->transport.slen, me->transport.ptr,
                    local_sdp->media[idx]->desc.port,

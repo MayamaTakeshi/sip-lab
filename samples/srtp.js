@@ -152,7 +152,7 @@ async function test() {
             media: m.fm([
               m.pm({
                 type: 'audio',
-		transport: 'RTP/SAVP',
+                protocol: 'RTP/SAVP',
                 local: {
                   mode: 'sendrecv'
                 },
@@ -173,7 +173,7 @@ async function test() {
             media: m.fm([
               m.pm({
                 type: 'audio',
-		transport: 'RTP/SAVP',
+                protocol: 'RTP/SAVP',
                 local: {
                   mode: 'sendrecv'
                 },
@@ -253,7 +253,7 @@ async function test() {
             media: m.fm([
               m.pm({
                 type: 'audio',
-		transport: 'RTP/SAVP',
+                protocol: 'RTP/SAVP',
                 local: {
                   mode: 'sendrecv'
                 },
@@ -274,7 +274,7 @@ async function test() {
             media: m.fm([
               m.pm({
                 type: 'audio',
-		transport: 'RTP/SAVP',
+                protocol: 'RTP/SAVP',
                 local: {
                   mode: 'sendrecv'
                 },
