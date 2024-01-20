@@ -37,6 +37,10 @@ async function test() {
         media: [
             {
                 type: 'audio',
+                secure: false,
+            },
+            {
+                type: 'audio',
                 secure: true,
             },
         ]})
@@ -55,7 +59,11 @@ async function test() {
     }
 
     sip.call.respond(ic.id, {code: 200, reason: 'OK', media: [
-	    {
+        {
+            type: 'audio',
+            secure: false,
+        },
+        {
             type: 'audio',
             secure: true,
         },
@@ -102,14 +110,32 @@ async function test() {
         },
         {
             event: 'dtmf',
+            call_id: ic.id,
+            digits: '1234',
+            mode: 1,
+            media_id: 1,
+        },
+        {
+            event: 'dtmf',
             call_id: oc.id,
             digits: '1234',
             mode: 1,
             media_id: 0,
         },
+        {
+            event: 'dtmf',
+            call_id: oc.id,
+            digits: '1234',
+            mode: 1,
+            media_id: 1,
+        },
     ], 2000)
 
     sip.call.reinvite(oc.id, {media: [
+        {
+            type: 'audio',
+            secure: false,
+        },
         {
             type: 'audio',
             secure: true,
@@ -126,6 +152,10 @@ async function test() {
     sip.call.respond(ic.id, {code: 200, reason: 'OK', media: [
         {
             type: 'audio',
+            secure: false,
+        },
+        {
+            type: 'audio',
             secure: true,
         },
     ]})
@@ -138,10 +168,10 @@ async function test() {
             msg: sip_msg({
                 $rs: '200',
                 $rb: sdp.jsonpath_matcher({
-                    '$.media.length': [1],
-                    '$.media[*].desc.type': ['audio'],
-                    '$.media[*].desc.port': [m.nonzero],
-                    '$.media[*].desc.protocol': ['RTP/SAVP'],
+                    '$.media.length': [2],
+                    '$.media[*].desc.type': ['audio', 'audio'],
+                    '$.media[*].desc.port': [m.nonzero, m.nonzero],
+                    '$.media[*].desc.protocol': ['RTP/AVP', 'RTP/SAVP'],
                 }),
             }),
         },
@@ -150,6 +180,20 @@ async function test() {
             call_id: ic.id,
             status: 'ok',
             media: m.fm([
+              m.pm({
+                type: 'audio',
+                protocol: 'RTP/AVP',
+                local: {
+                  mode: 'sendrecv'
+                },
+                remote: {
+                  mode: 'sendrecv'
+                },
+                fmt: [
+                  '0 PCMU/8000',
+                  '120 telephone-event/8000'
+                ]
+              }),
               m.pm({
                 type: 'audio',
                 protocol: 'RTP/SAVP',
@@ -171,6 +215,20 @@ async function test() {
             call_id: oc.id,
             status: 'ok',
             media: m.fm([
+              m.pm({
+                type: 'audio',
+                protocol: 'RTP/AVP',
+                local: {
+                  mode: 'sendrecv'
+                },
+                remote: {
+                  mode: 'sendrecv'
+                },
+                fmt: [
+                  '0 PCMU/8000',
+                  '120 telephone-event/8000'
+                ]
+              }),
               m.pm({
                 type: 'audio',
                 protocol: 'RTP/SAVP',
@@ -202,15 +260,33 @@ async function test() {
         },
         {
             event: 'dtmf',
+            call_id: ic.id,
+            digits: '1234',
+            mode: 1,
+            media_id: 1,
+        },
+        {
+            event: 'dtmf',
             call_id: oc.id,
             digits: '1234',
             mode: 1,
             media_id: 0,
         },
+        {
+            event: 'dtmf',
+            call_id: oc.id,
+            digits: '1234',
+            mode: 1,
+            media_id: 1,
+        },
     ], 2000)
 
 
     sip.call.reinvite(ic.id, {media: [
+        {
+            type: 'audio',
+            secure: false,
+        },
         {
             type: 'audio',
             secure: true,
@@ -227,6 +303,10 @@ async function test() {
     sip.call.respond(oc.id, {code: 200, reason: 'OK', media: [
         {
             type: 'audio',
+            secure: false,
+        },
+        {
+            type: 'audio',
             secure: true,
         },
     ]})
@@ -239,10 +319,10 @@ async function test() {
             msg: sip_msg({
                 $rs: '200',
                 $rb: sdp.jsonpath_matcher({
-                    '$.media.length': [1],
-                    '$.media[*].desc.type': ['audio'],
-                    '$.media[*].desc.port': [m.nonzero],
-                    '$.media[*].desc.protocol': ['RTP/SAVP'],
+                    '$.media.length': [2],
+                    '$.media[*].desc.type': ['audio', 'audio'],
+                    '$.media[*].desc.port': [m.nonzero, m.nonzero],
+                    '$.media[*].desc.protocol': ['RTP/AVP', 'RTP/SAVP'],
                 }),
             }),
         },
@@ -251,6 +331,20 @@ async function test() {
             call_id: oc.id,
             status: 'ok',
             media: m.fm([
+              m.pm({
+                type: 'audio',
+                protocol: 'RTP/AVP',
+                local: {
+                  mode: 'sendrecv'
+                },
+                remote: {
+                  mode: 'sendrecv'
+                },
+                fmt: [
+                  '0 PCMU/8000',
+                  '120 telephone-event/8000'
+                ]
+              }),
               m.pm({
                 type: 'audio',
                 protocol: 'RTP/SAVP',
@@ -272,6 +366,20 @@ async function test() {
             call_id: ic.id,
             status: 'ok',
             media: m.fm([
+              m.pm({
+                type: 'audio',
+                protocol: 'RTP/AVP',
+                local: {
+                  mode: 'sendrecv'
+                },
+                remote: {
+                  mode: 'sendrecv'
+                },
+                fmt: [
+                  '0 PCMU/8000',
+                  '120 telephone-event/8000'
+                ]
+              }),
               m.pm({
                 type: 'audio',
                 protocol: 'RTP/SAVP',
@@ -303,10 +411,24 @@ async function test() {
         },
         {
             event: 'dtmf',
+            call_id: ic.id,
+            digits: '1234',
+            mode: 1,
+            media_id: 1,
+        },
+        {
+            event: 'dtmf',
             call_id: oc.id,
             digits: '1234',
             mode: 1,
             media_id: 0,
+        },
+        {
+            event: 'dtmf',
+            call_id: oc.id,
+            digits: '1234',
+            mode: 1,
+            media_id: 1,
         },
     ], 2000)
 
