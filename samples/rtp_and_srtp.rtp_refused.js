@@ -1,5 +1,3 @@
-// This test creates 2 UDP SIP endpoints, makes a call between them and disconeects.
-
 const sip = require ('../index.js')
 const Zeq = require('@mayama/zeq')
 const m = require('data-matching')

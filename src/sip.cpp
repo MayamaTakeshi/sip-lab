@@ -4076,10 +4076,11 @@ int find_sdp_media_by_media_endpt(const pjmedia_sdp_session *sdp,
   printf("find_sdp_media_by_media_endpt %x\n", me);
   for (int i = 0; i < sdp->media_count; i++) {
     pjmedia_sdp_media *media = sdp->media[i];
-    printf("i=%d me->port=%i media->desc.port=%i me->media=%.*s media->desc.media=%.*s\n", i, me->port, media->desc.port, me->media.slen, me->media.ptr, media->desc.media.slen, media->desc.media.ptr);
+    printf("i=%d me->port=%i media->desc.port=%i me->media=%.*s media->desc.media=%.*s me->transport=%.*s media->desc.transport=%.*s\n", i, me->port, media->desc.port, me->media.slen, me->media.ptr, media->desc.media.slen, media->desc.media.ptr, me->transport.slen, me->transport.ptr, media->desc.transport.slen, media->desc.transport.ptr);
 
     if ((me->port == media->desc.port) &&
-        (pj_strcmp(&me->media, &media->desc.media) == 0)) {
+        (pj_strcmp(&me->media, &media->desc.media) == 0) &&
+        (pj_strcmp(&me->transport, &media->desc.transport) == 0)) {
       *media_out = media;
       printf("found\n");
       return i;
@@ -4414,18 +4415,24 @@ MediaEndpoint *find_media_endpt_by_sdp_media(Call *call,
 
     if (pj_strcmp2(&local_media->desc.media, "audio") == 0) {
       if (ENDPOINT_TYPE_AUDIO == me->type) {
-        in_use_chart[i] = true;
-        return me;
+        if (pj_strcmp(&local_media->desc.transport, &me->transport)) {
+          in_use_chart[i] = true;
+          return me;
+        }
       }
     } else if (pj_strcmp2(&local_media->desc.media, "video") == 0) {
       if (ENDPOINT_TYPE_VIDEO == me->type) {
-        in_use_chart[i] = true;
-        return me;
+        if (pj_strcmp(&local_media->desc.transport, &me->transport)) {
+          in_use_chart[i] = true;
+          return me;
+        } 
       }
     } else if (pj_strcmp2(&local_media->desc.media, "application") == 0) {
       if (ENDPOINT_TYPE_MRCP == me->type) {
-        in_use_chart[i] = true;
-        return me;
+        if (pj_strcmp(&local_media->desc.transport, &me->transport)) {
+          in_use_chart[i] = true;
+          return me;
+        }
       }
     } else {
       printf("local_media->desc.media=%.*s\n", local_media->desc.media.slen,
