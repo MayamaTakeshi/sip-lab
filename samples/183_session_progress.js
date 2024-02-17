@@ -32,7 +32,7 @@ async function test() {
     console.log("t1", t1)
     console.log("t2", t2)
 
-    oc = sip.call.create(t1.id, {from_uri: 'sip:alice@test.com', to_uri: `sip:bob@${t2.address}:${t2.port}`})
+    oc = sip.call.create(t1.id, {from_uri: 'sip:alice@test.com', to_uri: `sip:bob@${t2.address}:${t2.port}`, media: 'audio,audio'})
 
     await z.wait([
         {
@@ -46,7 +46,7 @@ async function test() {
         sip_call_id: z.store.sip_call_id,
     }
 
-    sip.call.respond(ic.id, {code: 183, reason: 'Session Progress'})
+    sip.call.respond(ic.id, {code: 183, reason: 'Session Progress', media: 'audio,audio'})
 
     await z.wait([
         {
@@ -72,6 +72,9 @@ async function test() {
               {
                 type: 'audio',
               },
+              {
+                type: 'audio',
+              },
            ],
         },
         {
@@ -79,6 +82,9 @@ async function test() {
             call_id: ic.id,
             status: 'ok',
             media: [
+              {
+                type: 'audio',
+              },
               {
                 type: 'audio',
               },
@@ -99,16 +105,30 @@ async function test() {
         },
         {
             event: 'dtmf',
+            call_id: ic.id,
+            digits: '1234',
+            mode: 0,
+            media_id: 1
+        },
+        {
+            event: 'dtmf',
             call_id: oc.id,
             digits: '4321',
             mode: 1,
             media_id: 0
         },
+	{
+            event: 'dtmf',
+            call_id: oc.id,
+            digits: '4321',
+            mode: 1,
+            media_id: 1
+        },
     ], 2000)
 
     await z.sleep(1000)
 
-    sip.call.respond(ic.id, {code: 200, reason: 'OK'})
+    sip.call.respond(ic.id, {code: 200, reason: 'OK', media: 'audio,audio'})
 
     await z.wait([
         {
@@ -116,8 +136,8 @@ async function test() {
             call_id: oc.id,
             method: 'INVITE',
             msg: sip_msg({
-                $rs: '183',
-                $rr: 'Session Progress',
+                $rs: '200',
+                $rr: 'OK',
                 '$(hdrcnt(VIA))': 1,
                 $fU: 'alice',
                 $fd: 'test.com',
@@ -133,6 +153,19 @@ async function test() {
 
     await z.wait([
         {
+            event: 'media_update',
+            call_id: oc.id,
+            status: 'ok',
+            media: [
+              {
+                type: 'audio',
+              },
+              {
+                type: 'audio',
+              },
+            ]
+        },
+        {
             event: 'dtmf',
             call_id: ic.id,
             digits: '1234',
@@ -141,14 +174,28 @@ async function test() {
         },
         {
             event: 'dtmf',
+            call_id: ic.id,
+            digits: '1234',
+            mode: 0,
+            media_id: 1
+        },
+        {
+            event: 'dtmf',
             call_id: oc.id,
             digits: '4321',
             mode: 1,
             media_id: 0
         },
+        {
+            event: 'dtmf',
+            call_id: oc.id,
+            digits: '4321',
+            mode: 1,
+            media_id: 1
+        },
     ], 2000)
 
-    sip.call.reinvite(oc.id)
+    sip.call.reinvite(oc.id, {media: 'audio,audio'})
 
     await z.wait([
         {
@@ -157,7 +204,7 @@ async function test() {
         },
     ], 1000)
 
-    sip.call.respond(ic.id, {code: 200, reason: 'OK'})
+    sip.call.respond(ic.id, {code: 200, reason: 'OK', media: 'audio,audio'})
 
     await z.wait([
         {
@@ -176,6 +223,9 @@ async function test() {
               {
                 type: 'audio',
               },
+              {
+                type: 'audio',
+              },
             ]
         },
         {
@@ -183,6 +233,9 @@ async function test() {
             call_id: oc.id,
             status: 'ok',
             media: [
+              {
+                type: 'audio',
+              },
               {
                 type: 'audio',
               },
@@ -203,10 +256,106 @@ async function test() {
         },
         {
             event: 'dtmf',
+            call_id: ic.id,
+            digits: '1234',
+            mode: 0,
+            media_id: 1
+        },
+        {
+            event: 'dtmf',
             call_id: oc.id,
             digits: '4321',
             mode: 1,
             media_id: 0
+        },
+        {
+            event: 'dtmf',
+            call_id: oc.id,
+            digits: '4321',
+            mode: 1,
+            media_id: 1
+        },
+    ], 2000)
+
+    sip.call.reinvite(ic.id, {media: 'audio,audio'})
+
+    await z.wait([
+        {
+            event: 'reinvite',
+            call_id: oc.id,
+        },
+    ], 1000)
+
+    sip.call.respond(oc.id, {code: 200, reason: 'OK', media: 'audio,audio'})
+
+    await z.wait([
+        {
+            event: 'response',
+            call_id: ic.id,
+            method: 'INVITE',
+            msg: sip_msg({
+                $rs: '200',
+            }),
+        },
+        {
+            event: 'media_update',
+            call_id: oc.id,
+            status: 'ok',
+            media: [
+              {
+                type: 'audio',
+              },
+              {
+                type: 'audio',
+              },
+            ]
+        },
+        {
+            event: 'media_update',
+            call_id: ic.id,
+            status: 'ok',
+            media: [
+              {
+                type: 'audio',
+              },
+              {
+                type: 'audio',
+              },
+            ]
+        },
+    ], 1000)
+
+    sip.call.send_dtmf(oc.id, {digits: '1234', mode: 0})
+    sip.call.send_dtmf(ic.id, {digits: '4321', mode: 1})
+
+    await z.wait([
+        {
+            event: 'dtmf',
+            call_id: ic.id,
+            digits: '1234',
+            mode: 0,
+            media_id: 0
+        },
+        {
+            event: 'dtmf',
+            call_id: ic.id,
+            digits: '1234',
+            mode: 0,
+            media_id: 1
+        },
+        {
+            event: 'dtmf',
+            call_id: oc.id,
+            digits: '4321',
+            mode: 1,
+            media_id: 0
+        },
+        {
+            event: 'dtmf',
+            call_id: oc.id,
+            digits: '4321',
+            mode: 1,
+            media_id: 1
         },
     ], 2000)
 

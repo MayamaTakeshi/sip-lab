@@ -424,6 +424,8 @@ struct Call {
 
   pjmedia_sdp_session *active_local_sdp;
   pjmedia_sdp_session *active_remote_sdp;
+
+  bool local_sdp_answer_already_set;
 };
 
 #define MAX_TCP_DATA 4096
@@ -2071,9 +2073,9 @@ int pjw_call_respond(long call_id, const char *json) {
         set_error("pjsip_rx_data_free_cloned failed with status=%i", status);
         goto out;
       }
+      call->pending_rdata = 0;
 
       call->pending_request = -1;
-      call->pending_rdata = 0;
     }
 
     goto out;
@@ -2084,13 +2086,16 @@ int pjw_call_respond(long call_id, const char *json) {
 
     if (call->pending_rdata && call->pending_rdata->msg_info.msg->body &&
         call->pending_rdata->msg_info.msg->body->len) {
-      if (!process_media(call, call->inv->dlg, document, true)) {
-        goto out;
-      }
+      if(!call->local_sdp_answer_already_set) {
+        if (!process_media(call, call->inv->dlg, document, true)) {
+          goto out;
+        }
 
-      status = pjsip_inv_set_sdp_answer(call->inv, call->local_sdp);
+        status = pjsip_inv_set_sdp_answer(call->inv, call->local_sdp);
+        call->local_sdp_answer_already_set = true;
+      }
     } else {
-      // delayed media. we need to sned the offer
+      printf("delayed media. we need to send the offer\n");
       if (!process_media(call, call->inv->dlg, document, false)) {
         goto out;
       }
@@ -2114,15 +2119,17 @@ int pjw_call_respond(long call_id, const char *json) {
 
     call->inv_initial_answer_required = false;
 
-    if (code >= 200) {
+    if (code >= 200 && code < 300) {
       status = pjsip_rx_data_free_cloned(call->pending_rdata);
       if (status != PJ_SUCCESS) {
         set_error("pjsip_rx_data_free_cloned failed with status=%i", status);
         goto out;
       }
-
-      call->pending_request = -1;
       call->pending_rdata = 0;
+
+      if (code >= 200 && code < 300) {
+        call->pending_request = -1;
+      }
     }
   } else {
     status = pjsip_inv_answer(call->inv, code, &r,
@@ -2133,7 +2140,20 @@ int pjw_call_respond(long call_id, const char *json) {
       goto out;
     }
 
-    call->pending_request = -1;
+    if (code >= 200 && code < 300) {
+      if(call->pending_rdata) {
+        status = pjsip_rx_data_free_cloned(call->pending_rdata);
+        if (status != PJ_SUCCESS) {
+          set_error("pjsip_rx_data_free_cloned failed with status=%i", status);
+          goto out;
+        }
+        call->pending_rdata = 0;
+      }
+
+      if (code >= 200 && code < 300) {
+        call->pending_request = -1;
+      }
+    }
 
     if (!add_headers(call->inv->dlg->pool, tdata, document)) {
       goto out;
@@ -2144,6 +2164,10 @@ int pjw_call_respond(long call_id, const char *json) {
   if (status != PJ_SUCCESS) {
     set_error("pjsip_inv_send_msg failed with status=%i", status);
     goto out;
+  }
+
+  if(code >= 200 && code < 300) {
+    call->local_sdp_answer_already_set = false;
   }
 out:
   PJW_UNLOCK();
