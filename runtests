@@ -1,5 +1,7 @@
 #!/bin/bash
 
+successful_tests=()
+
 for i in $(ls samples/*.js)
 do
     node $i
@@ -7,9 +9,19 @@ do
     then
         echo "$i failed"
         exit 1
+    else
+        successful_tests+=($i)
     fi
 done
 
 echo
-echo "Success. All tests passed"
+
+echo "Success. All tests passed:"
+
+for t in "${successful_tests[@]}"
+do
+  echo "  - $t: OK"
+done
+
+echo
 
