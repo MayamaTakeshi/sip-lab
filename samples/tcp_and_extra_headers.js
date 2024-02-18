@@ -16,8 +16,8 @@ async function test() {
 
     console.log(sip.start((data) => { console.log(data)} ))
 
-    t1 = sip.transport.create({address: "127.0.0.1", port: 5090, type: 'tcp'})
-    t2 = sip.transport.create({address: "127.0.0.1", port: 5092, type: 'tcp'})
+    t1 = sip.transport.create({address: "127.0.0.1", type: 'tcp'})
+    t2 = sip.transport.create({address: "127.0.0.1", type: 'tcp'})
 
     console.log("t1", t1)
     console.log("t2", t2)

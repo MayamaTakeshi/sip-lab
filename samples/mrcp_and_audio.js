@@ -20,8 +20,8 @@ async function test() {
 
     console.log(sip.start((data) => { console.log(data)} ))
 
-    var t1 = sip.transport.create({address: "127.0.0.1", port: 5090, type: 'udp'})
-    var t2 = sip.transport.create({address: "127.0.0.1", port: 5092, type: 'udp'})
+    var t1 = sip.transport.create({address: "127.0.0.1", type: 'udp'})
+    var t2 = sip.transport.create({address: "127.0.0.1", type: 'udp'})
 
     console.log("t1", t1)
     console.log("t2", t2)
