@@ -14,12 +14,12 @@ mkdir -p $START_DIR/3rdParty
 cd $START_DIR/3rdParty
 if [[ ! -d spandsp ]]
 then
-	commit=e59ca8fb8b1591e626e6a12fdc60a2ebe83435ed
-	git clone https://github.com/freeswitch/spandsp
-	cd spandsp
-	git checkout $commit
-	./bootstrap.sh
-	CFLAGS='-O -fPIC' ./configure --enable-shared
+    commit=e59ca8fb8b1591e626e6a12fdc60a2ebe83435ed
+    git clone https://github.com/freeswitch/spandsp
+    cd spandsp
+    git checkout $commit
+    ./bootstrap.sh
+    CFLAGS='-O -fPIC' ./configure --enable-shared
     make
 fi
 
@@ -27,9 +27,9 @@ fi
 cd $START_DIR/3rdParty
 if [[ ! -d rapidjson ]]
 then
-	git clone https://github.com/Tencent/rapidjson
-	cd rapidjson
-	git checkout 27c3a8dc0e2c9218fe94986d249a12b5ed838f1d
+    git clone https://github.com/Tencent/rapidjson
+    cd rapidjson
+    git checkout 27c3a8dc0e2c9218fe94986d249a12b5ed838f1d
 fi
 
 
@@ -49,36 +49,49 @@ fi
 cd $START_DIR/3rdParty
 if [[ ! -d pjproject ]]
 then
-	git clone https://github.com/pjsip/pjproject
-	cd pjproject
-	#git checkout de3d744c2e1188b59bb907b6ee32ef83740ebc64
+    git clone https://github.com/pjsip/pjproject
+    cd pjproject
+    #git checkout de3d744c2e1188b59bb907b6ee32ef83740ebc64
     #git checkout 33a3c9e0a5eb84426edef05a9aa98af17d8011c3 # required for bcg729
-    git checkout 797088ed133c98492519b7d042b75735f6f9388c # updated as part of #21
+    #git checkout 797088ed133c98492519b7d042b75735f6f9388c # updated as part of #21
+    #git checkout 651df5b50129b7c5a5feec8336dda4468d53d2b0 # updated to latest to see of crash issues improve
+    git checkout 043926a5846963a2c99378e8daa495230923eaab # update to try to solve ##49 (but issue remains)
 
-	cat > user.mak <<EOF
-	export CFLAGS += -fPIC -g
-	export LDFLAGS +=
+    cat > user.mak <<EOF
+    export CFLAGS += -fPIC -g
+    export LDFLAGS +=
 EOF
 
     sed -i -r 's/BCG729_LIBS="-lbcg729"/BCG729_LIBS=''/' aconfigure
     LIBS=`pwd`/../bcg729/src/libbcg729.a ./configure --with-bcg729=`pwd`/../bcg729
-	cat > pjlib/include/pj/config_site.h <<EOF
-#define PJMEDIA_HAS_SRTP  0
+    cat > pjlib/include/pj/config_site.h <<EOF
+#define PJSUA_MAX_ACC (20000)
+#define PJ_IOQUEUE_MAX_HANDLES (1024)
+#define PJSUA_MAX_CALLS (20000)
 EOF
-	make dep && make clean && make
+    make dep && make clean && make
 fi
+
+
+cd $START_DIR/3rdParty
+if [[ ! -d boost_1_51_0 ]]
+then
+    wget http://sourceforge.net/projects/boost/files/boost/1.51.0/boost_1_51_0.tar.bz2
+    tar xf boost_1_51_0.tar.bz2
+fi
+
 
 
 #cd $START_DIR/3rdParty
 #if [[ ! -d openssl ]]
 #then
-#    wget https://github.com/openssl/openssl/archive/refs/tags/openssl-3.0.5.tar.gz
-#    tar xf openssl-3.0.5.tar.gz
-#    mv openssl-openssl-3.0.5 openssl
+#    git clone https://github.com/openssl/openssl
 #    cd openssl
-#    ./Configure
+#    git checkout openssl-3.0.7
+#    ./config -d # configure with debug symbols enabled
 #    make
 #fi
+# statically linking to openssl will not solve anything (see #37).
 
 
 echo "Build of dependencies successful"

@@ -52,11 +52,34 @@ npx prebuildify --strip -t 15.0.0 -t 16.0.0 -t 17.0.0 -t 18.0.0 19.0.0 20.0.0 21
 ```
 However the above will build the addon to run on the current OS.
 
-Instead we will force the build on debian11 (using docker). So do this instead:
+Instead we will force the build on debian11 (using docker) using prebuildify-cross. So do this instead:
+
+Make sure you have the docker image built.
+
+cd docker-images/debian11/
+./build_image.sh
+
+If it fails due to proxy problems, check if you have proxy configured in ~/.docker/config.json like this:
+```
+{
+    "proxies": {
+        "default": {
+            "httpProxy": "http://192.168.67.50:3128",
+            "httpsProxy": "http://192.168.67.50:3128",
+            "noProxy": "*.test.example.com,.example.org,127.0.0.0/8"
+        }
+    }
+}
+
+```
+
+After the message is built you can pass them to prebuildify-cross:
 ```
 nvm use v16.13.1
 npx prebuildify-cross -i mayamatakeshi/sip-lab-debian11:latest -t 15.0.0 -t 16.0.0 -t 17.0.0 -t 18.0.0 -t 19.0.0 -t 20.0.0 -t 21.0.0 --strip
 ```
+
+Obs: however the above will fail if you are behind proxy (solution pending).
 
 #### Running tests
 ```
