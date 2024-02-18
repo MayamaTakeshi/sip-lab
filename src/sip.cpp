@@ -4757,21 +4757,29 @@ static void on_forked(pjsip_inv_session *inv, pjsip_event *e) {
 
 static pjmedia_transport *create_media_transport(const pj_str_t *addr,
                                                  pj_uint16_t *allocated_port) {
+  printf("create_media_transport\n");
   pjmedia_transport *med_transport;
   pj_status_t status;
   for (int i = 0; i < 1000; ++i) {
     int port = 10000 + (i * 2);
+    //printf("trying port=%i\n", port);
     status = pjmedia_transport_udp_create3(g_med_endpt, AF, NULL, addr, port, 0,
                                            &med_transport);
     if (status == PJ_SUCCESS) {
       pjmedia_transport_info tpinfo;
       pjmedia_transport_info_init(&tpinfo);
       status = pjmedia_transport_get_info(med_transport, &tpinfo);
-      printf("create_media_transport created %x\n", med_transport);
+      //printf("create_media_transport port=%i created %x\n", port,  med_transport);
       *allocated_port = port;
       return med_transport;
+    } else {
+      char err[1024];
+      pj_strerror(status, err, sizeof(err));
+
+      printf("pjmedia_transport_udp_create3 status=%i (%s)\n", status, err);
     }
   }
+  printf("no port available\n");
   return NULL;
 }
 
