@@ -23,7 +23,7 @@ TODO:
 ### Installation
 
 This is a node.js addon and it is known to work on Debian 11, Debian 10, Ubuntu 22.04 and Ubuntu 20.04.
-It is distributed with prebuild binaries for node.js 19.0.0 and above (but built for Debian 11. For other Debian versions or for Ubuntu a local build of the addon will be executed. Being the case, be patient as the build process will take several minutes to complete).
+It is distributed with prebuild binaries for node.js 15.0.0 and above (but built for Debian 11. For other Debian versions or for Ubuntu a local build of the addon will be executed. Being the case, be patient as the build process will take several minutes to complete). 
 
 To install it, first install some build dependencies (you might not need them if your are on Debian 11).
 ```

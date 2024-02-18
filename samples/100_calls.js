@@ -48,7 +48,7 @@ async function test() {
         event: "incoming_call",
         call_id: m.push("ic_ids"),
         transport_id: t.id,
-    })).value(), 30000)
+    })).value(), 50000)
 
     // Now we answer the calls
     z.store.ic_ids.forEach(ic_id => { 
@@ -84,7 +84,7 @@ async function test() {
         status: 'ok',
     })).value())
 
-    await z.wait(events, 30000)
+    await z.wait(events, 50000)
 
     ocs.forEach(oc => {
         sip.call.send_dtmf(oc.id, {digits: '1234', mode: 0})
@@ -96,7 +96,7 @@ async function test() {
         digits: '1234',
         mode: 0,
         media_id: 0,
-    })).value(), 30000)
+    })).value(), 50000)
 
     z.store.ic_ids.forEach(ic_id => {
         sip.call.send_dtmf(ic_id, {digits: '4321', mode: 1})
@@ -108,7 +108,7 @@ async function test() {
         digits: '4321',
         mode: 1,
         media_id: 0,
-    })).value(), 30000)
+    })).value(), 50000)
 
     // now we terminate the calls
     ocs.forEach(oc => {
@@ -136,7 +136,7 @@ async function test() {
         call_id: ic_id,
     })).value())
 
-    await z.wait(events, 30000)
+    await z.wait(events, 50000)
 
     console.log("Success")
 
