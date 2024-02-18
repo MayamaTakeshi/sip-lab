@@ -4692,7 +4692,7 @@ static void on_state_changed(pjsip_inv_session *inv, pjsip_event *e) {
       MediaEndpoint *me = call->media[i];
       if (ENDPOINT_TYPE_AUDIO == me->type) {
         AudioEndpoint *ae = (AudioEndpoint *)me->endpoint.audio;
-        addon_log(L_DBG, "processing media[%d] as AudioEndpoing\n", i);
+        addon_log(L_DBG, "processing media[%d] as AudioEndpoint\n", i);
         if (ae->master_port) {
           addon_log(L_DBG, "calling pjmedia_port_stop\n");
           status = pjmedia_master_port_stop(ae->master_port);
