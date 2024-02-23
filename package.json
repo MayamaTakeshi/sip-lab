@@ -1,6 +1,6 @@
 {
   "name": "sip-lab",
-  "version": "1.17.5",
+  "version": "1.17.6",
   "description": "",
   "main": "index.js",
   "engines": {
@@ -21,7 +21,7 @@
   "gypfile": true,
   "homepage": "https://github.com/MayamaTakeshi/sip-lab",
   "dependencies": {
-    "@mayama/zeq": "^4.13.0",
+    "@mayama/zeq": "^4.14.0",
     "mrcp": "^1.4.0",
     "mrcp-matching": "^1.0.0",
     "node-addon-api": "^5.0.0",
