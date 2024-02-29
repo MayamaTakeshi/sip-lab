@@ -16,6 +16,8 @@ async function test() {
         return e
     })
 
+    sip.set_codecs("pcmu/8000/1:128,pcma/8000/1:128,gsm/8000/1:128")
+
     console.log(sip.start((data) => { console.log(data)} ))
 
     t1 = sip.transport.create({address: "127.0.0.1", type: 'udp'})
@@ -53,6 +55,9 @@ async function test() {
         sip_call_id: z.store.sip_call_id,
     }
 
+    // force answer with pcma
+    sip.set_codecs("pcma/8000/1:128")
+
     sip.call.respond(ic.id, {code: 200, reason: 'OK'})
 
     await z.wait([
@@ -85,8 +90,12 @@ async function test() {
                 remote: {
                   port: 10002,
                   mode: 'sendrecv'
-                }
-              }
+                },
+                fmt: [                                                                             
+                  '8 PCMA/8000',                                                                   
+                  '120 telephone-event/8000',
+                ],
+              },
             ],
         },
         {
@@ -103,7 +112,11 @@ async function test() {
                 remote: {
                   port: 10000,
                   mode: 'sendrecv'
-                }
+                },
+                fmt: [                                                                             
+                  '8 PCMA/8000',                                                                   
+                  '120 telephone-event/8000',
+                ],
               }
             ],
         },
@@ -130,7 +143,8 @@ async function test() {
     ], 1500)
 
     for(i=0 ;i< 3; i++) {
-        //await z.sleep(100)
+        sip.set_codecs("pcmu/8000/1:128,pcma/8000/1:128,gsm/8000/1:128")
+
         sip.call.reinvite(oc.id)
 
         await z.wait([
@@ -139,6 +153,9 @@ async function test() {
                 call_id: ic.id,
             },
         ], 500)
+
+        // force answer with pcma
+        sip.set_codecs("pcma/8000/1:128")
 
         sip.call.respond(ic.id, {code: 200, reason: 'OK'})
 
@@ -165,15 +182,50 @@ async function test() {
                 event: 'media_update',
                 call_id: oc.id,
                 status: 'ok',
+                media: [
+                  {
+                    type: 'audio',
+                    local: {
+                      port: 10000,
+                      mode: 'sendrecv'
+                    },
+                    remote: {
+                      port: 10002,
+                      mode: 'sendrecv'
+                    },
+                    fmt: [                                                                             
+                      '8 PCMA/8000',                                                                   
+                      '120 telephone-event/8000',
+                    ],
+                  },
+                ],
             },
             {
                 event: 'media_update',
                 call_id: ic.id,
                 status: 'ok',
+                media: [
+                  {
+                    type: 'audio',
+                    local: {
+                      port: 10002,
+                      mode: 'sendrecv'
+                    },
+                    remote: {
+                      port: 10000,
+                      mode: 'sendrecv'
+                    },
+                    fmt: [                                                                             
+                      '8 PCMA/8000',                                                                   
+                      '120 telephone-event/8000',
+                    ],
+                  }
+                ],
             },
         ], 500)
 
-        //await z.sleep(100)
+        sip.set_codecs("pcmu/8000/1:128,pcma/8000/1:128,gsm/8000/1:128")
+
         sip.call.reinvite(ic.id)
 
         await z.wait([
@@ -182,6 +234,9 @@ async function test() {
                 call_id: oc.id,
             },
         ], 500)
+
+        // force answer with pcma
+        sip.set_codecs("pcma/8000/1:128")
 
         sip.call.respond(oc.id, {code: 200, reason: 'OK'})
 
@@ -207,11 +262,45 @@ async function test() {
                 event: 'media_update',
                 call_id: oc.id,
                 status: 'ok',
+                media: [
+                  {
+                    type: 'audio',
+                    local: {
+                      port: 10000,
+                      mode: 'sendrecv'
+                    },
+                    remote: {
+                      port: 10002,
+                      mode: 'sendrecv'
+                    },
+                    fmt: [                                                                             
+                      '8 PCMA/8000',                                                                   
+                      '120 telephone-event/8000',
+                    ],
+                  },
+                ],
             },
             {
                 event: 'media_update',
                 call_id: ic.id,
                 status: 'ok',
+                media: [
+                  {
+                    type: 'audio',
+                    local: {
+                      port: 10002,
+                      mode: 'sendrecv'
+                    },
+                    remote: {
+                      port: 10000,
+                      mode: 'sendrecv'
+                    },
+                    fmt: [                                                                             
+                      '8 PCMA/8000',                                                                   
+                      '120 telephone-event/8000',
+                    ],
+                  }
+                ],
             },
         ], 500)
 

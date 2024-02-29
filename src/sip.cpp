@@ -5446,9 +5446,12 @@ int pjw_set_codecs(const char *in_codec_info) {
   // char error[1000];
   pjmedia_codec_mgr *codec_mgr;
   pj_status_t status;
-  char codec_info[1000];
+  char codec_info[1024];
   pj_str_t codec_id;
-  char *tok;
+
+  char *token_comma;
+
+  char *saveptr;
 
   PJW_LOCK();
 
@@ -5467,26 +5470,36 @@ int pjw_set_codecs(const char *in_codec_info) {
 
   strcpy(codec_info, in_codec_info);
 
-  tok = strtok(codec_info, ":");
-  while (tok) {
-    if (!tok) {
+  printf("in_codec_info='%s'\n", in_codec_info);
+  printf("   codec_info='%s'\n", codec_info);
+
+  token_comma = strtok_r(codec_info, ",", &saveptr);
+
+  while (token_comma != NULL) {
+    printf("Token: '%s'\n", token_comma);
+
+    char *colon_position = strchr(token_comma, ':');
+    if (colon_position == NULL) {
       set_error("malformed argument codec_info");
-      goto out;
-    }
-    char *prio = strtok(NULL, " ");
-    if (!prio) {
-      set_error("malformed argument codec_info");
-      goto out;
+      break;
     }
 
-    codec_id = pj_str(tok);
+    *colon_position = '\0'; // Replace colon with null terminator
+    char *codec_id_s = token_comma;
+    char *prio = colon_position + 1;
+
+    printf("codec_id=%s prio=%s\n", codec_id_s, prio);
+
+    codec_id = pj_str(codec_id_s);
+
     status =
         pjmedia_codec_mgr_set_codec_priority(codec_mgr, &codec_id, atoi(prio));
     if (status != PJ_SUCCESS) {
       set_error("pjmedia_codec_mgr_set_codec_priority failed");
-      goto out;
+      break;
     }
-    tok = strtok(NULL, " ");
+
+    token_comma = strtok_r(NULL, ",", &saveptr);
   }
 
 out:

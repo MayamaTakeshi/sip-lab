@@ -16,6 +16,8 @@ async function test() {
         return e
     })
 
+    sip.set_codecs("pcmu/8000/1:128,pcma/8000/1:128,gsm/8000/1:128")
+
     // here we start sip-lab
     console.log(sip.start((data) => { console.log(data)} ))
 
