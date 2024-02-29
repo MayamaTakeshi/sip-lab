@@ -35,4 +35,6 @@ echo
 echo "Success. All tests passed"
 echo
 output_successful_tests
-
+echo
+echo "Everything OK"
+echo
