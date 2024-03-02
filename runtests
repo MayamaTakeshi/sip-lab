@@ -1,5 +1,35 @@
 #!/bin/bash
 
+set -o nounset
+
+function usage() {
+    cat <<EOF
+Usage: $0 [-g]
+
+Details:
+      -g : run each test inside gdb
+EOF
+}
+
+use_gdb=0
+
+while getopts "gh" o; do
+    case "${o}" in
+        g)
+            use_gdb=1
+	    ;;
+        h)
+            usage
+	    exit 0
+	    ;;
+	*)
+            usage
+	    exit 1
+	    ;;
+    esac
+done
+shift $((OPTIND-1))
+
 successful_tests=()
 
 function output_successful_tests() {
@@ -15,7 +45,14 @@ echo
 for i in $(ls samples/*.js)
 do
     start_time=$(date +%s.%N)
-    node $i
+
+    if [[ $use_gdb -eq 0 ]]
+    then
+        node $i
+    else
+        gdb -ex "handle SIGSEGV stop" -ex "run" -ex "bt" -ex "quit" --args node $i
+    fi
+
     if [[ $? -ne 0 ]]
     then
         echo "$i failed"
