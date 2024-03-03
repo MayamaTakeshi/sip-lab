@@ -269,6 +269,19 @@ pjsip_route_hdr route_set;
 pjsip_route_hdr *route;
 const pj_str_t hname = pj_str((char *)"Route");
 
+#define CONF_PORTS 1024
+#define CLOCK_RATE 16000
+#define CHANNEL_COUNT 1
+#define PTIME 20
+#define SAMPLES_PER_FRAME (CLOCK_RATE*PTIME/1000)
+#define BITS_PER_SAMPLE 16
+
+pjmedia_conf  *g_conf;
+
+pjmedia_master_port *g_master_port;
+pjmedia_port        *g_null_port;
+
+
 #define MAXDIGITS 256
 
 #define DTMF_MODE_RFC2833 0
@@ -1116,6 +1129,8 @@ int __pjw_init() {
 
   pj_status_t status;
 
+  pjmedia_port *conf_port = NULL;
+
   status = pj_init();
   if (status != PJ_SUCCESS) {
     addon_log(L_DBG, "pj_init failed\n");
@@ -1309,6 +1324,7 @@ int __pjw_init() {
 
 #if defined(PJMEDIA_HAS_SRTP) && (PJMEDIA_HAS_SRTP != 0)
   status = pjmedia_srtp_init_lib(g_med_endpt);
+
   if (status != PJ_SUCCESS) {
     addon_log(L_DBG, "Error initializing SRTP library\n");
     return 1;
@@ -1333,6 +1349,44 @@ int __pjw_init() {
 
   if (!start_digit_buffer_thread()) {
     addon_log(L_DBG, "start_digit_buffer_thread() failed\n");
+    return 1;
+  }
+
+  status = pjmedia_conf_create(g_pool,
+                                 CONF_PORTS,
+                                 CLOCK_RATE,
+                                 CHANNEL_COUNT,
+                                 SAMPLES_PER_FRAME,
+                                 BITS_PER_SAMPLE,
+                                 PJMEDIA_CONF_NO_DEVICE,
+                                 &g_conf);
+
+  if (status != PJ_SUCCESS) {
+    addon_log(L_DBG, "Error creating conference bridge\n");
+    return 1;
+  }
+
+  status = pjmedia_null_port_create(g_pool, CLOCK_RATE, CHANNEL_COUNT, SAMPLES_PER_FRAME, BITS_PER_SAMPLE, &g_null_port);
+  if (status != PJ_SUCCESS) {
+    addon_log(L_DBG, "Error creating null port\n");
+    return 1;
+  }
+    
+  conf_port = pjmedia_conf_get_master_port(g_conf);
+  if (conf_port == NULL) {
+    addon_log(L_DBG, "Error conf port is NULL\n");
+    return 1;
+  }
+    
+  status = pjmedia_master_port_create(g_pool, g_null_port, conf_port, 0, &g_master_port);
+  if (status != PJ_SUCCESS) {
+    addon_log(L_DBG, "Error creating master port\n");
+    return 1;
+  }
+    
+  status = pjmedia_master_port_start(g_master_port);
+  if (status != PJ_SUCCESS) {
+    addon_log(L_DBG, "Error start master port\n");
     return 1;
   }
 
