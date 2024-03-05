@@ -21,6 +21,7 @@
 #include "event_templates.hpp"
 
 #include "dtmfdet.h"
+#include "fax_port.h"
 
 #include <ctime>
 
@@ -263,8 +264,9 @@ pjsip_route_hdr route_set;
 pjsip_route_hdr *route;
 const pj_str_t hname = pj_str((char *)"Route");
 
-#define CONF_PORTS 2048
-#define CLOCK_RATE 16000
+#define CONF_PORTS 1024
+//#define CLOCK_RATE 16000
+#define CLOCK_RATE 8000
 #define CHANNEL_COUNT 1
 #define PTIME 20
 #define SAMPLES_PER_FRAME (CLOCK_RATE*PTIME/1000)
@@ -616,7 +618,6 @@ bool prepare_tonegen(Call *call, AudioEndpoint *ae);
 bool prepare_dtmfdet(Call *call, AudioEndpoint *ae);
 bool prepare_wav_player(Call *c, AudioEndpoint *ae, const char *file);
 bool prepare_wav_writer(Call *c, AudioEndpoint *ae, const char *file);
-
 bool prepare_fax(Call *c, AudioEndpoint *ae, bool is_sender, const char *file,
                  unsigned flags);
 
@@ -636,6 +637,7 @@ typedef pj_status_t (*audio_endpoint_stop_op_t)(Call *call, AudioEndpoint *ae);
 
 pj_status_t audio_endpoint_stop_play_wav(Call *call, AudioEndpoint *ae);
 pj_status_t audio_endpoint_stop_record_wav(Call *call, AudioEndpoint *ae);
+pj_status_t audio_endpoint_stop_fax(Call *call, AudioEndpoint *ae);
 
 static pjsip_module mod_tester = {
     NULL,
@@ -722,13 +724,13 @@ pj_status_t setup_call_conf(Call *call) {
                                  &call->conf);
 
   if (status != PJ_SUCCESS) {
-    addon_log(L_DBG, "Error creating conference bridge\n");
+    addon_log(L_DBG, "pjmedia_conf_create failed\n");
     return false;
   }
 
   status = pjmedia_null_port_create(call->inv->pool, CLOCK_RATE, CHANNEL_COUNT, SAMPLES_PER_FRAME, BITS_PER_SAMPLE, &call->null_port);
   if (status != PJ_SUCCESS) {
-    addon_log(L_DBG, "Error creating null port\n");
+    addon_log(L_DBG, "pjmedia_null_port_created failed\n");
     return false;
   }
     
@@ -736,25 +738,56 @@ pj_status_t setup_call_conf(Call *call) {
 
   conf_port = pjmedia_conf_get_master_port(call->conf);
   if (conf_port == NULL) {
-    addon_log(L_DBG, "Error conf port is NULL\n");
+    addon_log(L_DBG, "pjmedia_conf_get_master_port failed\n");
     return false;
   }
     
   status = pjmedia_master_port_create(call->inv->pool, call->null_port, conf_port, 0, &call->master_port);
   if (status != PJ_SUCCESS) {
-    addon_log(L_DBG, "Error creating master port\n");
+    addon_log(L_DBG, "pjmedia_master_port_create failed\n");
     return false;
   }
     
   status = pjmedia_master_port_start(call->master_port);
   if (status != PJ_SUCCESS) {
-    addon_log(L_DBG, "Error start master port\n");
+    addon_log(L_DBG, "pjmedia_master_port_start failed\n");
     return false;
   }
 
   return PJ_SUCCESS;
 }
 
+void release_call_conf(Call *call) {
+    pj_status_t status;
+
+    if (call->master_port) {
+        status = pjmedia_master_port_stop(call->master_port);
+        if(status != PJ_SUCCESS) {
+            addon_log(L_DBG, "pjmedia_master_port_stop failed\n");
+        }
+        pjmedia_master_port_destroy(call->master_port, 0);
+        if(status != PJ_SUCCESS) {
+            addon_log(L_DBG, "pjmedia_master_port_destroy failed\n");
+        }
+        call->master_port = NULL;
+    }
+
+    if (call->conf) {
+        status = pjmedia_conf_destroy(call->conf);
+        if(status != PJ_SUCCESS) {
+            addon_log(L_DBG, "pjmedia_conf_destroy failed\n");
+        }
+        call->conf = NULL;
+    }
+
+    if (call->null_port) {
+        status = pjmedia_port_destroy(call->null_port);
+        if(status != PJ_SUCCESS) {
+            addon_log(L_DBG, "pjmedia_port_destroy(null_port) failed\n");
+        }
+        call->null_port = NULL;
+    }
+}
 
 static int find_endpoint_by_inband_dtmf_media_port(Call *call,
                                                    pjmedia_port *port) {
@@ -3803,6 +3836,10 @@ out:
   return 0;
 }
 
+pj_status_t audio_endpoint_stop_fax(Call *call, AudioEndpoint *ae) {
+  return audio_endpoint_remove_port(call, &ae->fax_cbp);
+}
+
 int pjw_call_start_fax(long call_id, const char *json) {
   PJW_LOCK();
   clear_error();
@@ -3908,6 +3945,13 @@ int pjw_call_start_fax(long call_id, const char *json) {
       flags |= FAX_FLAG_TRANSMIT_ON_IDLE;
   }
 
+  // First stop and destroy existing fax port.
+  status = audio_endpoint_stop_fax(call, ae);
+  if(status != PJ_SUCCESS) {
+    set_error("audio_endpoint_stop_fax failed");
+    return -1;
+  }
+
   if (!prepare_fax(call, ae, is_sender, file, flags)) {
     set_error("prepare_fax failed");
     goto out;
@@ -3920,10 +3964,6 @@ out:
   }
 
   return 0;
-}
-
-pj_status_t audio_endpoint_stop_fax(Call *call, AudioEndpoint *ae) {
-  return audio_endpoint_remove_port(call, &ae->fax_cbp);
 }
 
 int pjw_call_stop_fax(long call_id, const char *json) {
@@ -4744,6 +4784,8 @@ static void on_state_changed(pjsip_inv_session *inv, pjsip_event *e) {
         }
       }
     }
+
+    release_call_conf(call);
 
     long val;
     if (!g_call_ids.remove(call_id, val)) {
@@ -6517,25 +6559,22 @@ bool prepare_dtmfdet(Call *c, AudioEndpoint *ae) {
   return true;
 }
 
-
 bool prepare_fax(Call *c, AudioEndpoint *ae, bool is_sender, const char *file,
                  unsigned flags) {
   pj_status_t status;
 
-  // TODO: create pjmedia_fax_port_create to enable the below block
-  /*
   status = pjmedia_fax_port_create(
-      c->inv->pool, PJMEDIA_PIA_SRATE(&ae->stream_cbp.port->info),
-      PJMEDIA_PIA_CCNT(&ae->stream_cbp.port->info), PJMEDIA_PIA_SPF(&ae->stream_cbp.port->info),
-      PJMEDIA_PIA_BITS(&ae->stream_cbp.port->info), on_fax_result, c, is_sender, file,
-      flags, (pjmedia_port **)&ae->fax_cbp);
+      c->inv->pool,
+      PJMEDIA_PIA_SRATE(&ae->stream_cbp.port->info),
+      PJMEDIA_PIA_CCNT(&ae->stream_cbp.port->info),
+      PJMEDIA_PIA_SPF(&ae->stream_cbp.port->info),
+      PJMEDIA_PIA_BITS(&ae->stream_cbp.port->info),
+      on_fax_result, c, is_sender, file,
+      flags, &ae->fax_cbp.port);
   if (status != PJ_SUCCESS) {
     set_error("pjmedia_fax_port_create failed");
     return false;
   }
-  */
-  set_error("pjmedia_fax_port_create not implemented");
-  return false;
 
   status = pjmedia_conf_add_port(c->conf, c->inv->pool, ae->fax_cbp.port, NULL, &ae->fax_cbp.slot);
   if (status != PJ_SUCCESS) {
