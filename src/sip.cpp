@@ -28,6 +28,8 @@
 #include "chainlink_wav_port.h"
 #include "chainlink_wire_port.h"
 
+#include "dtmfdet.h"
+
 #include <ctime>
 
 #define _BSD_SOURCE
@@ -643,6 +645,7 @@ bool prepare_wire(pj_pool_t *pool, chainlink **link, unsigned sampling_rate,
                   unsigned bits_per_sample);
 
 bool prepare_tonegen(Call *call, AudioEndpoint *ae);
+bool prepare_dtmfdet(Call *call, AudioEndpoint *ae);
 bool prepare_wav_player(Call *c, AudioEndpoint *ae, const char *file);
 bool prepare_wav_writer(Call *c, AudioEndpoint *ae, const char *file);
 
@@ -745,7 +748,7 @@ static int find_endpoint_by_inband_dtmf_media_port(Call *call,
     MediaEndpoint *me = (MediaEndpoint *)call->media[i];
     if (ENDPOINT_TYPE_AUDIO == me->type) {
       AudioEndpoint *ae = (AudioEndpoint *)me->endpoint.audio;
-      if ((pjmedia_port *)ae->dtmfdet == port) {
+      if (ae->dtmfdet_cbp.port && (pjmedia_port *)ae->dtmfdet_cbp.port == port) {
         return i;
       }
     }
@@ -4527,6 +4530,15 @@ bool restart_media_stream(Call *call, MediaEndpoint *me,
     return false;
   }
 
+  if(!ae->dtmfdet_cbp.port) {
+    if(!prepare_dtmfdet(call, ae)) {
+      make_evt_media_update(evt, sizeof(evt), call->id,
+                          "setup_failed (prepare_dtmfdet failed)", "");
+      dispatch_event(evt);
+      return false;
+    }
+  }
+
   if(ae->tonegen_cbp.port) {
     status = pjmedia_conf_connect_port(g_conf, ae->tonegen_cbp.slot, ae->stream_cbp.slot, 0);
     if (status != PJ_SUCCESS) {
@@ -6634,6 +6646,35 @@ bool prepare_wav_writer(Call *c, AudioEndpoint *ae, const char *file) {
 
   return true;
 }
+
+bool prepare_dtmfdet(Call *c, AudioEndpoint *ae) {
+  pj_status_t status;
+  status = pjmedia_dtmfdet_create(
+      c->inv->pool, 
+      PJMEDIA_PIA_SRATE(&ae->stream_cbp.port->info),
+      PJMEDIA_PIA_CCNT(&ae->stream_cbp.port->info), PJMEDIA_PIA_SPF(&ae->stream_cbp.port->info),
+      PJMEDIA_PIA_BITS(&ae->stream_cbp.port->info), 
+      on_inband_dtmf, c, &ae->dtmfdet_cbp.port);
+  if (status != PJ_SUCCESS) {
+    set_error("pjmedia_dtmfdet_create failed");
+      return false;
+  }
+  
+  status = pjmedia_conf_add_port(g_conf, c->inv->pool, ae->dtmfdet_cbp.port, NULL, &ae->dtmfdet_cbp.slot);
+  if (status != PJ_SUCCESS) {
+    set_error("pjmedia_conf_add_port failed");
+    return false;
+  }
+
+  status = pjmedia_conf_connect_port(g_conf, ae->stream_cbp.slot, ae->dtmfdet_cbp.slot, 0);
+  if (status != PJ_SUCCESS) {
+    set_error("pjmedia_conf_connect_port failed");
+    return false;
+  }
+
+  return true;
+}
+
 
 bool prepare_fax(Call *c, AudioEndpoint *ae, bool is_sender, const char *file,
                  unsigned flags) {

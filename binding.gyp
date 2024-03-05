@@ -108,6 +108,7 @@
         'src/idmanager.cpp',
         'src/sip.cpp',
         'src/addon.cpp',
+        'src/pjmedia/src/pjmedia/dtmfdet.c',
         'src/pjmedia/src/chainlink/chainlink_dtmfdet.c',
         'src/pjmedia/src/chainlink/chainlink_tonegen.c',
         'src/pjmedia/src/chainlink/chainlink_wav_player.c',

@@ -20,13 +20,15 @@
 
 #include <pjmedia/dtmfdet.h>
 #include <pjmedia/errno.h>
+#include <pjmedia/port.h>
 #include <pj/assert.h>
 #include <pj/pool.h>
 #include <pj/string.h>
 
 #include <spandsp.h>
+#include <spandsp/expose.h>
 
-#define SIGNATURE   PJMEDIA_PORT_SIGNATURE('d', 't', 'd', 't')
+#define SIGNATURE   PJMEDIA_SIGNATURE('d', 't', 'd', 't')
 #define THIS_FILE   "dtmfdet.c"
 
 #if 0
@@ -36,12 +38,12 @@
 #endif
 
 static pj_status_t dtmfdet_put_frame(pjmedia_port *this_port, 
-				  const pjmedia_frame *frame);
+				  pjmedia_frame *frame);
 static pj_status_t dtmfdet_on_destroy(pjmedia_port *this_port);
 
 struct dtmfdet
 {
-	pjmedia_port	base;
+	struct pjmedia_port	base;
 	dtmf_rx_state_t state;
     	void (*dtmf_cb)(pjmedia_port*, void*, char);
     	void *dtmf_cb_user_data;
@@ -106,13 +108,13 @@ PJ_DEF(pj_status_t) pjmedia_dtmfdet_create( pj_pool_t *pool,
 }
 
 static pj_status_t dtmfdet_put_frame(pjmedia_port *this_port, 
-				  const pjmedia_frame *frame)
+				  pjmedia_frame *frame)
 {
     if(frame->type != PJMEDIA_FRAME_TYPE_AUDIO) return PJ_SUCCESS;
 
     struct dtmfdet *dport = (struct dtmfdet*) this_port;
     dtmf_rx(&dport->state, (const pj_int16_t*)frame->buf,
-		dport->base.info.samples_per_frame);
+		PJMEDIA_PIA_SPF(&dport->base.info));
 
     return PJ_SUCCESS;
 
