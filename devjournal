@@ -2221,4 +2221,131 @@ node: ../src/pj/os_core_unix.c:1492: pj_mutex_unlock: Assertion `mutex->owner ==
 samples/srtp.js failed
 
 
+Obs: the above is hard to reproduce. It takes a lot of tries.
+
+
+And samples/100_calls.js get stuck this way:
+
+17:41:38.111  All expected events received
+17:41:38.111  wait (tt:93) finished
+json_get_string_param digits
+inband
+json_get_string_param digits
+inband
+json_get_string_param digits
+inband
+json_get_string_param digits
+inband
+
+
+(after the above happens, it is not possible to stop the app with Ctrl-C).
+
+So I executed it inside gdb and stopped the app with Control-C.
+Then I got:
+
+Thread 1 "node" received signal SIGINT, Interrupt.
+futex_wait (private=0, expected=2, futex_word=0x7ffff4cb28b8) at ../sysdeps/nptl/futex-internal.h:146
+146	../sysdeps/nptl/futex-internal.h: No such file or directory.
+(gdb) bt
+#0  futex_wait (private=0, expected=2, futex_word=0x7ffff4cb28b8) at ../sysdeps/nptl/futex-internal.h:146
+#1  __GI___lll_lock_wait (futex=futex@entry=0x7ffff4cb28b8, private=0) at ./nptl/lowlevellock.c:49
+#2  0x00007ffff789805d in lll_mutex_lock_optimized (mutex=0x7ffff4cb28b8) at ./nptl/pthread_mutex_lock.c:48
+#3  ___pthread_mutex_lock (mutex=mutex@entry=0x7ffff4cb28b8) at ./nptl/pthread_mutex_lock.c:128
+#4  0x00007ffff4f47d50 in pj_mutex_lock (mutex=0x7ffff4cb28b8) at ../src/pj/os_core_unix.c:1447
+#5  0x00007ffff4ed4201 in pjmedia_conf_add_port (conf=0x7ffff7affb30, pool=0x7fffeddcf380, strm_port=0x7fffed87faa8, port_name=0x7fffed87faa8, p_port=0x7fffeddce040)
+    at ../src/pjmedia/conference.c:793
+#6  0x00007ffff4eaeab0 in prepare_tonegen (c=<optimized out>, c=<optimized out>, ae=0x7fffeddcddd8) at ../src/sip.cpp:6383
+#7  prepare_tonegen (c=<optimized out>, ae=0x7fffeddcddd8) at ../src/sip.cpp:6365
+#8  0x00007ffff4eaebf2 in audio_endpoint_send_dtmf (call=0x7fffedd90598, ae=0x7fffeddcddd8, digits=0x7fffffffb7e0 "4321", mode=<optimized out>) at ../src/sip.cpp:3011
+#9  0x00007ffff4eaed0e in send_dtmf (call=call@entry=0x7fffedd90598, digits=0x7fffffffb7e0 "4321", mode=mode@entry=1) at ../src/sip.cpp:3047
+#10 0x00007ffff4ebd469 in pjw_call_send_dtmf (call_id=call_id@entry=139, json=<optimized out>) at ../src/sip.cpp:3136
+#11 0x00007ffff4eca5d9 in call_send_dtmf (info=...) at /usr/include/c++/11/bits/basic_string.h:194
+#12 0x00007ffff4ecf885 in Napi::details::CallbackData<Napi::Value (*)(Napi::CallbackInfo const&), Napi::Value>::Wrapper(napi_env__*, napi_callback_info__*)::{lambda()#1}::operator()() const (__closure=<synthetic pointer>, __closure=<synthetic pointer>) at /home/takeshi/src/git/MayamaTakeshi/sip-lab/node_modules/node-addon-api/napi-inl.h:111
+#13 Napi::details::WrapCallback<Napi::details::CallbackData<Napi::Value (*)(Napi::CallbackInfo const&), Napi::Value>::Wrapper(napi_env__*, napi_callback_info__*)::{lambda()#1}>(Napi::details::CallbackData<Napi::Value (*)(Napi::CallbackInfo const&), Napi::Value>::Wrapper(napi_env__*, napi_callback_info__*)::{lambda()#1}) (callback=...)
+    at /home/takeshi/src/git/MayamaTakeshi/sip-lab/node_modules/node-addon-api/napi-inl.h:73
+#14 Napi::details::CallbackData<Napi::Value (*)(Napi::CallbackInfo const&), Napi::Value>::Wrapper (env=0x7ffff7e6f540, info=0x7fffffffc9d0)
+    at /home/takeshi/src/git/MayamaTakeshi/sip-lab/node_modules/node-addon-api/napi-inl.h:106
+#15 0x0000000000b861f9 in v8impl::(anonymous namespace)::FunctionCallbackWrapper::Invoke(v8::FunctionCallbackInfo<v8::Value> const&) ()
+#16 0x0000000000e2f2a0 in v8::internal::MaybeHandle<v8::internal::Object> v8::internal::(anonymous namespace)::HandleApiCallHelper<false>(v8::internal::Isolate*, v8::internal::Handle<v8::internal::HeapObject>, v8::internal::Handle<v8::internal::FunctionTemplateInfo>, v8::internal::Handle<v8::internal::Object>, unsigned long*, int) ()
+#17 0x0000000000e306f6 in v8::internal::Builtin_HandleApiCall(int, unsigned long*, v8::internal::Isolate*) ()
+#18 0x00000000018384f9 in Builtins_CEntry_Return1_DontSaveFPRegs_ArgvOnStack_BuiltinExit ()
+#19 0x00000000017b06dc in Builtins_InterpreterEntryTrampoline ()
+#20 0x000030e5ef9815b1 in ?? ()
+
+
+Adding a sleep of 2000ms before entering the loop for send_dtmf inband permits for the test to pass the dtmf send/detection stage.
+So it seems this is an issue with pjmedia_conf with too many ports (maybe we should create a pjmedia_conf per call or per AudioEndpoint).
+
+But when processing the call termination, it crashed when processing on_state_changed (termination):
+
+  partial_match({                                                                                                                                                                      
+    event: 'call_ended',                                                                                                                                                               
+    call_id: 194                                                                                                                                                                       
+  }),                                                                                                                                                                                  
+  partial_match({                                                                          
+    event: 'call_ended',                                                                                                                                                               
+    call_id: 195                                                                                                                                                                       
+  }),                                                                                      
+  partial_match({                                                                                                                                                                      
+    event: 'call_ended',                                                                                                                                                               
+    call_id: 196                                                                                                                                                                       
+  }),                                                                                                                                                                                  
+  partial_match({                                                                                                                                                                      
+    event: 'call_ended',                                                                                                                                                               
+    call_id: 197                                                                                                                                                                       
+  }),                                                                                      
+  partial_match({                                                                          
+    event: 'call_ended',
+    call_id: 198                      
+  }),                                                                                      
+  partial_match({
+    event: 'call_ended',                    
+    call_id: 199                 
+  })
+]
+on_state_changed
+
+e->type=5
+inv->state=6
+call will terminate call=edf722b8
+
+close_media call_id=64
+close_media_endpoint edf72710
+close_media_transport 55ce668
+audio_endpoint_remove_port
+node: ../src/pj/os_core_unix.c:1436: pj_mutex_lock: Assertion `mutex' failed.
+
+Thread 11 "clock" received signal SIGABRT, Aborted.
+[Switching to Thread 0x7fffee7fc640 (LWP 254100)]
+__pthread_kill_implementation (no_tid=0, signo=6, threadid=140737194739264) at ./nptl/pthread_kill.c:44
+44      ./nptl/pthread_kill.c: No such file or directory.
+(gdb) bt
+#0  __pthread_kill_implementation (no_tid=0, signo=6, threadid=140737194739264) at ./nptl/pthread_kill.c:44
+#1  __pthread_kill_internal (signo=6, threadid=140737194739264) at ./nptl/pthread_kill.c:78
+#2  __GI___pthread_kill (threadid=140737194739264, signo=signo@entry=6) at ./nptl/pthread_kill.c:89
+#3  0x00007ffff7842476 in __GI_raise (sig=sig@entry=6) at ../sysdeps/posix/raise.c:26
+#4  0x00007ffff78287f3 in __GI_abort () at ./stdlib/abort.c:79
+#5  0x00007ffff782871b in __assert_fail_base (fmt=0x7ffff79dd130 "%s%s%s:%u: %s%sAssertion `%s' failed.\n%n", assertion=0x7ffff4f8de09 "mutex", 
+    file=0x7ffff4fb4af3 "../src/pj/os_core_unix.c", line=1436, function=<optimized out>) at ./assert/assert.c:92
+#6  0x00007ffff7839e96 in __GI___assert_fail (assertion=assertion@entry=0x7ffff4f8de09 "mutex", file=file@entry=0x7ffff4fb4af3 "../src/pj/os_core_unix.c", line=line@entry=1436, 
+    function=function@entry=0x7ffff4fb4ef0 <__PRETTY_FUNCTION__.9> "pj_mutex_lock") at ./assert/assert.c:101
+#7  0x00007ffff4f47e5d in pj_mutex_lock (mutex=<optimized out>) at ../src/pj/os_core_unix.c:1436
+#8  0x00007ffff4f482d6 in pj_atomic_get (atomic_var=0x7fffd8003cb8) at ../src/pj/os_core_unix.c:1096
+#9  0x00007ffff4f4e5c4 in grp_lock_acquire (p=0x7fffd8003c28) at ../src/pj/lock.c:293
+#10 0x00007ffff4ee2ca2 in send_rtcp (stream=stream@entry=0x7ffff7baa4f8, with_sdes=1, with_bye=with_bye@entry=0, with_fb=with_fb@entry=0, with_xr=0) at ../src/pjmedia/stream.c:1094
+#11 0x00007ffff4ee2fa4 in check_tx_rtcp (timestamp=263360, stream=0x7ffff7baa4f8) at ../src/pjmedia/stream.c:1257
+#12 check_tx_rtcp (stream=0x7ffff7baa4f8, timestamp=263360) at ../src/pjmedia/stream.c:1227
+#13 0x00007ffff4ee46b2 in put_frame_imp (frame=frame@entry=0x7fffee7fbc60, port=<optimized out>, port=<optimized out>) at ../src/pjmedia/stream.c:1541
+#14 0x00007ffff4ee4d14 in put_frame (port=0x7ffff7baad08, frame=0x7fffee7fbc60) at ../src/pjmedia/stream.c:1712
+#15 0x00007ffff4ed3315 in write_port (frm_type=<synthetic pointer>, timestamp=0x7fffee7fbce8, cport=0x5495878, conf=0x7ffff7affb30) at ../src/pjmedia/conference.c:1926
+#16 get_frame (this_port=<optimized out>, frame=0x7fffee7fbcd0) at ../src/pjmedia/conference.c:2221
+#17 0x00007ffff4ed8d83 in clock_callback (ts=0x7ffff4cb2f80, user_data=0x7ffff4cb2e88) at ../src/pjmedia/master_port.c:193
+#18 0x00007ffff4ef431b in clock_thread (arg=0x7ffff4cb2f60) at ../src/pjmedia/clock_thread.c:391
+#19 0x00007ffff4f48198 in thread_main (param=0x7ffff4cb6078) at ../src/pj/os_core_unix.c:701
+#20 0x00007ffff7894ac3 in start_thread (arg=<optimized out>) at ./nptl/pthread_create.c:442
+#21 0x00007ffff7926850 in clone3 () at ../sysdeps/unix/sysv/linux/x86_64/clone3.S:81
+(gdb) 
+
+So it seems we are not removing some port from the conf upon call termination.
+
 

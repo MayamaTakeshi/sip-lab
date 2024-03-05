@@ -263,7 +263,7 @@ pjsip_route_hdr route_set;
 pjsip_route_hdr *route;
 const pj_str_t hname = pj_str((char *)"Route");
 
-#define CONF_PORTS 1024
+#define CONF_PORTS 2048
 #define CLOCK_RATE 16000
 #define CHANNEL_COUNT 1
 #define PTIME 20
@@ -3608,6 +3608,12 @@ pj_status_t audio_endpoint_remove_port(ConfBridgePort *cbp) {
   pj_status_t status;
 
   if(cbp->port) {
+    /* 
+    no need to call pjmedia_conf_disconnect_port because pjmedia_conf_remove_port calls:
+      pjmedia_conf_disconnect_port_from_sources(conf, port);
+      pjmedia_conf_disconnect_port_from_sinks(conf, port);
+    */
+
     status = pjmedia_conf_remove_port(g_conf, cbp->slot);
     if (status != PJ_SUCCESS) {
       set_error("pjmedia_conf_remove_port failed");
@@ -6322,7 +6328,6 @@ void close_media_endpoint(MediaEndpoint *me) {
 
   if (ENDPOINT_TYPE_AUDIO == me->type) {
     AudioEndpoint *ae = (AudioEndpoint *)me->endpoint.audio;
-    close_media_transport(ae->med_transport);
 
     audio_endpoint_remove_port(&ae->stream_cbp);
     audio_endpoint_remove_port(&ae->wav_player_cbp);
@@ -6331,6 +6336,7 @@ void close_media_endpoint(MediaEndpoint *me) {
     audio_endpoint_remove_port(&ae->dtmfdet_cbp);
     audio_endpoint_remove_port(&ae->fax_cbp);
 
+    close_media_transport(ae->med_transport);
     ae->med_transport = NULL;
   } else if (ENDPOINT_TYPE_MRCP == me->type) {
     if(me->endpoint.mrcp->asock) {
@@ -6363,13 +6369,15 @@ void close_media(Call *c) {
 }
 
 bool prepare_tonegen(Call *c, AudioEndpoint *ae) {
+  printf("prepare_tone_gen call.id=%i\n", c->id);
   pj_status_t status;
 
   if(ae->tonegen_cbp.port) {
-    /* already prepared */
+    printf("already prepared\n");
     return true;
   }
 
+  printf("call.id=%i p1\n", c->id);
   status = pjmedia_tonegen_create(
         c->inv->pool, PJMEDIA_PIA_SRATE(&ae->stream_cbp.port->info),
         PJMEDIA_PIA_CCNT(&ae->stream_cbp.port->info),
@@ -6380,18 +6388,21 @@ bool prepare_tonegen(Call *c, AudioEndpoint *ae) {
     return false;
   }
 
+  printf("call.id=%i p2\n", c->id);
   status = pjmedia_conf_add_port(g_conf, c->inv->pool, ae->tonegen_cbp.port, NULL, &ae->tonegen_cbp.slot);
   if (status != PJ_SUCCESS) {
     set_error("pjmedia_conf_add_port failed");
     return false;
   }
 
+  printf("call.id=%i p3\n", c->id);
   status = pjmedia_conf_connect_port(g_conf, ae->tonegen_cbp.slot, ae->stream_cbp.slot, 0);
   if (status != PJ_SUCCESS) {
     set_error("pjmedia_conf_connect_port failed");
     return false;
   }
 
+  printf("call.id=%i p4 (success)\n", c->id);
   return true;
 }
 
