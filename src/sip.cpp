@@ -663,6 +663,9 @@ bool process_media(Call *c, pjsip_dialog *dlg, Document &document, bool answer);
 
 typedef pj_status_t (*audio_endpoint_stop_op_t)(Call *call, AudioEndpoint *ae);
 
+pj_status_t audio_endpoint_stop_play_wav(Call *call, AudioEndpoint *ae);
+pj_status_t audio_endpoint_stop_record_wav(Call *call, AudioEndpoint *ae);
+
 static pjsip_module mod_tester = {
     NULL,
     NULL,                           /* prev, next.		*/
@@ -3475,6 +3478,14 @@ int pjw_call_start_record_wav(long call_id, const char *json) {
 
   ae = (AudioEndpoint *)me->endpoint.audio;
 
+  if(!ae->stream_cbp.port) {
+    set_error("stream port is not ready yet");
+    goto out;
+  }
+
+  // stop/destroy existing writer
+  status = audio_endpoint_stop_record_wav(call, ae);
+
   if (!prepare_wav_writer(call, ae, file)) {
     set_error("prepare_wav_writer failed");
     goto out;
@@ -3491,12 +3502,24 @@ out:
 
 pj_status_t audio_endpoint_start_play_wav(Call *call, AudioEndpoint *ae,
                                           const char *file) {
+
+  pj_status_t status;
+  /*
   pjmedia_port *stream_port;
   pj_status_t status = pjmedia_stream_get_port(ae->med_stream, &stream_port);
   if (status != PJ_SUCCESS) {
     set_error("pjmedia_stream_get_port failed with status=%i", status);
     return status;
   }
+  */
+
+  if(!ae->stream_cbp.port) {
+    set_error("stream port is not ready yet");
+    return -1;
+  }
+
+  // First stop and destroy existing wav port.
+  status = audio_endpoint_stop_play_wav(call, ae);
 
   if (!prepare_wav_player(call, ae, file)) {
     return -1;
@@ -3609,23 +3632,34 @@ pj_status_t call_stop_audio_endpoints_op(Call *call,
 }
 
 pj_status_t audio_endpoint_stop_play_wav(Call *call, AudioEndpoint *ae) {
-  pjmedia_port *stream_port;
-  pj_status_t status = pjmedia_stream_get_port(ae->med_stream, &stream_port);
-  if (status != PJ_SUCCESS) {
-    set_error("pjmedia_stream_get_port failed with status=%i", status);
-    return status;
+  pj_status_t status;
+
+  if(!ae->stream_cbp.port) {
+    set_error("stream port not ready yet");
+    return false;
   }
 
-  if (!prepare_wire(call->inv->pool, &ae->wav_player,
-                    PJMEDIA_PIA_SRATE(&stream_port->info),
-                    PJMEDIA_PIA_CCNT(&stream_port->info),
-                    PJMEDIA_PIA_SPF(&stream_port->info),
-                    PJMEDIA_PIA_BITS(&stream_port->info))) {
-    set_error("prepare_wire failed.");
-    return -1;
-  }
+  if(ae->wav_player_cbp.port) {
+    status = pjmedia_conf_disconnect_port(g_conf, ae->wav_player_cbp.slot, ae->stream_cbp.slot);
+    if (status != PJ_SUCCESS) {
+      set_error("pjmedia_conf_disconnect_port failed");
+      return false;
+    }
 
-  connect_media_ports(ae);
+    status = pjmedia_conf_remove_port(g_conf, ae->wav_player_cbp.slot);
+    if (status != PJ_SUCCESS) {
+      set_error("pjmedia_conf_remove_port failed");
+      return false;
+    }
+    ae->wav_player_cbp.slot = 0;
+
+    status = pjmedia_port_destroy(ae->wav_player_cbp.port);
+    if (status != PJ_SUCCESS) {
+      set_error("pjmedia_port_destory(stream) failed");
+      return false;
+    }
+    ae->wav_player_cbp.port = NULL;
+  }
 
   return PJ_SUCCESS;
 }
@@ -3706,24 +3740,29 @@ out:
 }
 
 pj_status_t audio_endpoint_stop_record_wav(Call *call, AudioEndpoint *ae) {
-  pjmedia_port *stream_port;
+  pj_status_t status;
 
-  pj_status_t status = pjmedia_stream_get_port(ae->med_stream, &stream_port);
-  if (status != PJ_SUCCESS) {
-    set_error("pjmedia_stream_get_port failed.");
-    return status;
+  if(ae->wav_writer_cbp.port) {
+    status = pjmedia_conf_disconnect_port(g_conf, ae->stream_cbp.slot, ae->wav_writer_cbp.slot);
+    if (status != PJ_SUCCESS) {
+      set_error("pjmedia_conf_disconnect_port failed");
+      return false;
+    }
+
+    status = pjmedia_conf_remove_port(g_conf, ae->wav_writer_cbp.slot);
+    if (status != PJ_SUCCESS) {
+      set_error("pjmedia_conf_remove_port failed");
+      return false;
+    }
+    ae->wav_writer_cbp.slot = 0;
+
+    status = pjmedia_port_destroy(ae->wav_writer_cbp.port);
+    if (status != PJ_SUCCESS) {
+      set_error("pjmedia_port_destory(stream) failed");
+      return false;
+    }
+    ae->wav_writer_cbp.port = NULL;
   }
-
-  if (!prepare_wire(call->inv->pool, &ae->wav_writer,
-                    PJMEDIA_PIA_SRATE(&stream_port->info),
-                    PJMEDIA_PIA_CCNT(&stream_port->info),
-                    PJMEDIA_PIA_SPF(&stream_port->info),
-                    PJMEDIA_PIA_BITS(&stream_port->info))) {
-    set_error("prepare_wire failed.");
-    return -1;
-  }
-
-  connect_media_ports(ae);
 
   return PJ_SUCCESS;
 }
@@ -6578,33 +6617,6 @@ bool prepare_tonegen(Call *c, AudioEndpoint *ae) {
 bool prepare_wav_player(Call *c, AudioEndpoint *ae, const char *file) {
   pj_status_t status;
 
-  if(!ae->stream_cbp.port) {
-    set_error("stream port not ready yet");
-    return false;
-  }
-
-  if(ae->wav_player_cbp.port) {
-    status = pjmedia_conf_disconnect_port(g_conf, ae->wav_player_cbp.slot, ae->stream_cbp.slot);
-    if (status != PJ_SUCCESS) {
-      set_error("pjmedia_conf_disconnect_port failed");
-      return false;
-    }
-
-    status = pjmedia_conf_remove_port(g_conf, ae->wav_player_cbp.slot);
-    if (status != PJ_SUCCESS) {
-      set_error("pjmedia_conf_remove_port failed");
-      return false;
-    }
-    ae->wav_player_cbp.slot = 0;
-
-    status = pjmedia_port_destroy(ae->wav_player_cbp.port);
-    if (status != PJ_SUCCESS) {
-      set_error("pjmedia_port_destory(stream) failed");
-      return false;
-    }
-    ae->wav_player_cbp.port = NULL;
-  }
-
   unsigned wav_ptime;
   wav_ptime = PJMEDIA_PIA_SPF(&ae->stream_cbp.port->info) * 1000 /
               PJMEDIA_PIA_SRATE(&ae->stream_cbp.port->info);
@@ -6640,34 +6652,6 @@ bool prepare_wav_player(Call *c, AudioEndpoint *ae, const char *file) {
 
 bool prepare_wav_writer(Call *c, AudioEndpoint *ae, const char *file) {
   pj_status_t status;
-
-  if(!ae->stream_cbp.port) {
-    set_error("stream port not ready yet");
-    return false;
-  }
-
-
-  if(ae->wav_writer_cbp.port) {
-    status = pjmedia_conf_disconnect_port(g_conf, ae->stream_cbp.slot, ae->wav_writer_cbp.slot);
-    if (status != PJ_SUCCESS) {
-      set_error("pjmedia_conf_disconnect_port failed");
-      return false;
-    }
-
-    status = pjmedia_conf_remove_port(g_conf, ae->wav_writer_cbp.slot);
-    if (status != PJ_SUCCESS) {
-      set_error("pjmedia_conf_remove_port failed");
-      return false;
-    }
-    ae->wav_writer_cbp.slot = 0;
-
-    status = pjmedia_port_destroy(ae->wav_writer_cbp.port);
-    if (status != PJ_SUCCESS) {
-      set_error("pjmedia_port_destory(stream) failed");
-      return false;
-    }
-    ae->wav_writer_cbp.port = NULL;
-  }
 
   status = pjmedia_wav_writer_port_create(
       c->inv->pool, file, PJMEDIA_PIA_SRATE(&ae->stream_cbp.port->info),
