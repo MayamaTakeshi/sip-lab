@@ -3640,12 +3640,6 @@ pj_status_t audio_endpoint_stop_play_wav(Call *call, AudioEndpoint *ae) {
   }
 
   if(ae->wav_player_cbp.port) {
-    status = pjmedia_conf_disconnect_port(g_conf, ae->wav_player_cbp.slot, ae->stream_cbp.slot);
-    if (status != PJ_SUCCESS) {
-      set_error("pjmedia_conf_disconnect_port failed");
-      return false;
-    }
-
     status = pjmedia_conf_remove_port(g_conf, ae->wav_player_cbp.slot);
     if (status != PJ_SUCCESS) {
       set_error("pjmedia_conf_remove_port failed");
@@ -3743,12 +3737,6 @@ pj_status_t audio_endpoint_stop_record_wav(Call *call, AudioEndpoint *ae) {
   pj_status_t status;
 
   if(ae->wav_writer_cbp.port) {
-    status = pjmedia_conf_disconnect_port(g_conf, ae->stream_cbp.slot, ae->wav_writer_cbp.slot);
-    if (status != PJ_SUCCESS) {
-      set_error("pjmedia_conf_disconnect_port failed");
-      return false;
-    }
-
     status = pjmedia_conf_remove_port(g_conf, ae->wav_writer_cbp.slot);
     if (status != PJ_SUCCESS) {
       set_error("pjmedia_conf_remove_port failed");
