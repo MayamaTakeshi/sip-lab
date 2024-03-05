@@ -3604,6 +3604,7 @@ pj_status_t call_stop_audio_endpoints_op(Call *call,
 }
 
 pj_status_t audio_endpoint_remove_port(ConfBridgePort *cbp) {
+  printf("audio_endpoint_remove_port\n");
   pj_status_t status;
 
   if(cbp->port) {
@@ -3622,6 +3623,7 @@ pj_status_t audio_endpoint_remove_port(ConfBridgePort *cbp) {
     cbp->port = NULL;
   }
 
+  printf("success\n");
   return PJ_SUCCESS;
 }
 
@@ -4706,6 +4708,8 @@ static void on_state_changed(pjsip_inv_session *inv, pjsip_event *e) {
       return;
     }
 
+    close_media(call);
+
     for (int i = 0; i < call->media_count; i++) {
       addon_log(L_DBG, "processing media[%d]\n", i);
       MediaEndpoint *me = call->media[i];
@@ -4721,19 +4725,18 @@ static void on_state_changed(pjsip_inv_session *inv, pjsip_event *e) {
           }
         }
       }
-
-      long val;
-      if (!g_call_ids.remove(call_id, val)) {
-        addon_log(L_DBG, "g_call_ids.remove failed\n");
-      }
-
-      Pair_Call_CallId pcc;
-      pcc.pCall = call;
-      pcc.id = call_id;
-      g_LastCalls.push_back(pcc);
     }
 
-    close_media(call);
+    long val;
+    if (!g_call_ids.remove(call_id, val)) {
+      addon_log(L_DBG, "g_call_ids.remove failed\n");
+    }
+
+    Pair_Call_CallId pcc;
+    pcc.pCall = call;
+    pcc.id = call_id;
+    g_LastCalls.push_back(pcc);
+
 
     char evt[2048];
     int sip_msg_len = 0;

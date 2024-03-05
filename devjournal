@@ -2199,3 +2199,26 @@ Implementation draft:
   - create function create_tcp_socket("call", "mrcp|msrp|etc", **selected_port). This should return the pj_activesock created or NULL. The function should call pj_activesock_set_user_data(asock, {sock, call, proto}) so that in the callbacks, we will have a reference to the data necessary to generate the event tcp_data.
   - when activesock accept completes, the asock should be closed (clear user_data first) and its user_data should be passed to the new asock. We also need to update the media_endpoint with reference to the new socket as we will need to close this new one.
   - when close_media_endpoint is called, call pj_activesock_set_user_data(asock, NULL) so that the callbacks will ignore further data. Then call pj_activesock_close() and this will also close the underlying socket.
+
+-------------------------
+2024/03/05 takeshi:
+
+Work on branch conf_bridge_arch is almost complete (need to create pjmedia_fax_port).
+Most of functional calls pass but a few are causing crashes. Ex:
+
+on_state_changed
+
+e->type=5
+inv->state=6
+call will terminate call=d030fd88
+
+close_media call_id=0
+close_media_endpoint d03103b0
+close_media_transport d0347358
+audio_endpoint_remove_port
+node: ../src/pj/os_core_unix.c:1492: pj_mutex_unlock: Assertion `mutex->owner == pj_thread_this()' failed.
+./rr: line 45: 203195 Aborted                 (core dumped) node $i
+samples/srtp.js failed
+
+
+
