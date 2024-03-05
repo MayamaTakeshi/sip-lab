@@ -2348,4 +2348,4 @@ __pthread_kill_implementation (no_tid=0, signo=6, threadid=140737194739264) at .
 
 So it seems we are not removing some port from the conf upon call termination.
 
-
+UPDATE: after the final changes for #60 I could not reproduce these problems anymore.
