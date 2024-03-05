@@ -20,14 +20,6 @@
 #include "idmanager.hpp"
 #include "event_templates.hpp"
 
-// Customized media ports that can be chained
-#include "chainlink.h"
-#include "chainlink_dtmfdet.h"
-#include "chainlink_fax.h"
-#include "chainlink_tonegen.h"
-#include "chainlink_wav_port.h"
-#include "chainlink_wire_port.h"
-
 #include "dtmfdet.h"
 
 #include <ctime>
@@ -329,16 +321,6 @@ struct AudioEndpoint {
   pjmedia_transport *med_transport;
   pjmedia_stream *med_stream;
 
-  pjmedia_master_port *master_port;
-  pjmedia_port *media_port; // will contain Null Port, WAV File Player etc.
-
-  pjmedia_port *null_port;
-  chainlink *wav_writer;
-  chainlink *wav_player;
-  chainlink *tonegen;
-  chainlink *dtmfdet;
-  chainlink *fax;
-
   char DigitBuffers[2][MAXDIGITS + 1];
   int DigitBufferLength[2];
   int last_digit_timestamp[2];
@@ -356,7 +338,6 @@ struct AudioEndpoint {
 struct VideoEndpoint {
   pjmedia_transport *med_transport;
   pjmedia_stream *med_stream;
-  pjmedia_master_port *master_port;
 };
 
 struct MrcpEndpoint {
@@ -466,11 +447,6 @@ struct AsockUserData {
   char buf[MAX_TCP_DATA];
   pj_size_t len;
 };
-
-bool init_media_ports(Call *c, AudioEndpoint *ae, unsigned sampling_rate,
-                      unsigned channel_count, unsigned samples_per_frame,
-                      unsigned bits_per_sample);
-void connect_media_ports(AudioEndpoint *ae);
 
 struct Pair_Call_CallId {
   Call *pCall;
@@ -634,15 +610,9 @@ void process_in_dialog_refer(pjsip_dialog *dlg, pjsip_rx_data *rdata);
 
 void process_in_dialog_subscribe(pjsip_dialog *dlg, pjsip_rx_data *rdata);
 
-static pj_bool_t set_ports(Call *call, AudioEndpoint *ae,
-                           pjmedia_port *stream_port, pjmedia_port *media_port);
 // static pj_bool_t stop_media_operation(Call *call);
 static void build_stream_stat(ostringstream &oss, pjmedia_rtcp_stat *stat,
                               pjmedia_stream_info *stream_info);
-
-bool prepare_wire(pj_pool_t *pool, chainlink **link, unsigned sampling_rate,
-                  unsigned channel_count, unsigned samples_per_frame,
-                  unsigned bits_per_sample);
 
 bool prepare_tonegen(Call *call, AudioEndpoint *ae);
 bool prepare_dtmfdet(Call *call, AudioEndpoint *ae);
@@ -4109,30 +4079,6 @@ out:
   return 0;
 }
 
-bool stop_master_ports(Call *call) {
-  for (int i = 0; i < call->media_count; i++) {
-    MediaEndpoint *me = (MediaEndpoint *)call->media[i];
-    pjmedia_master_port *master_port = NULL;
-    if (ENDPOINT_TYPE_AUDIO == me->type) {
-      AudioEndpoint *ae = (AudioEndpoint *)me->endpoint.audio;
-      master_port = ae->master_port;
-    } else if (ENDPOINT_TYPE_VIDEO == me->type) {
-      VideoEndpoint *ve = (VideoEndpoint *)me->endpoint.video;
-      master_port = ve->master_port;
-    } else {
-      continue;
-    }
-
-    if (master_port) {
-      if (pjmedia_master_port_stop(master_port) != PJ_SUCCESS) {
-        return false;
-      }
-    }
-  }
-
-  return true;
-}
-
 bool media_endpoint_present_in_session_media(
     MediaEndpoint *me, const pjmedia_sdp_session *local_sdp) {
   printf("media_endpoint_present_in_session_media:\n");
@@ -4662,13 +4608,6 @@ static void on_media_update(pjsip_inv_session *inv, pj_status_t status) {
     return;
   }
 
-  if (!stop_master_ports(call)) {
-    make_evt_media_update(evt, sizeof(evt), call->id,
-                          "setup_failed (stop_master_port error)", "");
-    dispatch_event(evt);
-    return;
-  }
-
   status = pjmedia_sdp_neg_get_active_local(inv->neg, &local_sdp);
   if (status != PJ_SUCCESS) {
     make_evt_media_update(
@@ -4727,62 +4666,6 @@ static void on_media_update(pjsip_inv_session *inv, pj_status_t status) {
   dispatch_event(evt);
 }
 
-static pj_bool_t set_ports(Call *call, AudioEndpoint *ae,
-                           pjmedia_port *stream_port,
-                           pjmedia_port *media_port) {
-  pj_status_t status;
-
-  if (!ae->master_port) {
-    status = pjmedia_master_port_create(call->inv->pool, stream_port,
-                                        media_port, 0, &ae->master_port);
-    if (status != PJ_SUCCESS) {
-      return PJ_FALSE;
-    }
-
-    status = pjmedia_master_port_start(ae->master_port);
-    if (status != PJ_SUCCESS) {
-      return PJ_FALSE;
-    }
-
-    ae->media_port = media_port;
-    return PJ_TRUE;
-  }
-
-  status = pjmedia_master_port_stop(ae->master_port);
-  if (status != PJ_SUCCESS) {
-    return PJ_FALSE;
-  }
-
-  status = pjmedia_master_port_set_uport(ae->master_port, stream_port);
-  if (status != PJ_SUCCESS) {
-    return PJ_FALSE;
-  }
-
-  if (ae->media_port) {
-    if (ae->media_port != media_port) {
-      status = pjmedia_port_destroy(ae->media_port);
-      if (status != PJ_SUCCESS) {
-        return PJ_FALSE;
-      }
-    }
-    ae->media_port = NULL;
-  }
-
-  status = pjmedia_master_port_set_dport(ae->master_port, media_port);
-  if (status != PJ_SUCCESS) {
-    return PJ_FALSE;
-  }
-
-  ae->media_port = media_port;
-
-  status = pjmedia_master_port_start(ae->master_port);
-  if (status != PJ_SUCCESS) {
-    return PJ_FALSE;
-  }
-
-  return PJ_TRUE;
-}
-
 static void on_state_changed(pjsip_inv_session *inv, pjsip_event *e) {
   addon_log(L_DBG, "on_state_changed\n");
 
@@ -4829,27 +4712,6 @@ static void on_state_changed(pjsip_inv_session *inv, pjsip_event *e) {
       if (ENDPOINT_TYPE_AUDIO == me->type) {
         AudioEndpoint *ae = (AudioEndpoint *)me->endpoint.audio;
         addon_log(L_DBG, "processing media[%d] as AudioEndpoint\n", i);
-        if (ae->master_port) {
-          addon_log(L_DBG, "calling pjmedia_port_stop\n");
-          status = pjmedia_master_port_stop(ae->master_port);
-          if (status != PJ_SUCCESS) {
-            addon_log(L_DBG, "pjmedia_master_port_stop failed\n");
-          }
-
-          addon_log(L_DBG, "calling pjmedia_master_port_destroy\n");
-          status = pjmedia_master_port_destroy(ae->master_port, PJ_FALSE);
-          if (status != PJ_SUCCESS) {
-            addon_log(L_DBG, "pjmedia_master_port_destroy failed\n");
-          }
-        }
-
-        if (ae->media_port) {
-          addon_log(L_DBG, "calling pjmedia_port_destroy\n");
-          status = pjmedia_port_destroy(ae->media_port);
-          if (status != PJ_SUCCESS) {
-            addon_log(L_DBG, "pjmedia_port_destroy failed\n");
-          }
-        }
 
         if (ae->med_stream) {
           addon_log(L_DBG, "calling pjmedia_stream_destroy");
@@ -6497,67 +6359,6 @@ void close_media(Call *c) {
   c->media_count = 0;
 }
 
-bool init_media_ports(Call *call, AudioEndpoint *ae, unsigned sampling_rate,
-                      unsigned channel_count, unsigned samples_per_frame,
-                      unsigned bits_per_sample) {
-  pj_status_t status;
-
-  if (!ae->null_port) {
-    status = pjmedia_null_port_create(call->inv->pool, sampling_rate,
-                                      channel_count, samples_per_frame,
-                                      bits_per_sample, &ae->null_port);
-    if (status != PJ_SUCCESS)
-      return false;
-  }
-
-  if (!ae->wav_writer) {
-    if (!prepare_wire(call->inv->pool, &ae->wav_writer, sampling_rate,
-                      channel_count, samples_per_frame, bits_per_sample)) {
-      return false;
-    }
-  }
-
-  if (!ae->wav_player) {
-    if (!prepare_wire(call->inv->pool, &ae->wav_player, sampling_rate,
-                      channel_count, samples_per_frame, bits_per_sample)) {
-      return false;
-    }
-  }
-
-  if (!ae->tonegen) {
-    if (!prepare_wire(call->inv->pool, &ae->tonegen, sampling_rate,
-                      channel_count, samples_per_frame, bits_per_sample)) {
-      return false;
-    }
-  }
-
-  if (!ae->dtmfdet) {
-    status = chainlink_dtmfdet_create(
-        call->inv->pool, sampling_rate, channel_count, samples_per_frame,
-        bits_per_sample, on_inband_dtmf, call, (pjmedia_port **)&ae->dtmfdet);
-    if (status != PJ_SUCCESS)
-      return false;
-  }
-
-  if (!ae->fax) {
-    if (!prepare_wire(call->inv->pool, &ae->fax, sampling_rate, channel_count,
-                      samples_per_frame, bits_per_sample)) {
-      return false;
-    }
-  }
-
-  connect_media_ports(ae);
-  return true;
-}
-
-void connect_media_ports(AudioEndpoint *ae) {
-  ((chainlink *)ae->dtmfdet)->next = (pjmedia_port *)ae->tonegen;
-  ((chainlink *)ae->tonegen)->next = (pjmedia_port *)ae->wav_player;
-  ((chainlink *)ae->wav_player)->next = (pjmedia_port *)ae->wav_writer;
-  ((chainlink *)ae->wav_writer)->next = (pjmedia_port *)ae->fax;
-  ((chainlink *)ae->fax)->next = ae->null_port;
-}
-
 bool prepare_tonegen(Call *c, AudioEndpoint *ae) {
   pj_status_t status;
 
@@ -6720,29 +6521,6 @@ bool prepare_fax(Call *c, AudioEndpoint *ae, bool is_sender, const char *file,
     set_error("pjmedia_conf_connect_port failed");
     return false;
   }
-
-  return true;
-}
-
-bool prepare_wire(pj_pool_t *pool, chainlink **link, unsigned sampling_rate,
-                  unsigned channel_count, unsigned samples_per_frame,
-                  unsigned bits_per_sample) {
-  pj_status_t status;
-
-  if (*link) {
-    // addon_log(L_DBG, "prepare_wire: link is set. It will be destroyed\n");
-    pjmedia_port *port = (pjmedia_port *)*link;
-    status = pjmedia_port_destroy(port);
-    *link = NULL;
-    if (status != PJ_SUCCESS)
-      return false;
-  }
-
-  status = chainlink_wire_port_create(pool, sampling_rate, channel_count,
-                                      samples_per_frame, bits_per_sample,
-                                      (pjmedia_port **)link);
-  if (status != PJ_SUCCESS)
-    return false;
 
   return true;
 }
