@@ -6458,6 +6458,14 @@ void close_media_endpoint(MediaEndpoint *me) {
   if (ENDPOINT_TYPE_AUDIO == me->type) {
     AudioEndpoint *ae = (AudioEndpoint *)me->endpoint.audio;
     close_media_transport(ae->med_transport);
+
+    audio_endpoint_remove_port(&ae->stream_cbp);
+    audio_endpoint_remove_port(&ae->wav_player_cbp);
+    audio_endpoint_remove_port(&ae->wav_writer_cbp);
+    audio_endpoint_remove_port(&ae->tonegen_cbp);
+    audio_endpoint_remove_port(&ae->dtmfdet_cbp);
+    audio_endpoint_remove_port(&ae->fax_cbp);
+
     ae->med_transport = NULL;
   } else if (ENDPOINT_TYPE_MRCP == me->type) {
     if(me->endpoint.mrcp->asock) {
