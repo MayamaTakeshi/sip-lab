@@ -66,7 +66,7 @@ addon.call = {
   stop_play_wav: (c_id, params) => { return addon.call_stop_play_wav(c_id, JSON.stringify(params ? params : {})) },
   start_fax: (c_id, params) => { return addon.call_start_fax(c_id, JSON.stringify(params)) },
   stop_fax: (c_id, params) => { return addon.call_stop_fax(c_id, JSON.stringify(params ? params : {})) },
-  start_flite: (c_id, params) => { return addon.call_start_flite(c_id, JSON.stringify(params)) },
+  start_speech: (c_id, params) => { return addon.call_start_speech(c_id, JSON.stringify(params)) },
   get_stream_stat: (c_id, params) => { return addon.call_get_stream_stat(c_id, JSON.stringify(params ? params : {})) },
   //refer: (c_id, params) => { return addon.call_refer(c_id, JSON.stringify(params)) },
   get_info: addon.call_get_info,

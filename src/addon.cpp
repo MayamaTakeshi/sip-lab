@@ -569,7 +569,7 @@ Napi::Value call_start_fax(const Napi::CallbackInfo &info) {
   return env.Null();
 }
 
-Napi::Value call_start_flite(const Napi::CallbackInfo &info) {
+Napi::Value call_start_speech(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
 
   if (info.Length() != 2) {
@@ -593,7 +593,7 @@ Napi::Value call_start_flite(const Napi::CallbackInfo &info) {
   }
   const string json = info[1].As<Napi::String>().Utf8Value();
 
-  int res = pjw_call_start_flite(call_id, json.c_str());
+  int res = pjw_call_start_speech(call_id, json.c_str());
 
   if (res != 0) {
     Napi::Error::New(env, pjw_get_error()).ThrowAsJavaScriptException();
@@ -1300,7 +1300,7 @@ Napi::Object init(Napi::Env env, Napi::Object exports) {
               Napi::Function::New(env, call_start_play_wav));
   exports.Set("call_start_fax", Napi::Function::New(env, call_start_fax));
 
-  exports.Set("call_start_flite", Napi::Function::New(env, call_start_flite));
+  exports.Set("call_start_speech", Napi::Function::New(env, call_start_speech));
 
   exports.Set("call_stop_record_wav",
               Napi::Function::New(env, call_stop_record_wav));
