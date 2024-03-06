@@ -1,4 +1,4 @@
-// This test creates 256 caller UDP SIP endpoints, 256 callee UDP SIP endpoines and makes one call between them, test dtmf and disconeects.
+// This test creates 100 caller UDP SIP endpoints, 100 callee UDP SIP endpoines and makes one call between them, test dtmf and disconnects.
 
 const sip = require ('../index.js')
 const Zeq = require('@mayama/zeq')

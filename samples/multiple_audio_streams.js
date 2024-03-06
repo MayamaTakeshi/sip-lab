@@ -1,4 +1,4 @@
-const sip = require ('./index.js')
+const sip = require ('../index.js')
 const Zeq = require('@mayama/zeq')
 const m = require('data-matching')
 const sip_msg = require('sip-matching')
