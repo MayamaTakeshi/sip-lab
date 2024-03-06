@@ -163,7 +163,8 @@ static pj_status_t flite_get_frame(pjmedia_port *port,
         return PJ_SUCCESS;
     }
 
-    if (flite->written_samples >= flite->w->num_samples) {
+    printf("written_samples=%i num_samples=%i\n", flite->written_samples, flite->w->num_samples);
+    if (flite->written_samples + PJMEDIA_PIA_SPF(&port->info) > flite->w->num_samples) {
         printf("flite no more data\n");
         free_wave(flite->w);
         frame->type = PJMEDIA_FRAME_TYPE_NONE;
@@ -173,7 +174,7 @@ static pj_status_t flite_get_frame(pjmedia_port *port,
     memcpy(frame->buf, flite->w->samples + flite->written_samples, PJMEDIA_PIA_SPF(&port->info)*2);
     flite->written_samples += PJMEDIA_PIA_SPF(&port->info);
     frame->type = PJMEDIA_FRAME_TYPE_AUDIO;
-    printf("flite data written samples=i\n", PJMEDIA_PIA_SPF(&port->info));
+    printf("flite data written samples=%i\n", PJMEDIA_PIA_SPF(&port->info));
 
     return PJ_SUCCESS;
 }
