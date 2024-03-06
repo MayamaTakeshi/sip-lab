@@ -57,6 +57,8 @@ int pjw_call_start_fax(long call_id, const char *json);
 
 int pjw_call_stop_fax(long call_id, const char *json);
 
+int pjw_call_start_flite(long call_id, const char *json);
+
 int pjw_call_get_stream_stat(long call_id, const char *json, char *out_stats);
 
 // int pjw_call_refer(long call_id, const char *json, long

@@ -22,6 +22,7 @@
 
 #include "dtmfdet.h"
 #include "fax_port.h"
+#include "flite_port.h"
 
 #include <ctime>
 
@@ -329,6 +330,7 @@ struct AudioEndpoint {
   ConfBridgePort tonegen_cbp;
   ConfBridgePort dtmfdet_cbp;
   ConfBridgePort fax_cbp;
+  ConfBridgePort flite_cbp;
 };
 
 struct VideoEndpoint {
@@ -620,6 +622,7 @@ bool prepare_wav_player(Call *c, AudioEndpoint *ae, const char *file);
 bool prepare_wav_writer(Call *c, AudioEndpoint *ae, const char *file);
 bool prepare_fax(Call *c, AudioEndpoint *ae, bool is_sender, const char *file,
                  unsigned flags);
+bool prepare_flite(Call *c, AudioEndpoint *ae);
 
 void prepare_error_event(ostringstream *oss, char *scope, char *details);
 // void prepare_pjsipcall_error_event(ostringstream *oss, char *scope, char
@@ -638,6 +641,7 @@ typedef pj_status_t (*audio_endpoint_stop_op_t)(Call *call, AudioEndpoint *ae);
 pj_status_t audio_endpoint_stop_play_wav(Call *call, AudioEndpoint *ae);
 pj_status_t audio_endpoint_stop_record_wav(Call *call, AudioEndpoint *ae);
 pj_status_t audio_endpoint_stop_fax(Call *call, AudioEndpoint *ae);
+pj_status_t audio_endpoint_stop_flite(Call *call, AudioEndpoint *ae);
 
 static pjsip_module mod_tester = {
     NULL,
@@ -3176,6 +3180,37 @@ out:
   return 0;
 }
 
+pj_status_t audio_endpoint_remove_port(Call *call, ConfBridgePort *cbp) {
+  printf("audio_endpoint_remove_port\n");
+  pj_status_t status;
+
+  if(cbp->port) {
+    /* 
+    no need to call pjmedia_conf_disconnect_port because pjmedia_conf_remove_port calls:
+      pjmedia_conf_disconnect_port_from_sources(conf, port);
+      pjmedia_conf_disconnect_port_from_sinks(conf, port);
+    */
+
+    status = pjmedia_conf_remove_port(call->conf, cbp->slot);
+    if (status != PJ_SUCCESS) {
+      set_error("pjmedia_conf_remove_port failed");
+      return false;
+    }
+    cbp->slot = 0;
+
+    status = pjmedia_port_destroy(cbp->port);
+    if (status != PJ_SUCCESS) {
+      set_error("pjmedia_port_destroy failed");
+      return false;
+    }
+    cbp->port = NULL;
+  }
+
+  printf("success\n");
+  return PJ_SUCCESS;
+}
+
+
 int pjw_call_reinvite(long call_id, const char *json) {
   addon_log(L_DBG, "pjw_call_reinvite call_id=%d\n", call_id);
 
@@ -3609,6 +3644,115 @@ out:
   return 0;
 }
 
+pj_status_t audio_endpoint_start_flite(Call *call, AudioEndpoint *ae,
+                                          const char *text) {
+  pj_status_t status;
+
+  if(!ae->stream_cbp.port) {
+    set_error("stream port is not ready yet");
+    return -1;
+  }
+
+  // First stop and destroy existing flite port.
+  status = audio_endpoint_stop_flite(call, ae);
+  if(status != PJ_SUCCESS) {
+    return -1;
+  }
+
+  if (!prepare_flite(call, ae)) {
+    return -1;
+  }
+
+  pjmedia_flite_port_speak(ae->flite_cbp.port, text, 0);
+
+  return PJ_SUCCESS;
+}
+
+int pjw_call_start_flite(long call_id, const char *json) {
+  PJW_LOCK();
+  clear_error();
+
+  long val;
+  Call *call;
+
+  MediaEndpoint *me;
+  AudioEndpoint *ae;
+  int ae_count;
+
+  unsigned media_id = 0;
+
+  char *text;
+
+  char buffer[MAX_JSON_INPUT];
+
+  Document document;
+
+  const char *valid_params[] = {"text", "media_id", ""};
+
+  if (!g_call_ids.get(call_id, val)) {
+    set_error("Invalid call_id");
+    goto out;
+  }
+  call = (Call *)val;
+
+  ae_count = count_media_by_type(call, ENDPOINT_TYPE_AUDIO);
+
+  if (ae_count == 0) {
+    set_error("No audio endpoint");
+    goto out;
+  }
+
+  if (!parse_json(document, json, buffer, MAX_JSON_INPUT)) {
+    goto out;
+  }
+
+  if (!validate_params(document, valid_params)) {
+    goto out;
+  }
+
+  if (json_get_string_param(document, "text", false, &text) <= 0) {
+    goto out;
+  }
+
+  if (!text[0]) {
+    set_error("text cannot be blank string");
+    goto out;
+  }
+
+  if (ae_count > 1) {
+    if (json_get_uint_param(document, "media_id", false, &media_id) <= 0) {
+      goto out;
+    }
+  }
+
+  if ((int)media_id >= call->media_count) {
+    set_error("invalid media_id");
+    goto out;
+  }
+
+  me = (MediaEndpoint *)call->media[media_id];
+  if (ENDPOINT_TYPE_AUDIO != me->type) {
+    set_error("media_endpoint is not audio endpoint");
+    goto out;
+  }
+
+  ae = (AudioEndpoint *)me->endpoint.audio;
+
+  audio_endpoint_start_flite(call, ae, text);
+
+out:
+  PJW_UNLOCK();
+  if (pjw_errorstring[0]) {
+    return -1;
+  }
+
+  return 0;
+}
+
+pj_status_t audio_endpoint_stop_flite(Call *call, AudioEndpoint *ae) {
+  return audio_endpoint_remove_port(call, &ae->flite_cbp);
+}
+
 pj_status_t call_stop_audio_endpoints_op(Call *call,
                                          audio_endpoint_stop_op_t op) {
   addon_log(L_DBG, "call_stop_audio_endpoints_op media_count=%d\n",
@@ -3629,37 +3773,6 @@ pj_status_t call_stop_audio_endpoints_op(Call *call,
 
   return PJ_SUCCESS;
 }
-
-pj_status_t audio_endpoint_remove_port(Call *call, ConfBridgePort *cbp) {
-  printf("audio_endpoint_remove_port\n");
-  pj_status_t status;
-
-  if(cbp->port) {
-    /* 
-    no need to call pjmedia_conf_disconnect_port because pjmedia_conf_remove_port calls:
-      pjmedia_conf_disconnect_port_from_sources(conf, port);
-      pjmedia_conf_disconnect_port_from_sinks(conf, port);
-    */
-
-    status = pjmedia_conf_remove_port(call->conf, cbp->slot);
-    if (status != PJ_SUCCESS) {
-      set_error("pjmedia_conf_remove_port failed");
-      return false;
-    }
-    cbp->slot = 0;
-
-    status = pjmedia_port_destroy(cbp->port);
-    if (status != PJ_SUCCESS) {
-      set_error("pjmedia_port_destroy failed");
-      return false;
-    }
-    cbp->port = NULL;
-  }
-
-  printf("success\n");
-  return PJ_SUCCESS;
-}
-
 
 pj_status_t audio_endpoint_stop_play_wav(Call *call, AudioEndpoint *ae) {
   return audio_endpoint_remove_port(call, &ae->wav_player_cbp);
@@ -6394,7 +6507,6 @@ bool prepare_tonegen(Call *c, AudioEndpoint *ae) {
     return true;
   }
 
-  printf("call.id=%i p1\n", c->id);
   status = pjmedia_tonegen_create(
         c->inv->pool, PJMEDIA_PIA_SRATE(&ae->stream_cbp.port->info),
         PJMEDIA_PIA_CCNT(&ae->stream_cbp.port->info),
@@ -6405,21 +6517,18 @@ bool prepare_tonegen(Call *c, AudioEndpoint *ae) {
     return false;
   }
 
-  printf("call.id=%i p2\n", c->id);
   status = pjmedia_conf_add_port(c->conf, c->inv->pool, ae->tonegen_cbp.port, NULL, &ae->tonegen_cbp.slot);
   if (status != PJ_SUCCESS) {
     set_error("pjmedia_conf_add_port failed");
     return false;
   }
 
-  printf("call.id=%i p3\n", c->id);
   status = pjmedia_conf_connect_port(c->conf, ae->tonegen_cbp.slot, ae->stream_cbp.slot, 0);
   if (status != PJ_SUCCESS) {
     set_error("pjmedia_conf_connect_port failed");
     return false;
   }
 
-  printf("call.id=%i p4 (success)\n", c->id);
   return true;
 }
 
@@ -6552,6 +6661,41 @@ bool prepare_fax(Call *c, AudioEndpoint *ae, bool is_sender, const char *file,
 
   return true;
 }
+
+bool prepare_flite(Call *c, AudioEndpoint *ae) {
+  printf("prepare_flite call.id=%i\n", c->id);
+  pj_status_t status;
+
+  if(ae->flite_cbp.port) {
+    printf("already prepared\n");
+    return true;
+  }
+
+  status = pjmedia_flite_port_create(
+        c->inv->pool, PJMEDIA_PIA_SRATE(&ae->stream_cbp.port->info),
+        PJMEDIA_PIA_CCNT(&ae->stream_cbp.port->info),
+        PJMEDIA_PIA_SPF(&ae->stream_cbp.port->info),
+        PJMEDIA_PIA_BITS(&ae->stream_cbp.port->info), NULL, 0, "kal", &ae->flite_cbp.port);
+  if (status != PJ_SUCCESS) {
+    set_error("pjmedia_flite_port_create failed");
+    return false;
+  }
+
+  status = pjmedia_conf_add_port(c->conf, c->inv->pool, ae->flite_cbp.port, NULL, &ae->flite_cbp.slot);
+  if (status != PJ_SUCCESS) {
+    set_error("pjmedia_conf_add_port failed");
+    return false;
+  }
+
+  status = pjmedia_conf_connect_port(c->conf, ae->flite_cbp.slot, ae->stream_cbp.slot, 0);
+  if (status != PJ_SUCCESS) {
+    set_error("pjmedia_conf_connect_port failed");
+    return false;
+  }
+
+  return true;
+}
+
 
 void on_rx_notify(pjsip_evsub *sub, pjsip_rx_data *rdata, int *p_st_code,
                   pj_str_t **p_st_text, pjsip_hdr *res_hdr,
