@@ -622,7 +622,7 @@ bool prepare_wav_player(Call *c, AudioEndpoint *ae, const char *file);
 bool prepare_wav_writer(Call *c, AudioEndpoint *ae, const char *file);
 bool prepare_fax(Call *c, AudioEndpoint *ae, bool is_sender, const char *file,
                  unsigned flags);
-bool prepare_flite(Call *c, AudioEndpoint *ae);
+bool prepare_flite(Call *c, AudioEndpoint *ae, const char *voice);
 
 void prepare_error_event(ostringstream *oss, char *scope, char *details);
 // void prepare_pjsipcall_error_event(ostringstream *oss, char *scope, char
@@ -3644,8 +3644,7 @@ out:
   return 0;
 }
 
-pj_status_t audio_endpoint_start_flite(Call *call, AudioEndpoint *ae,
-                                          const char *text) {
+pj_status_t audio_endpoint_start_flite(Call *call, AudioEndpoint *ae, const char * voice, const char *text) {
   pj_status_t status;
 
   if(!ae->stream_cbp.port) {
@@ -3659,7 +3658,7 @@ pj_status_t audio_endpoint_start_flite(Call *call, AudioEndpoint *ae,
     return -1;
   }
 
-  if (!prepare_flite(call, ae)) {
+  if (!prepare_flite(call, ae, voice)) {
     return -1;
   }
 
@@ -3681,13 +3680,15 @@ int pjw_call_start_flite(long call_id, const char *json) {
 
   unsigned media_id = 0;
 
+  char *voice;
+
   char *text;
 
   char buffer[MAX_JSON_INPUT];
 
   Document document;
 
-  const char *valid_params[] = {"text", "media_id", ""};
+  const char *valid_params[] = {"voice", "text", "media_id", ""};
 
   if (!g_call_ids.get(call_id, val)) {
     set_error("Invalid call_id");
@@ -3707,6 +3708,15 @@ int pjw_call_start_flite(long call_id, const char *json) {
   }
 
   if (!validate_params(document, valid_params)) {
+    goto out;
+  }
+
+  if (json_get_string_param(document, "voice", false, &voice) <= 0) {
+    goto out;
+  }
+
+  if (!voice[0]) {
+    set_error("voice cannot be blank string");
     goto out;
   }
 
@@ -3738,7 +3748,7 @@ int pjw_call_start_flite(long call_id, const char *json) {
 
   ae = (AudioEndpoint *)me->endpoint.audio;
 
-  audio_endpoint_start_flite(call, ae, text);
+  audio_endpoint_start_flite(call, ae, voice, text);
 
 out:
   PJW_UNLOCK();
@@ -6662,7 +6672,7 @@ bool prepare_fax(Call *c, AudioEndpoint *ae, bool is_sender, const char *file,
   return true;
 }
 
-bool prepare_flite(Call *c, AudioEndpoint *ae) {
+bool prepare_flite(Call *c, AudioEndpoint *ae, const char *voice) {
   printf("prepare_flite call.id=%i\n", c->id);
   pj_status_t status;
 
@@ -6675,7 +6685,7 @@ bool prepare_flite(Call *c, AudioEndpoint *ae) {
         c->inv->pool, PJMEDIA_PIA_SRATE(&ae->stream_cbp.port->info),
         PJMEDIA_PIA_CCNT(&ae->stream_cbp.port->info),
         PJMEDIA_PIA_SPF(&ae->stream_cbp.port->info),
-        PJMEDIA_PIA_BITS(&ae->stream_cbp.port->info), NULL, 0, "kal", &ae->flite_cbp.port);
+        PJMEDIA_PIA_BITS(&ae->stream_cbp.port->info), NULL, 0, voice, &ae->flite_cbp.port);
   if (status != PJ_SUCCESS) {
     set_error("pjmedia_flite_port_create failed");
     return false;

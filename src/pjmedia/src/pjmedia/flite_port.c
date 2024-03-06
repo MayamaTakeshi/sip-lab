@@ -111,7 +111,6 @@ PJ_DEF(pj_status_t) pjmedia_flite_port_create( pj_pool_t *pool,
  *  so kal talks a little bit too fast ...
  *  for now: "symlink" kal to kal16
  */		flite->v = globals.kal16;
-		flite->v = globals.kal;
 	} else if (!strcasecmp(voice, "rms")) {
 		flite->v = globals.rms;
 	} else if (!strcasecmp(voice, "slt")) {
@@ -142,6 +141,9 @@ PJ_DEF(pj_status_t) pjmedia_flite_port_speak( pjmedia_port *port,
     }
     
     flite->w = flite_text_to_wave(text, flite->v);
+    if (flite->w->sample_rate != PJMEDIA_PIA_SRATE(&port->info)) {
+		cst_wave_resample(flite->w, PJMEDIA_PIA_SRATE(&port->info));
+    }
     flite->written_samples = 0;
 
     return PJ_SUCCESS;
@@ -168,10 +170,10 @@ static pj_status_t flite_get_frame(pjmedia_port *port,
         return PJ_SUCCESS;
     }
 
-    memcpy(frame->buf, flite->w->samples + flite->written_samples, PJMEDIA_PIA_SPF(&port->info));
+    memcpy(frame->buf, flite->w->samples + flite->written_samples, PJMEDIA_PIA_SPF(&port->info)*2);
     flite->written_samples += PJMEDIA_PIA_SPF(&port->info);
     frame->type = PJMEDIA_FRAME_TYPE_AUDIO;
-    printf("flite data written\n");
+    printf("flite data written samples=i\n", PJMEDIA_PIA_SPF(&port->info));
 
     return PJ_SUCCESS;
 }
