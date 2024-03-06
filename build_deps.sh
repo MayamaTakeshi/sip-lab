@@ -74,10 +74,10 @@ fi
 
 
 cd $START_DIR/3rdParty
-if [[ ! -d boost_1_51_0 ]]
+if [[ ! -d boost_1_66_0 ]]
 then
-    wget http://sourceforge.net/projects/boost/files/boost/1.51.0/boost_1_51_0.tar.bz2
-    tar xf boost_1_51_0.tar.bz2
+    wget https://downloads.sourceforge.net/project/boost/boost/1.66.0/boost_1_66_0.tar.bz2
+    tar xf boost_1_66_0.tar.bz2
 fi
 
 

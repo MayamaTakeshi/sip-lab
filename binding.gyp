@@ -15,7 +15,7 @@
             "src/pjmedia/include",
             "src/pjmedia/include/pjmedia",
             "3rdParty/rapidjson/include",
-            "3rdParty/boost_1_51_0",
+            "3rdParty/boost_1_66_0",
             "3rdParty/spandsp/src",
             "<!@(node -p \"require('node-addon-api').include\")",
           ],

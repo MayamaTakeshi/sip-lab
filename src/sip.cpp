@@ -1098,12 +1098,10 @@ static pj_bool_t on_connect_complete(pj_activesock_t *asock,
 }
 
 static pj_activesock_t* create_tcp_socket(pjsip_endpoint *sip_endpt, pj_str_t *ipaddr, pj_uint16_t  *out_port, MediaEndpoint *media_endpt, Call *call) {
-  pj_ioqueue_key_t **skey;
   pj_ioqueue_t *ioqueue = pjsip_endpt_get_ioqueue(sip_endpt);
 
   pj_pool_t *pool = call->inv->dlg->pool; 
 
-  skey = (pj_ioqueue_key_t **)pj_pool_alloc(pool, sizeof(pj_ioqueue_key_t *));
   pj_sock_t *sock = (pj_sock_t *)pj_pool_alloc(pool, sizeof(pj_sock_t));
 
   pj_status_t rc;
@@ -2988,7 +2986,7 @@ int call_create(Transport *t, unsigned flags, pjsip_dialog *dlg,
   if (!dlg_set_transport_by_t(t, dlg)) {
     return -1;
   }
-  addon_log(L_DBG, "inv=%x tdata=%x\n", inv, tdata);
+  addon_log(L_DBG, "inv=%p tdata=%p\n", (void*)inv, (void*)tdata);
 
   status = pjsip_inv_send_msg(inv, tdata);
   addon_log(L_DBG, "status=%d\n", status);
@@ -4132,7 +4130,7 @@ bool media_endpoint_present_in_session_media(
 int find_sdp_media_by_media_endpt(const pjmedia_sdp_session *sdp,
                                   pjmedia_sdp_media **media_out,
                                   MediaEndpoint *me) {
-  printf("find_sdp_media_by_media_endpt %x\n", (unsigned long)me);
+  printf("find_sdp_media_by_media_endpt %p\n", (void*)me);
   for (unsigned int i = 0; i < sdp->media_count; i++) {
     pjmedia_sdp_media *media = sdp->media[i];
     printf("i=%d me->port=%i media->desc.port=%i me->media=%.*s media->desc.media=%.*s me->transport=%.*s media->desc.transport=%.*s\n", i, me->port, media->desc.port, (int)me->media.slen, me->media.ptr, (int)media->desc.media.slen, media->desc.media.ptr, (int)me->transport.slen, me->transport.ptr, (int)media->desc.transport.slen, media->desc.transport.ptr);
@@ -4151,10 +4149,10 @@ int find_sdp_media_by_media_endpt(const pjmedia_sdp_session *sdp,
 
 bool is_media_in_active_media(MediaEndpoint *me, MediaEndpoint **active_media,
                               unsigned count) {
-  printf("is_media_in_active_media me=%x\n", (unsigned long)me);
+  printf("is_media_in_active_media me=%p\n", (void*)me);
   for (unsigned i = 0; i < count; i++) {
     MediaEndpoint *current = active_media[i];
-    printf("i=%d current=%x\n", i, current);
+    printf("i=%d current=%p\n", i, (void*)current);
     if (current == me) {
       printf("yes\n");
       return true;
@@ -4718,7 +4716,7 @@ static void on_state_changed(pjsip_inv_session *inv, pjsip_event *e) {
   printf("inv->state=%d\n", inv->state);
 
   if (PJSIP_INV_STATE_DISCONNECTED == inv->state) {
-    addon_log(L_DBG, "call will terminate call=%x\n", call);
+    addon_log(L_DBG, "call will terminate call=%p\n", (void*)call);
     pj_status_t status;
 
     long call_id;
@@ -4792,7 +4790,7 @@ static pjmedia_transport *create_media_transport(const pj_str_t *addr,
       pjmedia_transport_info tpinfo;
       pjmedia_transport_info_init(&tpinfo);
       status = pjmedia_transport_get_info(med_transport, &tpinfo);
-      //printf("create_media_transport port=%i created %x\n", port,  med_transport);
+      //printf("create_media_transport port=%i created %p\n", port,  (void*)med_transport);
       *allocated_port = port;
       return med_transport;
     } else {
@@ -5237,7 +5235,7 @@ static pj_bool_t on_rx_response(pjsip_rx_data *rdata) {
   long call_id;
 
   if (call) {
-    // addon_log(L_DBG, "call:%x\n",call);
+    // addon_log(L_DBG, "call:%p\n", (void*)call);
     if (!g_call_ids.get_id((long)call, call_id)) {
       // addon_log(L_DBG, "The call is not present in g_call_ids.\n");
       //  It means the call terminated and was removed from g_call_ids\n");
@@ -5809,7 +5807,7 @@ static void build_stream_stat(ostringstream &oss, pjmedia_rtcp_stat *stat,
 }
 
 void close_media_transport(pjmedia_transport *med_transport) {
-  printf("close_media_transport %x\n", (unsigned long)med_transport);
+  printf("close_media_transport %p\n", (void*)med_transport);
   pjmedia_transport_info tpinfo;
   pjmedia_transport_info_init(&tpinfo);
   pj_status_t status = pjmedia_transport_get_info(med_transport, &tpinfo);
@@ -6255,7 +6253,7 @@ bool process_media(Call *call, pjsip_dialog *dlg, Document &document, bool answe
 
         if(!create_media_endpoint(call, document, descr, dlg, (char*)"0.0.0.0", &new_me))
           return false;
-        addon_log(L_DBG, "i=%d media port=0 created %x\n", i, me);
+        addon_log(L_DBG, "i=%d media port=0 created %p\n", i, (void*)me);
 
         pjmedia_sdp_media *media = create_sdp_media(new_me, dlg);
         if (!media)
@@ -6266,7 +6264,7 @@ bool process_media(Call *call, pjsip_dialog *dlg, Document &document, bool answe
         // me was not active but it is activated now
         if (!create_media_endpoint(call, document, descr, dlg, t->address, &me))
           return false;
-        addon_log(L_DBG, "i=%d media created %x\n", i, me);
+        addon_log(L_DBG, "i=%d media created %p\n", i, (void*)me);
         call->media[idx] = me;
 
         if (!update_media_fields(me, dlg->pool, descr)) {
@@ -6293,7 +6291,7 @@ bool process_media(Call *call, pjsip_dialog *dlg, Document &document, bool answe
       addon_log(L_DBG, "i=%d media not found\n", i);
       if (!create_media_endpoint(call, document, descr, dlg, t->address, &me))
         return false;
-      addon_log(L_DBG, "i=%d media created %x\n", i, me);
+      addon_log(L_DBG, "i=%d media created %p\n", i, (void*)me);
       call->media[call->media_count++] = me;
       in_use_chart[call->media_count - 1] =
           true; // added elements must be set as in use
@@ -6342,7 +6340,7 @@ bool is_media_active(Call *c, MediaEndpoint *me) {
 }
 
 void close_media_endpoint(Call *call, MediaEndpoint *me) {
-  printf("close_media_endpoint %x\n", (unsigned long)me);
+  printf("close_media_endpoint %p\n", (void*)me);
   if(!me) return;
 
   if (ENDPOINT_TYPE_AUDIO == me->type) {
@@ -6379,7 +6377,7 @@ void close_media_endpoint(Call *call, MediaEndpoint *me) {
 }
 
 void close_media(Call *c) {
-  printf("close_media call_id=%x\n", c->id);
+  printf("close_media call_id=%li\n", c->id);
   for (int i = 0; i < c->media_count; ++i) {
     MediaEndpoint *me = c->media[i];
     close_media_endpoint(c, me);
@@ -7632,7 +7630,7 @@ int pjw_subscription_create(long transport_id, const char *json,
 
   pjsip_evsub_set_mod_data(evsub, mod_tester.id, subscription);
 
-  printf("subscription=%x\n", (unsigned long)subscription);
+  printf("subscription=%p\n", (void*)subscription);
 
   *out_subscription_id = subscription_id;
 out:
@@ -7815,7 +7813,7 @@ pj_status_t tcp_endpoint_send_msg(Call *call, MediaEndpoint *me, char *msg, pj_s
     send_key = (pj_ioqueue_op_key_t*)pj_pool_alloc(call->inv->pool, sizeof(pj_ioqueue_op_key_t));
     char *data = (char*)pj_pool_alloc(call->inv->pool, size);
     memcpy(data, msg, size);
-    printf("tcp_endpoint_send_msg send_key %x\n", (unsigned long)send_key);
+    printf("tcp_endpoint_send_msg send_key %p\n", (void*)send_key);
     //status = pj_activesock_send(asock, send_key, data, &size, 0);
     status = pj_activesock_send(asock, send_key, data, &size, PJ_IOQUEUE_ALWAYS_ASYNC);
     if (status != PJ_SUCCESS) {
