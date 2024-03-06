@@ -223,10 +223,10 @@ bool json_get_and_check_uri(Document &document, const char *param,
   return true;
 }
 
-static pjsip_method info_method = {PJSIP_OTHER_METHOD, {"INFO", 4}};
-static pjsip_method message_method = {PJSIP_OTHER_METHOD, {"MESSAGE", 7}};
+static pjsip_method info_method = {PJSIP_OTHER_METHOD, {(char*)"INFO", 4}};
+static pjsip_method message_method = {PJSIP_OTHER_METHOD, {(char*)"MESSAGE", 7}};
 
-static pj_str_t trying_reason = pj_str("Trying");
+static pj_str_t trying_reason = pj_str((char*)"Trying");
 
 #define PJW_LOCK() pthread_mutex_lock(&g_mutex)
 #define PJW_UNLOCK() pthread_mutex_unlock(&g_mutex)
@@ -531,8 +531,8 @@ static void on_dtmf(pjmedia_stream *stream, void *user_data, int digit);
 /* Callback for Registration Status */
 static void on_registration_status(pjsip_regc_cbparam *param);
 
-static void on_tsx_state_changed(pjsip_inv_session *inv, pjsip_transaction *tsx,
-                                 pjsip_event *e);
+/* static void on_tsx_state_changed(pjsip_inv_session *inv, pjsip_transaction *tsx,
+                                 pjsip_event *e); */
 
 static void client_on_evsub_state(pjsip_evsub *sub, pjsip_event *event);
 static void on_client_refresh(pjsip_evsub *sub);
@@ -935,9 +935,6 @@ static pj_bool_t on_data_read(pj_activesock_t *asock, void *data,
     return PJ_FALSE;
   }
 
-  assert(ud->len >= 0);
-
-  assert(size >= 0);
   assert(size + ud->len + 1 < MAX_TCP_DATA);
 
   memcpy(&ud->buf[ud->len], data, size);
@@ -971,7 +968,7 @@ static pj_bool_t on_data_read(pj_activesock_t *asock, void *data,
     assert(body_len > 0 && body_len < 4096);
 
     if(ud->buf+ud->len < sep+4+body_len) {
-      printf("tcp data: msg incomplete %i %i\n", ud->buf+ud->len, sep+4+body_len);
+      //printf("tcp data: msg incomplete %i %i\n", ud->buf+ud->len, sep+4+body_len);
       *remainder = 0;
       return PJ_TRUE;
     }
@@ -1110,8 +1107,7 @@ static pj_activesock_t* create_tcp_socket(pjsip_endpoint *sip_endpt, pj_str_t *i
   pj_sock_t *sock = (pj_sock_t *)pj_pool_alloc(pool, sizeof(pj_sock_t));
 
   pj_status_t rc;
-  pj_sockaddr_in addr, client_add, rmt_addr;
-  int client_addr_len;
+  pj_sockaddr_in addr;
 
   pj_activesock_t *asock = NULL;
 
@@ -1194,8 +1190,6 @@ int __pjw_init() {
   g_shutting_down = false;
 
   pj_status_t status;
-
-  pjmedia_port *conf_port = NULL;
 
   status = pj_init();
   if (status != PJ_SUCCESS) {
@@ -2092,8 +2086,6 @@ int pjw_call_respond(long call_id, const char *json) {
 
   pjsip_tx_data *tdata;
 
-  const pjmedia_sdp_session *local_sdp;
-
   Call *call;
 
   char buffer[MAX_JSON_INPUT];
@@ -2979,7 +2971,7 @@ int call_create(Transport *t, unsigned flags, pjsip_dialog *dlg,
   pjsip_tx_data *tdata;
   status = pjsip_inv_invite(inv, &tdata);
   if (status != PJ_SUCCESS) {
-    g_call_ids.remove(call_id, (long &)call);
+    g_call_ids.remove(call_id, (long&)call);
     close_media(call);
     status = pjsip_dlg_terminate(dlg); // ToDo:
     set_error("pjsip_inv_invite failed");
@@ -2987,7 +2979,7 @@ int call_create(Transport *t, unsigned flags, pjsip_dialog *dlg,
   }
 
   if (!add_headers(dlg->pool, tdata, document)) {
-    g_call_ids.remove(call_id, (long &)call);
+    g_call_ids.remove(call_id, (long&)call);
     close_media(call);                 // Todo:
     status = pjsip_dlg_terminate(dlg); // ToDo:
     return -1;
@@ -3000,9 +2992,8 @@ int call_create(Transport *t, unsigned flags, pjsip_dialog *dlg,
 
   status = pjsip_inv_send_msg(inv, tdata);
   addon_log(L_DBG, "status=%d\n", status);
-  pj_perror(0, "", status, "");
   if (status != PJ_SUCCESS) {
-    g_call_ids.remove(call_id, (long &)call);
+    g_call_ids.remove(call_id, (long&)call);
     close_media(call); // Todo:
     // The below code cannot be called here it will cause seg fault
     // status = pjsip_dlg_terminate(dlg); //ToDo:
@@ -3013,7 +3004,7 @@ int call_create(Transport *t, unsigned flags, pjsip_dialog *dlg,
   // Without this, on_rx_response will not be called
   status = pjsip_dlg_add_usage(dlg, &mod_tester, call);
   if (status != PJ_SUCCESS) {
-    g_call_ids.remove(call_id, (long &)call);
+    g_call_ids.remove(call_id, (long&)call);
     close_media(call);                 // Todo:
     status = pjsip_dlg_terminate(dlg); // ToDo:
     set_error("pjsip_dlg_add_usage failed");
@@ -3110,8 +3101,6 @@ int pjw_call_send_dtmf(long call_id, const char *json) {
   int mode = 0;
   ;
 
-  pj_status_t status;
-
   Call *call;
 
   char buffer[MAX_JSON_INPUT];
@@ -3202,8 +3191,6 @@ int pjw_call_reinvite(long call_id, const char *json) {
   pjsip_inv_session *inv;
 
   pj_status_t status;
-
-  const pjmedia_sdp_session *old_sdp = NULL;
 
   pjsip_tx_data *tdata;
   // pjmedia_sdp_session *sdp = 0;
@@ -3431,9 +3418,8 @@ int pjw_call_start_record_wav(long call_id, const char *json) {
   long val;
   Call *call;
   pj_status_t status;
-  pjmedia_port *stream_port;
 
-  unsigned media_id = 0;
+  unsigned  media_id = 0;
 
   MediaEndpoint *me;
   AudioEndpoint *ae;
@@ -3483,7 +3469,7 @@ int pjw_call_start_record_wav(long call_id, const char *json) {
     }
   }
 
-  if (media_id >= call->media_count) {
+  if ((int)media_id >= call->media_count) {
     set_error("invalid media_id");
     goto out;
   }
@@ -3550,8 +3536,6 @@ int pjw_call_start_play_wav(long call_id, const char *json) {
 
   long val;
   Call *call;
-  pj_status_t status;
-  pjmedia_port *stream_port;
 
   MediaEndpoint *me;
   AudioEndpoint *ae;
@@ -3603,7 +3587,7 @@ int pjw_call_start_play_wav(long call_id, const char *json) {
     }
   }
 
-  if (media_id >= call->media_count) {
+  if ((int)media_id >= call->media_count) {
     set_error("invalid media_id");
     goto out;
   }
@@ -3695,14 +3679,11 @@ int pjw_call_stop_play_wav(long call_id, const char *json) {
 
   MediaEndpoint *me;
   AudioEndpoint *ae;
-  int ae_count;
   int res;
 
   unsigned media_id = 0;
 
   char buffer[MAX_JSON_INPUT];
-
-  const char *valid_params[] = {"media_id", ""};
 
   Document document;
 
@@ -3730,7 +3711,7 @@ int pjw_call_stop_play_wav(long call_id, const char *json) {
   } else {
     // Stop play wav on specified media_id
 
-    if (media_id >= call->media_count) {
+    if ((int)media_id >= call->media_count) {
       set_error("invalid media_id");
       goto out;
     }
@@ -3768,19 +3749,15 @@ int pjw_call_stop_record_wav(long call_id, const char *json) {
 
   long val;
   Call *call = (Call *)val;
-  pjmedia_port *stream_port;
   pj_status_t status;
 
   MediaEndpoint *me;
   AudioEndpoint *ae;
-  int ae_count;
   int res;
 
   unsigned media_id = 0;
 
   char buffer[MAX_JSON_INPUT];
-
-  const char *valid_params[] = {"media_id", ""};
 
   Document document;
 
@@ -3808,7 +3785,7 @@ int pjw_call_stop_record_wav(long call_id, const char *json) {
   } else {
     // Stop record wav on specified media_id
 
-    if (media_id >= call->media_count) {
+    if ((int)media_id >= call->media_count) {
       set_error("invalid media_id");
       goto out;
     }
@@ -3847,7 +3824,6 @@ int pjw_call_start_fax(long call_id, const char *json) {
   long val;
   Call *call;
   pj_status_t status;
-  pjmedia_port *stream_port;
 
   bool is_sender;
   char *file;
@@ -3903,7 +3879,7 @@ int pjw_call_start_fax(long call_id, const char *json) {
     }
   }
 
-  if (media_id >= call->media_count) {
+  if ((int)media_id >= call->media_count) {
     set_error("invalid media_id");
     goto out;
   }
@@ -3973,19 +3949,15 @@ int pjw_call_stop_fax(long call_id, const char *json) {
   long val;
   Call *call;
 
-  pjmedia_port *stream_port;
   pj_status_t status;
 
   MediaEndpoint *me;
   AudioEndpoint *ae;
-  int ae_count;
   int res;
 
   unsigned media_id = 0;
 
   char buffer[MAX_JSON_INPUT];
-
-  const char *valid_params[] = {"media_id", ""};
 
   Document document;
 
@@ -4013,7 +3985,7 @@ int pjw_call_stop_fax(long call_id, const char *json) {
   } else {
     // Stop fax on specified media_id
 
-    if (media_id >= call->media_count) {
+    if ((int)media_id >= call->media_count) {
       set_error("invalid media_id");
       goto out;
     }
@@ -4050,8 +4022,6 @@ int pjw_call_get_stream_stat(long call_id, const char *json, char *out_stats) {
 
   char buffer[MAX_JSON_INPUT];
 
-  const char *valid_params[] = {"media_id", ""};
-
   Document document;
 
   pj_status_t status;
@@ -4082,7 +4052,7 @@ int pjw_call_get_stream_stat(long call_id, const char *json, char *out_stats) {
     goto out;
   }
 
-  if (media_id >= call->media_count) {
+  if ((int)media_id >= call->media_count) {
     set_error("invalid media_id");
     goto out;
   }
@@ -4142,11 +4112,11 @@ out:
 bool media_endpoint_present_in_session_media(
     MediaEndpoint *me, const pjmedia_sdp_session *local_sdp) {
   printf("media_endpoint_present_in_session_media:\n");
-  for (int i = 0; i < local_sdp->media_count; i++) {
+  for (unsigned i = 0; i < local_sdp->media_count; i++) {
     pjmedia_sdp_media *media = local_sdp->media[i];
     printf("port: %d %d\n", me->port, media->desc.port);
-    printf("media: %.*s %.*s\n", me->media.slen, me->media.ptr,
-           media->desc.media.slen, media->desc.media.ptr);
+    printf("media: %.*s %.*s\n", (int)me->media.slen, me->media.ptr,
+           (int)media->desc.media.slen, media->desc.media.ptr);
     if (me->port && (me->port == media->desc.port) &&
         (pj_strcmp(&me->media, &media->desc.media) == 0) &&
         (pj_strcmp(&me->transport, &media->desc.transport) == 0) &&
@@ -4162,10 +4132,10 @@ bool media_endpoint_present_in_session_media(
 int find_sdp_media_by_media_endpt(const pjmedia_sdp_session *sdp,
                                   pjmedia_sdp_media **media_out,
                                   MediaEndpoint *me) {
-  printf("find_sdp_media_by_media_endpt %x\n", me);
-  for (int i = 0; i < sdp->media_count; i++) {
+  printf("find_sdp_media_by_media_endpt %x\n", (unsigned long)me);
+  for (unsigned int i = 0; i < sdp->media_count; i++) {
     pjmedia_sdp_media *media = sdp->media[i];
-    printf("i=%d me->port=%i media->desc.port=%i me->media=%.*s media->desc.media=%.*s me->transport=%.*s media->desc.transport=%.*s\n", i, me->port, media->desc.port, me->media.slen, me->media.ptr, media->desc.media.slen, media->desc.media.ptr, me->transport.slen, me->transport.ptr, media->desc.transport.slen, media->desc.transport.ptr);
+    printf("i=%d me->port=%i media->desc.port=%i me->media=%.*s media->desc.media=%.*s me->transport=%.*s media->desc.transport=%.*s\n", i, me->port, media->desc.port, (int)me->media.slen, me->media.ptr, (int)media->desc.media.slen, media->desc.media.ptr, (int)me->transport.slen, me->transport.ptr, (int)media->desc.transport.slen, media->desc.transport.ptr);
 
     if ((me->port == media->desc.port) &&
         (pj_strcmp(&me->media, &media->desc.media) == 0) &&
@@ -4181,8 +4151,8 @@ int find_sdp_media_by_media_endpt(const pjmedia_sdp_session *sdp,
 
 bool is_media_in_active_media(MediaEndpoint *me, MediaEndpoint **active_media,
                               unsigned count) {
-  printf("is_media_in_active_media me=%x\n", me);
-  for (int i = 0; i < count; i++) {
+  printf("is_media_in_active_media me=%x\n", (unsigned long)me);
+  for (unsigned i = 0; i < count; i++) {
     MediaEndpoint *current = active_media[i];
     printf("i=%d current=%x\n", i, current);
     if (current == me) {
@@ -4218,10 +4188,10 @@ void gen_media_json(char *dest, int len, Call *call,
     if(!me->port) {
       switch (me->type) {
         case ENDPOINT_TYPE_AUDIO:
-          p += sprintf(p, "{\"type\": \"audio\", \"protocol\": \"%.*s\", \"port\": 0}", me->transport.slen, me->transport.ptr);
+          p += sprintf(p, "{\"type\": \"audio\", \"protocol\": \"%.*s\", \"port\": 0}", (int)me->transport.slen, me->transport.ptr);
           break;
         case ENDPOINT_TYPE_MRCP:
-          p += sprintf(p, "{\"type\": \"mrcp\", \"protocol\": \"%.*s\", \"port\": 0}", me->transport.slen, me->transport.ptr);
+          p += sprintf(p, "{\"type\": \"mrcp\", \"protocol\": \"%.*s\", \"port\": 0}", (int)me->transport.slen, me->transport.ptr);
           break;
         default:  
           p += sprintf(p, "{\"type\": \"unknown\", \"port\": 0}");
@@ -4231,8 +4201,6 @@ void gen_media_json(char *dest, int len, Call *call,
 
     switch (me->type) {
     case ENDPOINT_TYPE_AUDIO: {
-      AudioEndpoint *ae = (AudioEndpoint *)me->endpoint.audio;
-
       const char *local_mode =
           get_media_mode(local_media->attr, local_media->attr_count);
       const char *remote_mode =
@@ -4256,21 +4224,21 @@ void gen_media_json(char *dest, int len, Call *call,
                    "{\"type\": \"audio\", \"protocol\": \"%.*s\", \"local\": {\"addr\": \"%.*s\", "
                    "\"port\": %d, \"mode\": \"%s\"}, \"remote\": {\"addr\": "
                    "\"%.*s\", \"port\": %d, \"mode\": \"%s\"}, \"fmt\": [",
-                   me->transport.slen, me->transport.ptr,
-                   local_addr->slen, local_addr->ptr, local_media->desc.port,
-                   local_mode, remote_addr->slen, remote_addr->ptr,
+                   (int)me->transport.slen, me->transport.ptr,
+                   (int)local_addr->slen, local_addr->ptr, local_media->desc.port,
+                   local_mode, (int)remote_addr->slen, remote_addr->ptr,
                    remote_media->desc.port, remote_mode);
 
-      for (int i = 0; i < local_media->desc.fmt_count; i++) {
+      for (unsigned i = 0; i < local_media->desc.fmt_count; i++) {
         if (i > 0)
           p += sprintf(p, ",");
         pj_str_t *fmt = &local_media->desc.fmt[i];
         pjmedia_sdp_attr *attr = pjmedia_sdp_attr_find2(
             local_media->attr_count, local_media->attr, "rtpmap", fmt);
         if (attr) {
-          p += sprintf(p, "\"%.*s\"", attr->value.slen, attr->value.ptr);
+          p += sprintf(p, "\"%.*s\"", (int)attr->value.slen, attr->value.ptr);
         } else {
-          p += sprintf(p, "\"%.*s\"", fmt->slen, fmt->ptr);
+          p += sprintf(p, "\"%.*s\"", (int)fmt->slen, fmt->ptr);
         }
       }
       p += sprintf(p, "]}");
@@ -4280,7 +4248,7 @@ void gen_media_json(char *dest, int len, Call *call,
       p += sprintf(p,
                    "{\"type\": \"mrcp\", \"protocol\": \"%.*s\", \"local\": {\"port\": %d}, "
                    "\"remote\": {\"port\": %d}}",
-                   me->transport.slen, me->transport.ptr,
+                   (int)me->transport.slen, me->transport.ptr,
                    local_sdp->media[idx]->desc.port,
                    remote_sdp->media[idx]->desc.port);
       break;
@@ -4318,13 +4286,11 @@ bool start_tcp_media(Call *call, MediaEndpoint *me,
   } else {
     remote_addr = &remote_sdp->conn->addr;
   }
-  printf("start_tcp_media remote port: %d, remote addr: %.*s\n", remote_media->desc.port, remote_addr->slen, remote_addr->ptr);
+  printf("start_tcp_media remote port: %d, remote addr: %.*s\n", remote_media->desc.port, (int)remote_addr->slen, remote_addr->ptr);
 
   pj_sock_t *sock = (pj_sock_t *)pj_pool_alloc(pool, sizeof(pj_sock_t));
 
   pj_activesock_t *asock = NULL;
-
-  unsigned allocated_port = 0;
 
   AsockUserData *ud = NULL;
 
@@ -4628,7 +4594,7 @@ MediaEndpoint *find_media_endpt_by_sdp_media(Call *call,
         }
       }
     } else {
-      printf("local_media->desc.media=%.*s\n", local_media->desc.media.slen,
+      printf("local_media->desc.media=%.*s\n", (int)local_media->desc.media.slen,
              local_media->desc.media.ptr);
       assert(0);
       // missing media type support implementation
@@ -4653,9 +4619,8 @@ static void on_media_update(pjsip_inv_session *inv, pj_status_t status) {
                      "be notified.\n");
     return;
   }
-  printf("call_id=%d\n", call_id);
+  printf("call_id=%li\n", call_id);
 
-  pjmedia_stream_info stream_info;
   const pjmedia_sdp_session *local_sdp;
   const pjmedia_sdp_session *remote_sdp;
 
@@ -4696,11 +4661,8 @@ static void on_media_update(pjsip_inv_session *inv, pj_status_t status) {
             call->id, b);
 
   // update media endpoint based on sdp media
-  bool in_use_chart[PJMEDIA_MAX_SDP_MEDIA] = {false};
-  MediaEndpoint *active_media[PJMEDIA_MAX_SDP_MEDIA] = {NULL};
-  int active_media_count = 0;
 
-  for (int i = 0; i < local_sdp->media_count; i++) {
+  for (unsigned i = 0; i < local_sdp->media_count; i++) {
     MediaEndpoint *me = call->media[i];
     if (!local_sdp->media[i]->desc.port) {
       close_media_endpoint(call, me);
@@ -5224,7 +5186,7 @@ static pj_bool_t on_rx_request(pjsip_rx_data *rdata) {
     Transport *transport = (Transport *)val;
     call->transport = transport;
   } else {
-    printf("could not resolve transport id=%d\n", transport_id);
+    printf("could not resolve transport id=%li\n", transport_id);
     exit(1);
   }
 
@@ -5320,15 +5282,11 @@ static void on_rx_offer2(pjsip_inv_session *inv,
   if (g_shutting_down)
     return;
 
-  char evt[2048];
-
   Call *call = (Call *)inv->dlg->mod_data[mod_tester.id];
 
   printf("on_rx_offer2 call_id=%d\n", call->id);
 
   pj_status_t status;
-
-  const pjsip_rx_data *rdata = param->rdata;
 
   pjmedia_sdp_neg_state state = pjmedia_sdp_neg_get_state(inv->neg);
   printf("neg state: %d\n", state);
@@ -5851,7 +5809,7 @@ static void build_stream_stat(ostringstream &oss, pjmedia_rtcp_stat *stat,
 }
 
 void close_media_transport(pjmedia_transport *med_transport) {
-  printf("close_media_transport %x\n", med_transport);
+  printf("close_media_transport %x\n", (unsigned long)med_transport);
   pjmedia_transport_info tpinfo;
   pjmedia_transport_info_init(&tpinfo);
   pj_status_t status = pjmedia_transport_get_info(med_transport, &tpinfo);
@@ -5886,7 +5844,7 @@ bool has_attribute_mode(MediaEndpoint *me) {
 }
 
 void remove_mode_attributes(pjmedia_sdp_media *m) {
-  for (int i = 0; i < m->attr_count; i++) {
+  for (unsigned i = 0; i < m->attr_count; i++) {
     pjmedia_sdp_attr *attr = m->attr[i];
     if ((pj_strcmp2(&attr->name, "sendrecv") == 0) ||
         (pj_strcmp2(&attr->name, "sendonly") == 0) ||
@@ -5990,7 +5948,7 @@ bool create_media_endpoint(Call *call, Document &document, Value &descr,
       }
       audio_endpt->med_transport = srtp;
 
-      status = pjmedia_transport_media_create(audio_endpt->med_transport, dlg->pool, NULL, NULL, 0);
+      status = pjmedia_transport_media_create(audio_endpt->med_transport, dlg->pool, 0, NULL, 0);
       if(status != PJ_SUCCESS) {
         set_error("pjmedia_transport_media_create failed"); 
         return false;
@@ -6295,7 +6253,7 @@ bool process_media(Call *call, pjsip_dialog *dlg, Document &document, bool answe
         // me was active but it must be deactivated
         MediaEndpoint *new_me;
 
-        if(!create_media_endpoint(call, document, descr, dlg, "0.0.0.0", &new_me))
+        if(!create_media_endpoint(call, document, descr, dlg, (char*)"0.0.0.0", &new_me))
           return false;
         addon_log(L_DBG, "i=%d media port=0 created %x\n", i, me);
 
@@ -6384,7 +6342,7 @@ bool is_media_active(Call *c, MediaEndpoint *me) {
 }
 
 void close_media_endpoint(Call *call, MediaEndpoint *me) {
-  printf("close_media_endpoint %x\n", me);
+  printf("close_media_endpoint %x\n", (unsigned long)me);
   if(!me) return;
 
   if (ENDPOINT_TYPE_AUDIO == me->type) {
@@ -6989,7 +6947,7 @@ void process_in_dialog_refer(pjsip_dialog *dlg, pjsip_rx_data *rdata) {
   }
 }
 
-static void on_tsx_state_changed(pjsip_inv_session *inv, pjsip_transaction *tsx,
+/* static void on_tsx_state_changed(pjsip_inv_session *inv, pjsip_transaction *tsx,
                                  pjsip_event *e) {
   addon_log(L_DBG, "on_tsx_state change method=%.*s.\n", tsx->method.name.slen,
             tsx->method.name.ptr);
@@ -7010,11 +6968,11 @@ static void on_tsx_state_changed(pjsip_inv_session *inv, pjsip_transaction *tsx,
   printf("call_id=%d\n", call->id);
 
   if (call->inv == NULL) {
-    /* Shouldn't happen. It happens only when we don't terminate the
-     * server subscription caused by REFER after the call has been
-     * transfered (and this call has been disconnected), and we
-     * receive another REFER for this call.
-     */
+    // Shouldn't happen. It happens only when we don't terminate the
+    // server subscription caused by REFER after the call has been
+    // transfered (and this call has been disconnected), and we
+    // receive another REFER for this call.
+    //
     return;
   }
 
@@ -7022,9 +6980,9 @@ static void on_tsx_state_changed(pjsip_inv_session *inv, pjsip_transaction *tsx,
   // Transport *t;
   if (tsx->role == PJSIP_ROLE_UAS && tsx->state == PJSIP_TSX_STATE_TRYING) {
     if (pjsip_method_cmp(&tsx->method, pjsip_get_refer_method()) == 0) {
-      /*
-       * Incoming REFER request.
-       */
+      // 
+      // Incoming REFER request.
+      //
 
       process_in_dialog_refer(call->inv->dlg, e->body.tsx_state.src.rdata);
     } else {
@@ -7053,7 +7011,7 @@ static void on_tsx_state_changed(pjsip_inv_session *inv, pjsip_transaction *tsx,
   } else {
     addon_log(L_DBG, "doing nothiing");
   }
-}
+} */
 
 int pjw_call_get_info(long call_id, const char *required_info, char *out_info) {
   PJW_LOCK();
@@ -7674,7 +7632,7 @@ int pjw_subscription_create(long transport_id, const char *json,
 
   pjsip_evsub_set_mod_data(evsub, mod_tester.id, subscription);
 
-  printf("subscription=%x\n", subscription);
+  printf("subscription=%x\n", (unsigned long)subscription);
 
   *out_subscription_id = subscription_id;
 out:
@@ -7790,8 +7748,6 @@ out:
 }
 
 void process_in_dialog_subscribe(pjsip_dialog *dlg, pjsip_rx_data *rdata) {
-  char evt[2048];
-
   return;
 }
 
@@ -7859,7 +7815,7 @@ pj_status_t tcp_endpoint_send_msg(Call *call, MediaEndpoint *me, char *msg, pj_s
     send_key = (pj_ioqueue_op_key_t*)pj_pool_alloc(call->inv->pool, sizeof(pj_ioqueue_op_key_t));
     char *data = (char*)pj_pool_alloc(call->inv->pool, size);
     memcpy(data, msg, size);
-    printf("tcp_endpoint_send_msg send_key %x\n", send_key);
+    printf("tcp_endpoint_send_msg send_key %x\n", (unsigned long)send_key);
     //status = pj_activesock_send(asock, send_key, data, &size, 0);
     status = pj_activesock_send(asock, send_key, data, &size, PJ_IOQUEUE_ALWAYS_ASYNC);
     if (status != PJ_SUCCESS) {
@@ -7880,7 +7836,6 @@ pj_status_t call_send_tcp_msg(Call *call, char *msg, pj_ssize_t size) {
   pj_status_t status;
   for (int i = 0; i < call->media_count; i++) {
     MediaEndpoint *me = (MediaEndpoint *)call->media[i];
-    pj_activesock_t *asock = NULL;
     if (ENDPOINT_TYPE_MRCP == me->type) {
       status = tcp_endpoint_send_msg(call, me, msg, size);
       if(status != PJ_SUCCESS) {
@@ -7903,14 +7858,11 @@ int pjw_call_send_tcp_msg(long call_id, const char *json) {
   long val;
 
   MediaEndpoint *me;
-  MrcpEndpoint *mrcp_endpt;
   int res;
 
   unsigned media_id = 0;
 
   char buffer[MAX_JSON_INPUT];
-
-  const char *valid_params[] = {"msg", "media_id", ""};
 
   char *msg;
   pj_ssize_t size;
@@ -7946,7 +7898,7 @@ int pjw_call_send_tcp_msg(long call_id, const char *json) {
   } else {
     // Send msg to specified media_id
 
-    if (media_id >= call->media_count) {
+    if ((int)media_id >= call->media_count) {
       set_error("invalid media_id");
       goto out;
     }

@@ -49,7 +49,7 @@ int make_evt_dtmf(char *dest, int size, long call_id, int digits_len,
 
 int make_evt_call_ended(char *dest, int size, long call_id, int sip_msg_len,
                         const char *sip_msg) {
-  printf("make_evt_call_ended sip_msg_len=%i sip_msg=%x\n", sip_msg_len,
+  printf("make_evt_call_ended sip_msg_len=%i sip_msg=%s\n", sip_msg_len,
          sip_msg);
   if (!sip_msg || sip_msg == (char *)0xc000000000000) {
     // received invalid pointer to sip_msg so do not add the message to the
@@ -72,8 +72,8 @@ int make_evt_non_dialog_request(char *dest, int size, long transport_id,
                                 long request_id, int sip_msg_len,
                                 const char *sip_msg) {
   return snprintf(dest, size,
-                  "{\"event\": \"non_dialog_request\", \"request_id\": %i, "
-                  "\"transport_id\": %i}\n%.*s",
+                  "{\"event\": \"non_dialog_request\", \"request_id\": %li, "
+                  "\"transport_id\": %li}\n%.*s",
                   request_id, transport_id, sip_msg_len, sip_msg);
 }
 
@@ -85,7 +85,7 @@ int make_evt_internal_error(char *dest, int size, const char *msg) {
 int make_evt_reinvite(char *dest, int size, long call_id, int sip_msg_len,
                       char *sip_msg) {
   return snprintf(dest, size,
-                  "{\"event\": \"reinvite\", \"call_id\": %i}\n%.*s", call_id,
+                  "{\"event\": \"reinvite\", \"call_id\": %li}\n%.*s", call_id,
                   sip_msg_len, sip_msg);
 }
 

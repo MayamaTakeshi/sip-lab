@@ -205,7 +205,7 @@ static pj_status_t fax_get_frame(pjmedia_port *this_port,
 	//printf("ENTER fax_get_frame frame_size=%i\n", frame->size);
 
 	PJ_ASSERT_RETURN(this_port && frame, PJ_EINVAL);
-	char *p = (char*)frame->buf;
+	//char *p = (char*)frame->buf; // TODO: remove
 
 	struct fax_device *fd = (struct fax_device*)this_port;
     pj_lock_acquire(fd->lock);
