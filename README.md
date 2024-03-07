@@ -7,13 +7,16 @@ It uses pjproject for SIP and media processing.
 
 It permits to:
   - make audio calls using UDP, TCP and TLS transports
-  - send and receive DTMF inband/RFC2833/INFO.
+  - send/receive DTMF inband/RFC2833/INFO.
   - play/record wav file on a call
   - send/receive fax (T.30 only)
   - send/receive MRCPv2 messages (TCP only, no TLS)
+  - send/receive audio using SRTP
+  - generate speech from text into a call (using flite)
 
 TODO:
   - add support for video playing/recording from/to file
+  - add support for speech recognition using pocketsphinx
   - add support for T.38 fax
   - add support for WebSocket
   - add support for WebRTC
