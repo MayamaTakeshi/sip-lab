@@ -130,8 +130,8 @@ async function test() {
 	},
     ], 3000)
 
-    sip.call.start_speech(oc.id, {voice: 'slt', text: 'Hello World.'})
-    sip.call.start_speech(ic.id, {voice: 'kal', text: 'How are you?'})
+    sip.call.start_speech_synth(oc.id, {voice: 'slt', text: 'Hello World.'})
+    sip.call.start_speech_synth(ic.id, {voice: 'kal', text: 'How are you?'})
 
     await z.sleep(1500)
 

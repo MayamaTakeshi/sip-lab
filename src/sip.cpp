@@ -3644,7 +3644,7 @@ out:
   return 0;
 }
 
-pj_status_t audio_endpoint_start_speech(Call *call, AudioEndpoint *ae, const char * voice, const char *text) {
+pj_status_t audio_endpoint_start_speech_synth(Call *call, AudioEndpoint *ae, const char * voice, const char *text) {
   pj_status_t status;
 
   if(!ae->stream_cbp.port) {
@@ -3667,7 +3667,7 @@ pj_status_t audio_endpoint_start_speech(Call *call, AudioEndpoint *ae, const cha
   return PJ_SUCCESS;
 }
 
-int pjw_call_start_speech(long call_id, const char *json) {
+int pjw_call_start_speech_synth(long call_id, const char *json) {
   PJW_LOCK();
   clear_error();
 
@@ -3748,7 +3748,7 @@ int pjw_call_start_speech(long call_id, const char *json) {
 
   ae = (AudioEndpoint *)me->endpoint.audio;
 
-  audio_endpoint_start_speech(call, ae, voice, text);
+  audio_endpoint_start_speech_synth(call, ae, voice, text);
 
 out:
   PJW_UNLOCK();
