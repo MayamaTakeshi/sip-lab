@@ -622,7 +622,7 @@ bool prepare_wav_player(Call *c, AudioEndpoint *ae, const char *file, unsigned f
 bool prepare_wav_writer(Call *c, AudioEndpoint *ae, const char *file);
 bool prepare_fax(Call *c, AudioEndpoint *ae, bool is_sender, const char *file,
                  unsigned flags);
-bool prepare_flite(Call *c, AudioEndpoint *ae, const char *voice);
+bool prepare_flite(Call *c, AudioEndpoint *ae, const char *voice, bool end_of_speech_event);
 
 void prepare_error_event(ostringstream *oss, char *scope, char *details);
 // void prepare_pjsipcall_error_event(ostringstream *oss, char *scope, char
@@ -888,6 +888,23 @@ static void on_end_of_file(pjmedia_port *port, void *user_data) {
   make_evt_end_of_file(evt, sizeof(evt), call_id);
   dispatch_event(evt);
 }
+
+static void on_end_of_speech(pjmedia_port *port, void *user_data) {
+  if (g_shutting_down)
+    return;
+
+  long call_id;
+  if (!g_call_ids.get_id((long)user_data, call_id)) {
+    printf(
+        "on_end_of_speech: Failed to get call_id. Event will not be notified.\n");
+    return;
+  }
+
+  char evt[1024];
+  make_evt_end_of_speech(evt, sizeof(evt), call_id);
+  dispatch_event(evt);
+}
+
 
 void dispatch_event(const char *evt) {
   addon_log(L_DBG, "dispach_event called with evt=%s\n", evt);
@@ -3677,7 +3694,7 @@ out:
   return 0;
 }
 
-pj_status_t audio_endpoint_start_speech_synth(Call *call, AudioEndpoint *ae, const char * voice, const char *text) {
+pj_status_t audio_endpoint_start_speech_synth(Call *call, AudioEndpoint *ae, const char * voice, const char *text, unsigned flags, bool end_of_speech_event) {
   pj_status_t status;
 
   if(!ae->stream_cbp.port) {
@@ -3691,11 +3708,11 @@ pj_status_t audio_endpoint_start_speech_synth(Call *call, AudioEndpoint *ae, con
     return -1;
   }
 
-  if (!prepare_flite(call, ae, voice)) {
+  if (!prepare_flite(call, ae, voice, end_of_speech_event)) {
     return -1;
   }
 
-  pjmedia_flite_port_speak(ae->flite_cbp.port, text, 0);
+  pjmedia_flite_port_speak(ae->flite_cbp.port, text, flags);
 
   return PJ_SUCCESS;
 }
@@ -3717,11 +3734,17 @@ int pjw_call_start_speech_synth(long call_id, const char *json) {
 
   char *text;
 
+  bool end_of_speech_event = false;
+
+  unsigned flags = 0;
+
+  bool no_loop = false;
+
   char buffer[MAX_JSON_INPUT];
 
   Document document;
 
-  const char *valid_params[] = {"voice", "text", "media_id", ""};
+  const char *valid_params[] = {"voice", "text", "media_id", "end_of_speech_event", "no_loop", ""};
 
   if (!g_call_ids.get(call_id, val)) {
     set_error("Invalid call_id");
@@ -3762,6 +3785,18 @@ int pjw_call_start_speech_synth(long call_id, const char *json) {
     goto out;
   }
 
+  if (json_get_bool_param(document, "end_of_speech_event", true, &end_of_speech_event) <= 0) {
+    goto out;
+  }
+
+  if (json_get_bool_param(document, "no_loop", true, &no_loop) <= 0) {
+    goto out;
+  }
+
+  if(no_loop) {
+    flags |= PJMEDIA_SPEECH_NO_LOOP;
+  }
+
   if (ae_count > 1) {
     if (json_get_uint_param(document, "media_id", false, &media_id) <= 0) {
       goto out;
@@ -3781,7 +3816,7 @@ int pjw_call_start_speech_synth(long call_id, const char *json) {
 
   ae = (AudioEndpoint *)me->endpoint.audio;
 
-  audio_endpoint_start_speech_synth(call, ae, voice, text);
+  audio_endpoint_start_speech_synth(call, ae, voice, text, flags, end_of_speech_event);
 
 out:
   PJW_UNLOCK();
@@ -6713,7 +6748,7 @@ bool prepare_fax(Call *c, AudioEndpoint *ae, bool is_sender, const char *file,
   return true;
 }
 
-bool prepare_flite(Call *c, AudioEndpoint *ae, const char *voice) {
+bool prepare_flite(Call *c, AudioEndpoint *ae, const char *voice, bool end_of_speech_event) {
   printf("prepare_flite call.id=%i\n", c->id);
   pj_status_t status;
 
@@ -6726,10 +6761,18 @@ bool prepare_flite(Call *c, AudioEndpoint *ae, const char *voice) {
         c->inv->pool, PJMEDIA_PIA_SRATE(&ae->stream_cbp.port->info),
         PJMEDIA_PIA_CCNT(&ae->stream_cbp.port->info),
         PJMEDIA_PIA_SPF(&ae->stream_cbp.port->info),
-        PJMEDIA_PIA_BITS(&ae->stream_cbp.port->info), NULL, 0, voice, &ae->flite_cbp.port);
+        PJMEDIA_PIA_BITS(&ae->stream_cbp.port->info), voice, &ae->flite_cbp.port);
   if (status != PJ_SUCCESS) {
     set_error("pjmedia_flite_port_create failed");
     return false;
+  }
+
+  if (end_of_speech_event) {
+    status = pjmedia_flite_port_set_eof_cb(ae->flite_cbp.port, (void*)c, on_end_of_speech);
+    if (status != PJ_SUCCESS) {
+      set_error("pjmedia_flite_port_set_eof_cb failed");
+      return false;
+    }
   }
 
   status = pjmedia_conf_add_port(c->conf, c->inv->pool, ae->flite_cbp.port, NULL, &ae->flite_cbp.slot);

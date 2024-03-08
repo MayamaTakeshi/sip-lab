@@ -130,10 +130,26 @@ async function test() {
 	},
     ], 3000)
 
-    sip.call.start_speech_synth(oc.id, {voice: 'slt', text: 'Hello World.'})
-    sip.call.start_speech_synth(ic.id, {voice: 'kal', text: 'How are you?'})
+    sip.call.start_speech_synth(oc.id, {voice: 'slt', text: 'Hello World.', end_of_speech_event: true})
+    sip.call.start_speech_synth(ic.id, {voice: 'kal', text: 'How are you?', end_of_speech_event: true, no_loop: true})
 
-    await z.sleep(1500)
+    await z.wait([
+        {
+            event: 'end_of_speech',
+            call_id: ic.id,
+        },
+        {
+            event: 'end_of_speech',
+            call_id: oc.id,
+        },
+    ], 2000)
+
+    await z.wait([
+        {
+            event: 'end_of_speech',
+            call_id: oc.id,
+        },
+    ], 2000)
 
     sip.call.stop_record_wav(oc.id)
     sip.call.stop_record_wav(ic.id)

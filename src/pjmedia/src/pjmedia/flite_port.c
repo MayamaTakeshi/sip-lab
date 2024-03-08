@@ -53,26 +53,62 @@ static struct {
 
 struct flite_t {
     struct pjmedia_port base;
-	void (*flite_cb)(pjmedia_port*, void*, int);
-	void *flite_cb_user_data;
+    unsigned         options;
+
 	cst_voice *v;
-    int written_samples;
+    unsigned written_samples;
 	cst_wave *w;
-	char *buffer;
+
+    pj_bool_t        subscribed;
+    void           (*cb)(pjmedia_port*, void*);
 };
 
 #define free_wave(w) if (w) {delete_wave(w) ; w = NULL; }
 #define FLITE_BLOCK_SIZE 1024 * 32
+
+/*
+ * Register a callback to be called when we reach the end of speech
+ */
+PJ_DEF(pj_status_t) pjmedia_flite_port_set_eof_cb(pjmedia_port *port,
+                               void *user_data,
+                               void (*cb)(pjmedia_port *port,
+                                          void *usr_data))
+{
+    struct flite_t *flite;
+
+    /* Sanity check */
+    PJ_ASSERT_RETURN(port, -PJ_EINVAL);
+
+    /* Check that this is really a flite port */
+    PJ_ASSERT_RETURN(port->info.signature == SIGNATURE, -PJ_EINVALIDOP);
+
+    flite = (struct flite_t*) port;
+
+    flite->base.port_data.pdata = user_data;
+    flite->cb = cb;
+
+    return PJ_SUCCESS;
+}
+
+
+static pj_status_t speech_on_event(pjmedia_event *event,
+                                 void *user_data)
+{
+    struct flite_t *flite = (struct flite_t*)user_data;
+
+    if (event->type == PJMEDIA_EVENT_CALLBACK) {
+        if (flite->cb)
+            (*flite->cb)(&flite->base, flite->base.port_data.pdata);
+    }
+    
+    return PJ_SUCCESS;
+}
 
 PJ_DEF(pj_status_t) pjmedia_flite_port_create( pj_pool_t *pool,
 				unsigned clock_rate,
 				unsigned channel_count,
 				unsigned samples_per_frame,
 				unsigned bits_per_sample,
-				void (*cb)(pjmedia_port*, 
-					void *user_data, 
-					int result), 
-				void *user_data,
 				const char *voice,
 				pjmedia_port **p_port)
 {
@@ -122,9 +158,6 @@ PJ_DEF(pj_status_t) pjmedia_flite_port_create( pj_pool_t *pool,
         return 0;
 	}
 
-    flite->flite_cb = cb;
-    flite->flite_cb_user_data = user_data;
-
     TRACE_((THIS_FILE, "flite_device created: %u/%u/%u/%u", clock_rate, 
 	    channel_count, samples_per_frame, bits_per_sample));
 
@@ -140,8 +173,10 @@ PJ_DEF(pj_status_t) pjmedia_flite_port_speak( pjmedia_port *port,
         free_wave(flite->w);
     }
     
+    flite->options = options;
+
     flite->w = flite_text_to_wave(text, flite->v);
-    if (flite->w->sample_rate != PJMEDIA_PIA_SRATE(&port->info)) {
+    if ((unsigned)flite->w->sample_rate != PJMEDIA_PIA_SRATE(&port->info)) {
 		cst_wave_resample(flite->w, PJMEDIA_PIA_SRATE(&port->info));
     }
     flite->written_samples = 0;
@@ -164,11 +199,36 @@ static pj_status_t flite_get_frame(pjmedia_port *port,
     }
 
     printf("written_samples=%i num_samples=%i\n", flite->written_samples, flite->w->num_samples);
-    if (flite->written_samples + PJMEDIA_PIA_SPF(&port->info) > flite->w->num_samples) {
-        printf("flite no more data\n");
-        free_wave(flite->w);
-        frame->type = PJMEDIA_FRAME_TYPE_NONE;
-        return PJ_SUCCESS;
+    if (flite->written_samples + PJMEDIA_PIA_SPF(&port->info) > (unsigned)flite->w->num_samples) {
+        printf("flite end of speech\n");
+
+        if(flite->cb) {
+            if (!flite->subscribed) {
+                pj_status_t status = pjmedia_event_subscribe(NULL, &speech_on_event,
+                                                 flite, flite);
+                flite->subscribed = (status == PJ_SUCCESS)? PJ_TRUE:
+                                    PJ_FALSE;
+            }
+
+            if (flite->subscribed) {
+                pjmedia_event event;
+
+                pjmedia_event_init(&event, PJMEDIA_EVENT_CALLBACK,
+                                   NULL, flite);
+                pjmedia_event_publish(NULL, flite, &event,
+                                      PJMEDIA_EVENT_PUBLISH_POST_EVENT);
+            }
+        }
+
+        pj_bool_t no_loop = (flite->options & PJMEDIA_SPEECH_NO_LOOP);
+
+        if(no_loop) {
+            free_wave(flite->w);
+            frame->type = PJMEDIA_FRAME_TYPE_NONE;
+            return PJ_SUCCESS;
+        } else {
+            flite->written_samples = 0;
+        }
     }
 
     memcpy(frame->buf, flite->w->samples + flite->written_samples, PJMEDIA_PIA_SPF(&port->info)*2);
@@ -187,7 +247,15 @@ static pj_status_t flite_on_destroy(pjmedia_port *port)
 	printf("flite_on_destroy\n");
 
     struct flite_t *flite = (struct flite_t*)port;
+
+    pj_assert(port->info.signature == SIGNATURE);
+
     free_wave(flite->w);
+
+    if (flite->subscribed) {
+        pjmedia_event_unsubscribe(NULL, &speech_on_event, flite, flite);
+        flite->subscribed = PJ_FALSE;
+    }
 
     return PJ_SUCCESS;
 }
