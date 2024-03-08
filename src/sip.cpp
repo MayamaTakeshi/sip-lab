@@ -3595,13 +3595,15 @@ int pjw_call_start_play_wav(long call_id, const char *json) {
 
   unsigned flags = 0;
 
-  bool end_of_file_event;
+  bool end_of_file_event = false;
+
+  bool no_loop = false;
 
   char buffer[MAX_JSON_INPUT];
 
   Document document;
 
-  const char *valid_params[] = {"file", "media_id", "end_of_file_event", ""};
+  const char *valid_params[] = {"file", "media_id", "end_of_file_event", "no_loop", ""};
 
   if (!g_call_ids.get(call_id, val)) {
     set_error("Invalid call_id");
@@ -3635,6 +3637,14 @@ int pjw_call_start_play_wav(long call_id, const char *json) {
 
   if (json_get_bool_param(document, "end_of_file_event", true, &end_of_file_event) <= 0) {
     goto out;
+  }
+
+  if (json_get_bool_param(document, "no_loop", true, &no_loop) <= 0) {
+    goto out;
+  }
+
+  if(no_loop) {
+    flags |= PJMEDIA_FILE_NO_LOOP;
   }
 
   if (ae_count > 1) {
@@ -6576,7 +6586,7 @@ bool prepare_wav_player(Call *c, AudioEndpoint *ae, const char *file, unsigned f
                   c->inv->pool, 
                   file,
                   wav_ptime,
-                  0,                  /* flags        */
+                  flags,
                   -1,                  /* buf size     */
                   &ae->wav_player_cbp.port
                   );
