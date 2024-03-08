@@ -104,6 +104,12 @@ int make_evt_fax_result(char *dest, int size, long call_id, int result) {
       result);
 }
 
+int make_evt_end_of_file(char *dest, int size, long call_id) {
+  return snprintf(
+      dest, size,
+      "{\"event\": \"end_of_file\", \"call_id\": %ld}", call_id);
+}
+
 int make_evt_tcp_msg(char *dest, int size, long call_id, const char *protocol, char *data, int data_len) {
   return snprintf(
       dest, size,

@@ -618,7 +618,7 @@ static void build_stream_stat(ostringstream &oss, pjmedia_rtcp_stat *stat,
 
 bool prepare_tonegen(Call *call, AudioEndpoint *ae);
 bool prepare_dtmfdet(Call *call, AudioEndpoint *ae);
-bool prepare_wav_player(Call *c, AudioEndpoint *ae, const char *file);
+bool prepare_wav_player(Call *c, AudioEndpoint *ae, const char *file, unsigned flags, bool end_of_file_event);
 bool prepare_wav_writer(Call *c, AudioEndpoint *ae, const char *file);
 bool prepare_fax(Call *c, AudioEndpoint *ae, bool is_sender, const char *file,
                  unsigned flags);
@@ -851,7 +851,7 @@ static void on_inband_dtmf(pjmedia_port *port, void *user_data, char digit) {
     ae->last_digit_timestamp[mode] = ms_timestamp();
     PJW_UNLOCK();
   } else {
-    char evt[256];
+    char evt[1024];
     make_evt_dtmf(evt, sizeof(evt), call_id, 1, &d, mode, media_id);
     dispatch_event(evt);
   }
@@ -868,8 +868,24 @@ static void on_fax_result(pjmedia_port *port, void *user_data, int result) {
     return;
   }
 
-  char evt[256];
+  char evt[1024];
   make_evt_fax_result(evt, sizeof(evt), call_id, result);
+  dispatch_event(evt);
+}
+
+static void on_end_of_file(pjmedia_port *port, void *user_data) {
+  if (g_shutting_down)
+    return;
+
+  long call_id;
+  if (!g_call_ids.get_id((long)user_data, call_id)) {
+    printf(
+        "on_end_of_file: Failed to get call_id. Event will not be notified.\n");
+    return;
+  }
+
+  char evt[1024];
+  make_evt_end_of_file(evt, sizeof(evt), call_id);
   dispatch_event(evt);
 }
 
@@ -3541,7 +3557,7 @@ out:
 }
 
 pj_status_t audio_endpoint_start_play_wav(Call *call, AudioEndpoint *ae,
-                                          const char *file) {
+                                          const char *file, unsigned flags, bool end_of_file_event) {
   pj_status_t status;
 
   if(!ae->stream_cbp.port) {
@@ -3555,14 +3571,13 @@ pj_status_t audio_endpoint_start_play_wav(Call *call, AudioEndpoint *ae,
     return -1;
   }
 
-  if (!prepare_wav_player(call, ae, file)) {
+  if (!prepare_wav_player(call, ae, file, flags, end_of_file_event)) {
     return -1;
   }
 
   return PJ_SUCCESS;
 }
 
-// int pjw_call_start_play_wav(long call_id, const char *file)
 int pjw_call_start_play_wav(long call_id, const char *json) {
   PJW_LOCK();
   clear_error();
@@ -3578,11 +3593,15 @@ int pjw_call_start_play_wav(long call_id, const char *json) {
 
   char *file;
 
+  unsigned flags = 0;
+
+  bool end_of_file_event;
+
   char buffer[MAX_JSON_INPUT];
 
   Document document;
 
-  const char *valid_params[] = {"file", "media_id", ""};
+  const char *valid_params[] = {"file", "media_id", "end_of_file_event", ""};
 
   if (!g_call_ids.get(call_id, val)) {
     set_error("Invalid call_id");
@@ -3614,6 +3633,10 @@ int pjw_call_start_play_wav(long call_id, const char *json) {
     goto out;
   }
 
+  if (json_get_bool_param(document, "end_of_file_event", true, &end_of_file_event) <= 0) {
+    goto out;
+  }
+
   if (ae_count > 1) {
     if (json_get_uint_param(document, "media_id", false, &media_id) <= 0) {
       goto out;
@@ -3633,7 +3656,7 @@ int pjw_call_start_play_wav(long call_id, const char *json) {
 
   ae = (AudioEndpoint *)me->endpoint.audio;
 
-  audio_endpoint_start_play_wav(call, ae, file);
+  audio_endpoint_start_play_wav(call, ae, file, flags, end_of_file_event);
 
 out:
   PJW_UNLOCK();
@@ -6542,7 +6565,7 @@ bool prepare_tonegen(Call *c, AudioEndpoint *ae) {
   return true;
 }
 
-bool prepare_wav_player(Call *c, AudioEndpoint *ae, const char *file) {
+bool prepare_wav_player(Call *c, AudioEndpoint *ae, const char *file, unsigned flags, bool end_of_file_event) {
   pj_status_t status;
 
   unsigned wav_ptime;
@@ -6561,6 +6584,14 @@ bool prepare_wav_player(Call *c, AudioEndpoint *ae, const char *file) {
   if (status != PJ_SUCCESS) {
     set_error("pjmedia_wav_player_port_create failed");
     return false;
+  }
+
+  if (end_of_file_event) {
+    status = pjmedia_wav_player_set_eof_cb2(ae->wav_player_cbp.port, (void*)c, on_end_of_file);
+    if (status != PJ_SUCCESS) {
+      set_error("pjmedia_wav_player_set_eof_cb2 failed");
+      return false;
+    }
   }
 
   status = pjmedia_conf_add_port(c->conf, c->inv->pool, ae->wav_player_cbp.port, NULL, &ae->wav_player_cbp.slot);
