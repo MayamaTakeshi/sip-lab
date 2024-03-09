@@ -641,7 +641,7 @@ typedef pj_status_t (*audio_endpoint_stop_op_t)(Call *call, AudioEndpoint *ae);
 pj_status_t audio_endpoint_stop_play_wav(Call *call, AudioEndpoint *ae);
 pj_status_t audio_endpoint_stop_record_wav(Call *call, AudioEndpoint *ae);
 pj_status_t audio_endpoint_stop_fax(Call *call, AudioEndpoint *ae);
-pj_status_t audio_endpoint_stop_flite(Call *call, AudioEndpoint *ae);
+pj_status_t audio_endpoint_stop_speech_synth(Call *call, AudioEndpoint *ae);
 
 static pjsip_module mod_tester = {
     NULL,
@@ -3769,7 +3769,7 @@ pj_status_t audio_endpoint_start_speech_synth(Call *call, AudioEndpoint *ae, con
   }
 
   // First stop and destroy existing flite port.
-  status = audio_endpoint_stop_flite(call, ae);
+  status = audio_endpoint_stop_speech_synth(call, ae);
   if(status != PJ_SUCCESS) {
     return -1;
   }
@@ -3907,10 +3907,6 @@ out:
   return 0;
 }
 
-pj_status_t audio_endpoint_stop_flite(Call *call, AudioEndpoint *ae) {
-  return audio_endpoint_remove_port(call, &ae->flite_cbp);
-}
-
 pj_status_t call_stop_audio_endpoints_op(Call *call,
                                          audio_endpoint_stop_op_t op) {
   addon_log(L_DBG, "call_stop_audio_endpoints_op media_count=%d\n",
@@ -3930,6 +3926,82 @@ pj_status_t call_stop_audio_endpoints_op(Call *call,
   }
 
   return PJ_SUCCESS;
+}
+
+pj_status_t audio_endpoint_stop_speech_synth(Call *call, AudioEndpoint *ae) {
+  return audio_endpoint_remove_port(call, &ae->flite_cbp);
+}
+
+int pjw_call_stop_speech_synth(long call_id, const char *json) {
+  PJW_LOCK();
+  clear_error();
+
+  Call *call;
+
+  pj_status_t status;
+
+  long val;
+
+  MediaEndpoint *me;
+  AudioEndpoint *ae;
+  int res;
+
+  int media_id = -1;
+
+  char buffer[MAX_JSON_INPUT];
+
+  Document document;
+
+  if (!g_call_ids.get(call_id, val)) {
+    set_error("Invalid call_id");
+    goto out;
+  }
+  call = (Call *)val;
+
+  if (!parse_json(document, json, buffer, MAX_JSON_INPUT)) {
+    goto out;
+  }
+
+  res = json_get_int_param(document, "media_id", true, &media_id);
+  if (res <= 0) {
+    goto out;
+  }
+
+  if (NOT_FOUND_OPTIONAL == res) {
+    // Stop in all audio endpoints
+    status = call_stop_audio_endpoints_op(call, audio_endpoint_stop_speech_synth);
+    if (status != PJ_SUCCESS) {
+      goto out;
+    }
+  } else {
+    // Stop on specified media_id
+
+    if (media_id >= call->media_count) {
+      set_error("invalid media_id");
+      goto out;
+    }
+
+    me = (MediaEndpoint *)call->media[media_id];
+    if (ENDPOINT_TYPE_AUDIO != me->type) {
+      set_error("invalid media_id non audio");
+      goto out;
+    }
+
+    ae = (AudioEndpoint *)me->endpoint.audio;
+
+    status = audio_endpoint_stop_speech_synth(call, ae);
+    if (status != PJ_SUCCESS) {
+      goto out;
+    }
+  }
+
+out:
+  PJW_UNLOCK();
+  if (pjw_errorstring[0]) {
+    return -1;
+  }
+
+  return 0;
 }
 
 pj_status_t audio_endpoint_stop_play_wav(Call *call, AudioEndpoint *ae) {
@@ -6670,7 +6742,7 @@ void close_media_endpoint(Call *call, MediaEndpoint *me) {
 }
 
 void close_media(Call *c) {
-  printf("close_media call_id=%li\n", c->id);
+  printf("close_media call_id=%i\n", c->id);
   for (int i = 0; i < c->media_count; ++i) {
     MediaEndpoint *me = c->media[i];
     close_media_endpoint(c, me);
