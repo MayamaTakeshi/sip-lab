@@ -151,8 +151,8 @@ async function test() {
         },
     ], 2000)
 
-    sip.call.stop_speech_synth(oc.id) // this is not actually necessary. It just used to confirm the command works
-    sip.call.stop_speech_synth(ic.id) // this is not actually necessary. It just used to confirm the command works
+    sip.call.stop_speech_synth(oc.id) // this is not actually necessary. It is used just to confirm the command works
+    sip.call.stop_speech_synth(ic.id) // this is not actually necessary. It is used just to confirm the command works
 
     sip.call.stop_record_wav(oc.id)
     sip.call.stop_record_wav(ic.id)

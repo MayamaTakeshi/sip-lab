@@ -345,6 +345,9 @@ async function test() {
     console.log("stat1", stat1)
     console.log("stat2", stat2)
 
+    sip.call.stop_play_wav(oc.id) // this is not really necessary. We are just confirming it works
+    sip.call.stop_play_wav(ic.id) // this is not really necessary. We are just confirming it works
+
     sip.call.stop_record_wav(oc.id)
     sip.call.stop_record_wav(ic.id)
 
