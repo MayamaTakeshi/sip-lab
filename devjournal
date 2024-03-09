@@ -2393,7 +2393,8 @@ Audio probably degrades when flite_port use the 16000 voices and call cst_wave_r
 
 So I tried to use pjmedia resample_port to change flite 16000 to 8000. But with both high-quality (default) and PJMEDIA_RESAMPLE_USE_LINEAR the pocketsphinx transcription quality was not good.
 
-
+Obs: this is not that bad. We might still use pocketsphinx by recording messages to wav files and playing the file instead of generating the audio using flite.
+Maybe with good enunciation we can have adequate results.
 
 
 
