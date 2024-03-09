@@ -49,14 +49,9 @@ int make_evt_dtmf(char *dest, int size, long call_id, int digits_len,
 
 int make_evt_call_ended(char *dest, int size, long call_id, int sip_msg_len,
                         const char *sip_msg) {
-  printf("make_evt_call_ended sip_msg_len=%i sip_msg=%s\n", sip_msg_len,
+  printf("make_evt_call_ended sip_msg_len=%i sip_msg=%p\n", sip_msg_len,
          sip_msg);
-  if (!sip_msg || sip_msg == (char *)0xc000000000000) {
-    // received invalid pointer to sip_msg so do not add the message to the
-    // event
-    return snprintf(dest, size, "{\"event\": \"call_ended\", \"call_id\": %ld}",
-                    call_id);
-  } else if (sip_msg_len > 500 && sip_msg_len < 2000 && sip_msg) {
+  if (sip_msg_len > 500 && sip_msg_len < 2000 && sip_msg) {
     /* sip_msg_len sometimes show up as a large value like sip_msg_len=11560297
      * which seems to be a bug in pjsip */
     return snprintf(dest, size,
