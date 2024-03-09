@@ -3123,7 +3123,6 @@ pj_status_t send_dtmf(Call *call, const char *digits, int mode) {
   return PJ_SUCCESS;
 }
 
-// int pjw_call_send_dtmf(long call_id, const char *digits, int mode)
 int pjw_call_send_dtmf(long call_id, const char *json) {
 #define MAX_LENGTH                                                             \
   31 // pjsip allows for 31 digits (inband allows for 32 digits)
@@ -3131,18 +3130,32 @@ int pjw_call_send_dtmf(long call_id, const char *json) {
   PJW_LOCK();
   clear_error();
 
+  Call *call;
+
+  pj_status_t status;
+
   long val;
+
   char *digits;
   int mode = 0;
-  ;
 
-  Call *call;
+  MediaEndpoint *me;
+  AudioEndpoint *ae;
+  int res;
+
+  int media_id = -1;
 
   char buffer[MAX_JSON_INPUT];
 
   Document document;
 
-  const char *valid_params[] = {"digits", "mode", ""};
+  const char *valid_params[] = {"digits", "mode", "media_id", ""};
+
+  if (!g_call_ids.get(call_id, val)) {
+    set_error("Invalid call_id");
+    goto out;
+  }
+  call = (Call *)val;
 
   if (!parse_json(document, json, buffer, MAX_JSON_INPUT)) {
     goto out;
@@ -3151,12 +3164,6 @@ int pjw_call_send_dtmf(long call_id, const char *json) {
   if (!validate_params(document, valid_params)) {
     goto out;
   }
-
-  if (!g_call_ids.get(call_id, val)) {
-    set_error("Invalid call_id");
-    goto out;
-  }
-  call = (Call *)val;
 
   if (json_get_string_param(document, "digits", false, &digits) <= 0) {
     goto out;
@@ -3202,7 +3209,38 @@ int pjw_call_send_dtmf(long call_id, const char *json) {
   adjusted_digits[len] = 0;
   // addon_log(L_DBG, "adjusted_digits >>%s<<\n", adjusted_digits);
 
-  send_dtmf(call, adjusted_digits, mode);
+  res = json_get_int_param(document, "media_id", true, &media_id);
+  if (res <= 0) {
+    goto out;
+  }
+
+  if (NOT_FOUND_OPTIONAL == res) {
+    // send_dtmf to all audio endpoints
+    status = send_dtmf(call, adjusted_digits, mode);
+    if (status != PJ_SUCCESS) {
+      goto out;
+    }
+  } else {
+    // send_dtmf to specified media_id
+
+    if (media_id >= call->media_count) {
+      set_error("invalid media_id");
+      goto out;
+    }
+
+    me = (MediaEndpoint *)call->media[media_id];
+    if (ENDPOINT_TYPE_AUDIO != me->type) {
+      set_error("invalid media_id non audio");
+      goto out;
+    }
+
+    ae = (AudioEndpoint *)me->endpoint.audio;
+
+    status = audio_endpoint_send_dtmf(call, ae, digits, mode);
+    if (status != PJ_SUCCESS) {
+      goto out;
+    }
+  }
 
 out:
   PJW_UNLOCK();
@@ -3476,7 +3514,15 @@ int count_media_by_type(Call *call, int type) {
   return total;
 }
 
-// int pjw_call_start_record_wav(long call_id, const char *file)
+int get_first_media_id_by_type(Call *call, int type) {
+  for (int i = 0; i < call->media_count; i++) {
+    MediaEndpoint *me = (MediaEndpoint *)call->media[i];
+    if (type == me->type)
+      return i;
+  }
+  return -1;
+}
+
 int pjw_call_start_record_wav(long call_id, const char *json) {
   PJW_LOCK();
   clear_error();
@@ -3485,7 +3531,7 @@ int pjw_call_start_record_wav(long call_id, const char *json) {
   Call *call;
   pj_status_t status;
 
-  unsigned  media_id = 0;
+  int media_id = -1;
 
   MediaEndpoint *me;
   AudioEndpoint *ae;
@@ -3530,7 +3576,13 @@ int pjw_call_start_record_wav(long call_id, const char *json) {
   }
 
   if (ae_count > 1) {
-    if (json_get_uint_param(document, "media_id", false, &media_id) <= 0) {
+    if (json_get_int_param(document, "media_id", false, &media_id) <= 0) {
+      goto out;
+    }
+  } else {
+    media_id = get_first_media_id_by_type(call, ENDPOINT_TYPE_AUDIO);
+    if(media_id < 0) {
+      set_error("could not resolve media_id");
       goto out;
     }
   }
@@ -3605,8 +3657,9 @@ int pjw_call_start_play_wav(long call_id, const char *json) {
   MediaEndpoint *me;
   AudioEndpoint *ae;
   int ae_count;
+  int res;
 
-  unsigned media_id = 0;
+  int media_id = -1;
 
   char *file;
 
@@ -3617,6 +3670,8 @@ int pjw_call_start_play_wav(long call_id, const char *json) {
   bool no_loop = false;
 
   char buffer[MAX_JSON_INPUT];
+
+  pj_status_t status;
 
   Document document;
 
@@ -3664,26 +3719,37 @@ int pjw_call_start_play_wav(long call_id, const char *json) {
     flags |= PJMEDIA_FILE_NO_LOOP;
   }
 
-  if (ae_count > 1) {
-    if (json_get_uint_param(document, "media_id", false, &media_id) <= 0) {
+  res = json_get_int_param(document, "media_id", true, &media_id);
+  if (res <= 0) {
+    goto out;
+  }
+
+  if (NOT_FOUND_OPTIONAL == res) {
+    // start on all audio media endpoints
+    for (int i = 0; i < call->media_count; i++) {
+      MediaEndpoint *me = (MediaEndpoint *)call->media[i];
+      if (me->type == ENDPOINT_TYPE_AUDIO) {
+        AudioEndpoint *ae = (AudioEndpoint *)me->endpoint.audio;
+        status = audio_endpoint_start_play_wav(call, ae, file, flags, end_of_file_event);
+        if (status != PJ_SUCCESS) goto out;
+      }
+    }
+  } else {
+    if (media_id >= call->media_count) {
+      set_error("invalid media_id");
       goto out;
     }
+
+    me = (MediaEndpoint *)call->media[media_id];
+    if (ENDPOINT_TYPE_AUDIO != me->type) {
+      set_error("media_endpoint is not audio endpoint");
+      goto out;
+    }
+
+    ae = (AudioEndpoint *)me->endpoint.audio;
+
+    audio_endpoint_start_play_wav(call, ae, file, flags, end_of_file_event);
   }
-
-  if ((int)media_id >= call->media_count) {
-    set_error("invalid media_id");
-    goto out;
-  }
-
-  me = (MediaEndpoint *)call->media[media_id];
-  if (ENDPOINT_TYPE_AUDIO != me->type) {
-    set_error("media_endpoint is not audio endpoint");
-    goto out;
-  }
-
-  ae = (AudioEndpoint *)me->endpoint.audio;
-
-  audio_endpoint_start_play_wav(call, ae, file, flags, end_of_file_event);
 
 out:
   PJW_UNLOCK();
@@ -3724,11 +3790,14 @@ int pjw_call_start_speech_synth(long call_id, const char *json) {
   long val;
   Call *call;
 
+  pj_status_t status;
+
   MediaEndpoint *me;
   AudioEndpoint *ae;
   int ae_count;
+  int res;
 
-  unsigned media_id = 0;
+  int media_id = -1;
 
   char *voice;
 
@@ -3797,26 +3866,37 @@ int pjw_call_start_speech_synth(long call_id, const char *json) {
     flags |= PJMEDIA_SPEECH_NO_LOOP;
   }
 
-  if (ae_count > 1) {
-    if (json_get_uint_param(document, "media_id", false, &media_id) <= 0) {
+  res = json_get_int_param(document, "media_id", true, &media_id);
+  if (res <= 0) {
+    goto out;
+  }
+
+  if (NOT_FOUND_OPTIONAL == res) {
+    // start on all audio media endpoints
+    for (int i = 0; i < call->media_count; i++) {
+      MediaEndpoint *me = (MediaEndpoint *)call->media[i];
+      if (me->type == ENDPOINT_TYPE_AUDIO) {
+        AudioEndpoint *ae = (AudioEndpoint *)me->endpoint.audio;
+        status = audio_endpoint_start_speech_synth(call, ae, voice, text, flags, end_of_speech_event);
+        if (status != PJ_SUCCESS) goto out;
+      }
+    }
+  } else {
+    if ((int)media_id >= call->media_count) {
+      set_error("invalid media_id");
       goto out;
     }
+
+    me = (MediaEndpoint *)call->media[media_id];
+    if (ENDPOINT_TYPE_AUDIO != me->type) {
+      set_error("media_endpoint is not audio endpoint");
+      goto out;
+    }
+
+    ae = (AudioEndpoint *)me->endpoint.audio;
+
+    audio_endpoint_start_speech_synth(call, ae, voice, text, flags, end_of_speech_event);
   }
-
-  if ((int)media_id >= call->media_count) {
-    set_error("invalid media_id");
-    goto out;
-  }
-
-  me = (MediaEndpoint *)call->media[media_id];
-  if (ENDPOINT_TYPE_AUDIO != me->type) {
-    set_error("media_endpoint is not audio endpoint");
-    goto out;
-  }
-
-  ae = (AudioEndpoint *)me->endpoint.audio;
-
-  audio_endpoint_start_speech_synth(call, ae, voice, text, flags, end_of_speech_event);
 
 out:
   PJW_UNLOCK();
@@ -3870,7 +3950,7 @@ int pjw_call_stop_play_wav(long call_id, const char *json) {
   AudioEndpoint *ae;
   int res;
 
-  unsigned media_id = 0;
+  int media_id = -1;
 
   char buffer[MAX_JSON_INPUT];
 
@@ -3886,7 +3966,7 @@ int pjw_call_stop_play_wav(long call_id, const char *json) {
     goto out;
   }
 
-  res = json_get_uint_param(document, "media_id", true, &media_id);
+  res = json_get_int_param(document, "media_id", true, &media_id);
   if (res <= 0) {
     goto out;
   }
@@ -3900,7 +3980,7 @@ int pjw_call_stop_play_wav(long call_id, const char *json) {
   } else {
     // Stop play wav on specified media_id
 
-    if ((int)media_id >= call->media_count) {
+    if (media_id >= call->media_count) {
       set_error("invalid media_id");
       goto out;
     }
@@ -3944,7 +4024,7 @@ int pjw_call_stop_record_wav(long call_id, const char *json) {
   AudioEndpoint *ae;
   int res;
 
-  unsigned media_id = 0;
+  int media_id = -1;
 
   char buffer[MAX_JSON_INPUT];
 
@@ -3960,7 +4040,7 @@ int pjw_call_stop_record_wav(long call_id, const char *json) {
     goto out;
   }
 
-  res = json_get_uint_param(document, "media_id", true, &media_id);
+  res = json_get_int_param(document, "media_id", true, &media_id);
   if (res <= 0) {
     goto out;
   }
@@ -3974,7 +4054,7 @@ int pjw_call_stop_record_wav(long call_id, const char *json) {
   } else {
     // Stop record wav on specified media_id
 
-    if ((int)media_id >= call->media_count) {
+    if (media_id >= call->media_count) {
       set_error("invalid media_id");
       goto out;
     }
@@ -4022,8 +4102,9 @@ int pjw_call_start_fax(long call_id, const char *json) {
   MediaEndpoint *me;
   AudioEndpoint *ae;
   int ae_count;
+  int res;
 
-  unsigned media_id = 0;
+  int media_id = -1;
 
   char buffer[MAX_JSON_INPUT];
 
@@ -4062,43 +4143,7 @@ int pjw_call_start_fax(long call_id, const char *json) {
     goto out;
   }
 
-  if (ae_count > 1) {
-    if (json_get_uint_param(document, "media_id", false, &media_id) <= 0) {
-      goto out;
-    }
-  }
-
-  if ((int)media_id >= call->media_count) {
-    set_error("invalid media_id");
-    goto out;
-  }
-
-  me = (MediaEndpoint *)call->media[media_id];
-  if (ENDPOINT_TYPE_AUDIO != me->type) {
-    set_error("media_endpoint is not audio endpoint");
-    goto out;
-  }
-
-  ae = (AudioEndpoint *)me->endpoint.audio;
-
-  if (!parse_json(document, json, buffer, MAX_JSON_INPUT)) {
-    goto out;
-  }
-
-  if (!validate_params(document, valid_params)) {
-    goto out;
-  }
-
   if (json_get_bool_param(document, "is_sender", false, &is_sender) <= 0) {
-    goto out;
-  }
-
-  if (json_get_string_param(document, "file", false, &file) <= 0) {
-    goto out;
-  }
-
-  if (!file[0]) {
-    set_error("file cannot be blank string");
     goto out;
   }
 
@@ -4110,16 +4155,73 @@ int pjw_call_start_fax(long call_id, const char *json) {
       flags |= FAX_FLAG_TRANSMIT_ON_IDLE;
   }
 
-  // First stop and destroy existing fax port.
-  status = audio_endpoint_stop_fax(call, ae);
-  if(status != PJ_SUCCESS) {
-    set_error("audio_endpoint_stop_fax failed");
-    return -1;
-  }
+  if(is_sender) {
+    // if we are sender we can do fax operaton to all media streams
+    res = json_get_int_param(document, "media_id", true, &media_id);
+    if (res <= 0) goto out;
 
-  if (!prepare_fax(call, ae, is_sender, file, flags)) {
-    set_error("prepare_fax failed");
-    goto out;
+    if (NOT_FOUND_OPTIONAL == res) {
+      // first stop fax in all audio endpoints
+      status = call_stop_audio_endpoints_op(call, audio_endpoint_stop_fax);
+      if (status != PJ_SUCCESS) goto out;
+
+      // now star fax in all audio endpoints
+      for (int i = 0; i < call->media_count; i++) {
+        MediaEndpoint *me = (MediaEndpoint *)call->media[i];
+        if (ENDPOINT_TYPE_AUDIO == me->type) {
+          me = (MediaEndpoint *)call->media[i];
+          ae = (AudioEndpoint *)me->endpoint.audio;
+          if (!prepare_fax(call, ae, is_sender, file, flags)) goto out;
+        }
+      }
+    } else {
+      // first top fax on specified media_id
+
+      if ((int)media_id >= call->media_count) {
+        set_error("invalid media_id");
+        goto out;
+      }
+
+      me = (MediaEndpoint *)call->media[media_id];
+      if (ENDPOINT_TYPE_AUDIO != me->type) {
+        set_error("invalid media_id non audio");
+        goto out;
+      }
+
+      ae = (AudioEndpoint *)me->endpoint.audio;
+
+      status = audio_endpoint_stop_fax(call, ae);
+      if (status != PJ_SUCCESS) goto out;
+
+      // now start the fax operation
+      if (!prepare_fax(call, ae, is_sender, file, flags)) goto out;
+    }
+  } else {
+    // if we are not sender we can only start fax operation in a single media endpoint (otherwise, there would be more than one fax process writing to the same fax file)
+    res = json_get_int_param(document, "media_id", true, &media_id);
+    if (res <= 0) goto out;
+
+    if (NOT_FOUND_OPTIONAL == res) {
+      media_id = get_first_media_id_by_type(call, ENDPOINT_TYPE_AUDIO);
+      if(media_id < 0) {
+        set_error("could not resolve media_id");
+        goto out;
+      }
+    }
+
+    me = (MediaEndpoint *)call->media[media_id];
+    if (ENDPOINT_TYPE_AUDIO != me->type) {
+      set_error("invalid media_id non audio");
+      goto out;
+    }
+
+    ae = (AudioEndpoint *)me->endpoint.audio;
+
+    // First stop and destroy existing fax port.
+    status = audio_endpoint_stop_fax(call, ae);
+    if(status != PJ_SUCCESS) goto out;
+
+    if (!prepare_fax(call, ae, is_sender, file, flags)) goto out;
   }
 
 out:
@@ -4144,7 +4246,7 @@ int pjw_call_stop_fax(long call_id, const char *json) {
   AudioEndpoint *ae;
   int res;
 
-  unsigned media_id = 0;
+  int media_id = -1;
 
   char buffer[MAX_JSON_INPUT];
 
@@ -4160,7 +4262,7 @@ int pjw_call_stop_fax(long call_id, const char *json) {
     goto out;
   }
 
-  res = json_get_uint_param(document, "media_id", true, &media_id);
+  res = json_get_int_param(document, "media_id", true, &media_id);
   if (res <= 0) {
     goto out;
   }
@@ -4174,7 +4276,7 @@ int pjw_call_stop_fax(long call_id, const char *json) {
   } else {
     // Stop fax on specified media_id
 
-    if ((int)media_id >= call->media_count) {
+    if (media_id >= call->media_count) {
       set_error("invalid media_id");
       goto out;
     }
@@ -8096,7 +8198,7 @@ int pjw_call_send_tcp_msg(long call_id, const char *json) {
   MediaEndpoint *me;
   int res;
 
-  unsigned media_id = 0;
+  int media_id = -1;
 
   char buffer[MAX_JSON_INPUT];
 
@@ -8120,7 +8222,7 @@ int pjw_call_send_tcp_msg(long call_id, const char *json) {
   }
   size = strlen(msg);
 
-  res = json_get_uint_param(document, "media_id", true, &media_id);
+  res = json_get_int_param(document, "media_id", true, &media_id);
   if (res <= 0) {
     goto out;
   }
@@ -8134,7 +8236,7 @@ int pjw_call_send_tcp_msg(long call_id, const char *json) {
   } else {
     // Send msg to specified media_id
 
-    if ((int)media_id >= call->media_count) {
+    if (media_id >= call->media_count) {
       set_error("invalid media_id");
       goto out;
     }
