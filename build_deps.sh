@@ -55,7 +55,8 @@ then
     #git checkout 33a3c9e0a5eb84426edef05a9aa98af17d8011c3 # required for bcg729
     #git checkout 797088ed133c98492519b7d042b75735f6f9388c # updated as part of #21
     #git checkout 651df5b50129b7c5a5feec8336dda4468d53d2b0 # updated to latest to see of crash issues improve
-    git checkout 043926a5846963a2c99378e8daa495230923eaab # update to try to solve ##49 (but issue remains)
+    #git checkout 043926a5846963a2c99378e8daa495230923eaab # updated to try to solve #49 (but issue remains)
+    git checkout c36802585ddefb3ca477d1f6d773d179510c5412 # updated to try to solve #83 (but issue remains)
 
     cat > user.mak <<EOF
     export CFLAGS += -fPIC -g

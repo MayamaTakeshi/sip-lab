@@ -5131,6 +5131,7 @@ static void on_state_changed(pjsip_inv_session *inv, pjsip_event *e) {
       sip_msg = e->body.rx_msg.rdata->msg_info.msg_buf;
     }
 
+    printf("call_id=%i sip_msg_len=%i sip_msg=%p\n", call_id, sip_msg_len, sip_msg);
     make_evt_call_ended(evt, sizeof(evt), call_id, sip_msg_len, sip_msg);
     dispatch_event(evt);
   }
