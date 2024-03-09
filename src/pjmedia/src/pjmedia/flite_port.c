@@ -177,7 +177,8 @@ PJ_DEF(pj_status_t) pjmedia_flite_port_speak( pjmedia_port *port,
 
     flite->w = flite_text_to_wave(text, flite->v);
     if ((unsigned)flite->w->sample_rate != PJMEDIA_PIA_SRATE(&port->info)) {
-		cst_wave_resample(flite->w, PJMEDIA_PIA_SRATE(&port->info));
+        printf("resampling from %i to %i\n", flite->w->sample_rate, PJMEDIA_PIA_SRATE(&port->info));
+        cst_wave_resample(flite->w, PJMEDIA_PIA_SRATE(&port->info));
     }
     flite->written_samples = 0;
 
