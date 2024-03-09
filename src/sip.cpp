@@ -6718,6 +6718,7 @@ void close_media_endpoint(Call *call, MediaEndpoint *me) {
     audio_endpoint_remove_port(call, &ae->tonegen_cbp);
     audio_endpoint_remove_port(call, &ae->dtmfdet_cbp);
     audio_endpoint_remove_port(call, &ae->fax_cbp);
+    audio_endpoint_remove_port(call, &ae->flite_cbp);
 
     close_media_transport(ae->med_transport);
     ae->med_transport = NULL;
