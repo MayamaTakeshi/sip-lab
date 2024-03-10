@@ -2399,6 +2399,7 @@ Maybe with good enunciation we can have adequate results.
 However, if kal (which uses sampling rate of 8000 works with flite command line tool, then we should be able to generate at that rate and have similar results.
 So let's investigate this further.
 
+Obs: I tested with speex/16000 and with it results were reasonably good.
 
 
 

@@ -143,10 +143,7 @@ PJ_DEF(pj_status_t) pjmedia_flite_port_create( pj_pool_t *pool,
 	if (!strcasecmp(voice, "awb")) {
 		flite->v = globals.awb;
 	} else if (!strcasecmp(voice, "kal")) {
-/*  "kal" is 8kHz and the native rate is set to 16kHz
- *  so kal talks a little bit too fast ...
- *  for now: "symlink" kal to kal16
- */		flite->v = globals.kal16;
+		flite->v = globals.kal; // this uses SamplingRate of 8000. All others use 16000
 	} else if (!strcasecmp(voice, "rms")) {
 		flite->v = globals.rms;
 	} else if (!strcasecmp(voice, "slt")) {
