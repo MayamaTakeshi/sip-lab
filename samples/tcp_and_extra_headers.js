@@ -126,7 +126,6 @@ async function test() {
         },
     ], 2000)
 
-
     sip.call.reinvite(oc.id)
 
     await z.wait([
@@ -336,6 +335,50 @@ async function test() {
 
     sip.call.start_play_wav(oc.id, {file: 'samples/artifacts/yosemitesam.wav'})
     sip.call.start_play_wav(ic.id, {file: 'samples/artifacts/yosemitesam.wav'})
+
+    await z.sleep(2000)
+
+    sip.call.reinvite(oc.id)
+
+    await z.wait([
+        {
+            event: 'reinvite',
+            call_id: ic.id
+        },
+    ], 1000)
+
+    sip.call.respond(ic.id, {code: 200, reason: 'OK'})
+
+    await z.wait([
+        {
+            event: 'response',
+            call_id: oc.id,
+            method: 'INVITE',
+            msg: sip_msg({
+                $rs: '100',
+            }),
+        },
+        {
+            event: 'response',
+            call_id: oc.id,
+            method: 'INVITE',
+            msg: sip_msg({
+                $rs: '200',
+                $rr: 'OK',
+                $rb: '!{_}a=sendrecv',
+            }),
+        },
+        {
+            event: 'media_update',
+            call_id: oc.id,
+            status: 'ok',
+        },
+        {
+            event: 'media_update',
+            call_id: ic.id,
+            status: 'ok',
+        },
+    ], 500)
 
     await z.sleep(2000)
 

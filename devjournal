@@ -2396,5 +2396,9 @@ So I tried to use pjmedia resample_port to change flite 16000 to 8000. But with 
 Obs: this is not that bad. We might still use pocketsphinx by recording messages to wav files and playing the file instead of generating the audio using flite.
 Maybe with good enunciation we can have adequate results.
 
+However, if kal (which uses sampling rate of 8000 works with flite command line tool, then we should be able to generate at that rate and have similar results.
+So let's investigate this further.
+
+
 
 
