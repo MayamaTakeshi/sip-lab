@@ -2402,4 +2402,135 @@ So let's investigate this further.
 Obs: I tested with speex/16000 and with it results were reasonably good.
 
 
+-------------------------
+2024/03/10 takeshi:
+
+I prepared an app to test pocketsphinx streaming frames from a raw file:
+
+takeshi@takeshi-desktop:examples$ cat stream_from_file.c 
+/*
+Convert wav to raw file:
+  sox c.wav -t raw -e unsigned -r 16000 c16000.raw pad 0 10
+
+Compile app:
+  gcc -o stream_from_file stream_from_file.c -I ../include/ -L ../ -lpocketsphinx -lm -lportaudio
+
+Execute app:
+  POCKETSPHINX_PATH=/home/takeshi/src/git/pocketsphinx/model/ ./stream_from_file c16000.raw 16000
+*/
+
+#include <pocketsphinx.h>
+
+int
+main(int argc, char *argv[])
+{
+    short *frame;
+    ps_decoder_t *decoder;
+    ps_config_t *config;
+    ps_endpointer_t *ep;
+    size_t frame_size;
+
+    (void)argc; (void)argv;
+
+    char *filename = argv[1];
+    int sampling_rate = atoi(argv[2]);
+
+    config = ps_config_init(NULL);
+    ps_default_search_args(config);
+
+    if ((decoder = ps_init(config)) == NULL)
+        E_FATAL("PocketSphinx decoder init failed\n");
+    if ((ep = ps_endpointer_init(0, 0.0, 0, sampling_rate, 0)) == NULL)
+        E_FATAL("PocketSphinx endpointer init failed\n");
+    frame_size = ps_endpointer_frame_size(ep);
+    if ((frame = malloc(frame_size * sizeof(frame[0]))) == NULL)
+        E_FATAL_SYSTEM("Failed to allocate frame");
+
+    printf("sampling_rate=%i frame_size=%lu\n", sampling_rate, frame_size);
+   
+    FILE *rawfd = fopen(filename, "rb");
+    if (rawfd == NULL) {
+        E_FATAL_SYSTEM("Failed to open raw audio file %s for reading.\n", filename);
+    }
+
+    short buf[2048];
+
+    while (!feof(rawfd)) {
+    	//size_t frame = fread(buf, sizeof(int16), frame_size, rawfd);
+    	size_t x = fread(frame, sizeof(short), frame_size, rawfd);
+	printf("first=%x\n", frame[0]);
+
+        const int16 *speech;
+        int prev_in_speech = ps_endpointer_in_speech(ep);
+        speech = ps_endpointer_process(ep, buf);
+        if (speech != NULL) {
+            const char *hyp;
+            if (!prev_in_speech) {
+                fprintf(stdout, "Speech start at %.2f\n",
+                        ps_endpointer_speech_start(ep));
+		fflush(stdout); /* For broken MSYS2 terminal */
+                ps_start_utt(decoder);
+            }
+            if (ps_process_raw(decoder, speech, frame_size, FALSE, FALSE) < 0)
+                E_FATAL("ps_process_raw() failed\n");
+            if ((hyp = ps_get_hyp(decoder, NULL)) != NULL) {
+                fprintf(stdout, "PARTIAL RESULT: %s\n", hyp);
+		fflush(stdout);
+	    }
+            if (!ps_endpointer_in_speech(ep)) {
+                fprintf(stdout, "Speech end at %.2f\n",
+                        ps_endpointer_speech_end(ep));
+		fflush(stdout);
+                ps_end_utt(decoder);
+                if ((hyp = ps_get_hyp(decoder, NULL)) != NULL) {
+		    printf("%s\n", hyp);
+		    fflush(stdout);
+		}
+            }
+        }
+    }
+    free(frame);
+    ps_endpointer_free(ep);
+    ps_free(decoder);
+    ps_config_free(config);
+        
+    return 0;
+}
+
+But it didn't work and gives different results for the same input (wav file with kal saying 'How are you?')
+Sample output:
+
+takeshi@takeshi-desktop:examples$ POCKETSPHINX_PATH=/home/takeshi/src/git/pocketsphinx/model/ ./stream_from_file c16000.raw 16000 
+... ABRIDGED ...
+first=ffff8000
+PARTIAL RESULT: nowhere
+first=ffff8000
+PARTIAL RESULT: nowhere
+first=ffff8000
+PARTIAL RESULT: nowhere
+first=ffff8000
+PARTIAL RESULT: nowhere
+first=ffff8000
+PARTIAL RESULT: nowhere
+first=ffff8000
+PARTIAL RESULT: nowhere
+first=ffff8000
+PARTIAL RESULT: nowhere
+first=ffff8000
+PARTIAL RESULT: nowhere
+first=7fff
+PARTIAL RESULT: nowhere
+first=ffff8000
+PARTIAL RESULT: nowhere
+first=ffff8000
+PARTIAL RESULT: nowhere
+first=ffff8001
+PARTIAL RESULT: nowhere
+first=ffff8000
+PARTIAL RESULT: nowhere
+takeshi@takeshi-desktop:examples$ 
+
+
+
+
 
