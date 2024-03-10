@@ -2405,19 +2405,80 @@ Obs: I tested with speex/16000 and with it results were reasonably good.
 -------------------------
 2024/03/10 takeshi:
 
-I prepared an app to test pocketsphinx streaming frames from a raw file:
+Research to implement pocketsphinx_port.c.
+
+This worked:
 
 takeshi@takeshi-desktop:examples$ cat stream_from_file.c 
 /*
-Convert wav to raw file:
-  sox c.wav -t raw -e unsigned -r 16000 c16000.raw pad 0 10
 
+Convert c.wav (8000hz) to raw file (16000hz):
+ sox c.wav -t raw -e signed -r 16000 c16000.raw pad 0 10
+
+Play raw file:
+  play -t raw -e signed -r 16000 -b 16 -c 1 c16000.raw
+  
 Compile app:
-  gcc -o stream_from_file stream_from_file.c -I ../include/ -L ../ -lpocketsphinx -lm -lportaudio
+  gcc -o stream_from_file stream_from_file.c -I ../include/ -L ../ -lpocketsphinx -lm -lportaudi
 
 Execute app:
-  POCKETSPHINX_PATH=/home/takeshi/src/git/pocketsphinx/model/ ./stream_from_file c16000.raw 16000
+
+takeshi@takeshi-desktop:examples$ POCKETSPHINX_PATH=/home/takeshi/src/git/pocketsphinx/model/ ./stream_from_file c16000.raw 16000 
+sampling_rate=16000 frame_size=480
+Speech start at 0.24
+Speech end at 1.08
+are you
+takeshi@takeshi-desktop:examples$ 
+
+As we can see. Instead of 'how are you' we get just 'are you'.
+
+But testing with flite output we confirmed our implementation is OK as we also get just 'are you':
+
+takeshi@takeshi-desktop:examples$ flite 'how are you?' -voice kal -o a.wav
+
+takeshi@takeshi-desktop:examples$ soxi a.wav
+
+Input File     : 'a.wav'
+Channels       : 1
+Sample Rate    : 8000
+Precision      : 16-bit
+Duration       : 00:00:01.00 = 7971 samples ~ 74.7281 CDDA sectors
+File Size      : 16.0k
+Bit Rate       : 128k
+Sample Encoding: 16-bit Signed Integer PCM
+
+takeshi@takeshi-desktop:examples$ sox a.wav -t raw -e signed -r 16000 a16000.raw pad 0 10
+takeshi@takeshi-desktop:examples$ POCKETSPHINX_PATH=/home/takeshi/src/git/pocketsphinx/model/ ./stream_from_file a16000.raw 16000
+sampling_rate=16000 frame_size=480
+Speech start at 0.24
+Speech end at 1.08
+are you
+takeshi@takeshi-desktop:examples$
+
+Then if we use kal16 (16000hz), it is OK:
+
+takeshi@takeshi-desktop:examples$ flite 'how are you?' -voice kal16 -o b.wav
+takeshi@takeshi-desktop:examples$ soxi b.wav
+
+Input File     : 'b.wav'
+Channels       : 1
+Sample Rate    : 16000
+Precision      : 16-bit
+Duration       : 00:00:01.00 = 15942 samples ~ 74.7281 CDDA sectors
+File Size      : 31.9k
+Bit Rate       : 256k
+Sample Encoding: 16-bit Signed Integer PCM
+
+takeshi@takeshi-desktop:examples$ sox b.wav -t raw -e signed -r 16000 b16000.raw pad 0 10
+takeshi@takeshi-desktop:examples$ POCKETSPHINX_PATH=/home/takeshi/src/git/pocketsphinx/model/ ./stream_from_file b16000.raw 16000
+sampling_rate=16000 frame_size=480
+Speech start at 0.24
+Speech end at 1.08
+how are you
+takeshi@takeshi-desktop:examples$
+
 */
+
 
 #include <pocketsphinx.h>
 
@@ -2453,16 +2514,12 @@ main(int argc, char *argv[])
         E_FATAL_SYSTEM("Failed to open raw audio file %s for reading.\n", filename);
     }
 
-    short buf[2048];
-
     while (!feof(rawfd)) {
-    	//size_t frame = fread(buf, sizeof(int16), frame_size, rawfd);
     	size_t x = fread(frame, sizeof(short), frame_size, rawfd);
-	printf("first=%x\n", frame[0]);
 
         const int16 *speech;
         int prev_in_speech = ps_endpointer_in_speech(ep);
-        speech = ps_endpointer_process(ep, buf);
+        speech = ps_endpointer_process(ep, frame);
         if (speech != NULL) {
             const char *hyp;
             if (!prev_in_speech) {
@@ -2474,7 +2531,7 @@ main(int argc, char *argv[])
             if (ps_process_raw(decoder, speech, frame_size, FALSE, FALSE) < 0)
                 E_FATAL("ps_process_raw() failed\n");
             if ((hyp = ps_get_hyp(decoder, NULL)) != NULL) {
-                fprintf(stdout, "PARTIAL RESULT: %s\n", hyp);
+                //fprintf(stdout, "PARTIAL RESULT: %s\n", hyp);
 		fflush(stdout);
 	    }
             if (!ps_endpointer_in_speech(ep)) {
@@ -2496,41 +2553,6 @@ main(int argc, char *argv[])
         
     return 0;
 }
-
-But it didn't work and gives different results for the same input (wav file with kal saying 'How are you?')
-Sample output:
-
-takeshi@takeshi-desktop:examples$ POCKETSPHINX_PATH=/home/takeshi/src/git/pocketsphinx/model/ ./stream_from_file c16000.raw 16000 
-... ABRIDGED ...
-first=ffff8000
-PARTIAL RESULT: nowhere
-first=ffff8000
-PARTIAL RESULT: nowhere
-first=ffff8000
-PARTIAL RESULT: nowhere
-first=ffff8000
-PARTIAL RESULT: nowhere
-first=ffff8000
-PARTIAL RESULT: nowhere
-first=ffff8000
-PARTIAL RESULT: nowhere
-first=ffff8000
-PARTIAL RESULT: nowhere
-first=ffff8000
-PARTIAL RESULT: nowhere
-first=7fff
-PARTIAL RESULT: nowhere
-first=ffff8000
-PARTIAL RESULT: nowhere
-first=ffff8000
-PARTIAL RESULT: nowhere
-first=ffff8001
-PARTIAL RESULT: nowhere
-first=ffff8000
-PARTIAL RESULT: nowhere
 takeshi@takeshi-desktop:examples$ 
-
-
-
 
 
