@@ -2556,3 +2556,8 @@ main(int argc, char *argv[])
 takeshi@takeshi-desktop:examples$ 
 
 
+The frame_size requested by pocketsphinx was 480.
+I tried forcing 160, and with this, nothing was detected.
+Then I tried forcing 320 and with this it worked (got 'are you' for kall and 'how are you' for kal16)
+So in the pocketsphinx_port.c we will need to buffer data to the desired frame_size before feeeding it to ps.
+
