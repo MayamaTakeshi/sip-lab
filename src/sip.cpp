@@ -614,22 +614,22 @@ static void build_stream_stat(ostringstream &oss, pjmedia_rtcp_stat *stat,
 
 bool prepare_tonegen(Call *call, AudioEndpoint *ae);
 bool prepare_dtmfdet(Call *call, AudioEndpoint *ae);
-bool prepare_wav_player(Call *c, AudioEndpoint *ae, const char *file, unsigned flags, bool end_of_file_event);
-bool prepare_wav_writer(Call *c, AudioEndpoint *ae, const char *file);
-bool prepare_fax(Call *c, AudioEndpoint *ae, bool is_sender, const char *file, unsigned flags);
-bool prepare_flite(Call *c, AudioEndpoint *ae, const char *voice, bool end_of_speech_event);
+bool prepare_wav_player(Call *call, AudioEndpoint *ae, const char *file, unsigned flags, bool end_of_file_event);
+bool prepare_wav_writer(Call *call, AudioEndpoint *ae, const char *file);
+bool prepare_fax(Call *call, AudioEndpoint *ae, bool is_sender, const char *file, unsigned flags);
+bool prepare_flite(Call *call, AudioEndpoint *ae, const char *voice, bool end_of_speech_event);
 
 void prepare_error_event(ostringstream *oss, char *scope, char *details);
 // void prepare_pjsipcall_error_event(ostringstream *oss, char *scope, char
 // *function, pj_status_t s);
 void append_status(ostringstream *oss, pj_status_t s);
 
-bool is_media_active(Call *c, MediaEndpoint *me);
+bool is_media_active(Call *call, MediaEndpoint *me);
 void close_media_endpoint(Call *call, MediaEndpoint *me);
 
-void close_media(Call *c);
+void close_media(Call *call);
 
-bool process_media(Call *c, pjsip_dialog *dlg, Document &document, bool answer);
+bool process_media(Call *call, pjsip_dialog *dlg, Document &document, bool answer);
 
 typedef pj_status_t (*audio_endpoint_stop_op_t)(Call *call, AudioEndpoint *ae);
 
@@ -6504,10 +6504,10 @@ bool process_media(Call *call, pjsip_dialog *dlg, Document &document, bool answe
   return true;
 }
 
-bool is_media_active(Call *c, MediaEndpoint *me) {
+bool is_media_active(Call *call, MediaEndpoint *me) {
   // check if media from call->media_neg is on call->media
-  for (int i = 0; i < c->media_count; ++i) {
-    if (me == c->media[i])
+  for (int i = 0; i < call->media_count; ++i) {
+    if (me == call->media[i])
       return true;
   }
   return false;
@@ -6546,17 +6546,17 @@ void close_media_endpoint(Call *call, MediaEndpoint *me) {
   me->port = 0;
 }
 
-void close_media(Call *c) {
-  printf("close_media call_id=%i\n", c->id);
-  for (int i = 0; i < c->media_count; ++i) {
-    MediaEndpoint *me = c->media[i];
-    close_media_endpoint(c, me);
+void close_media(Call *call) {
+  printf("close_media call_id=%i\n", call->id);
+  for (int i = 0; i < call->media_count; ++i) {
+    MediaEndpoint *me = call->media[i];
+    close_media_endpoint(call, me);
   }
-  c->media_count = 0;
+  call->media_count = 0;
 }
 
-bool prepare_tonegen(Call *c, AudioEndpoint *ae) {
-  printf("prepare_tone_gen call.id=%i\n", c->id);
+bool prepare_tonegen(Call *call, AudioEndpoint *ae) {
+  printf("prepare_tone_gen call.id=%i\n", call->id);
   pj_status_t status;
 
   if(ae->tonegen_cbp.port) {
@@ -6565,7 +6565,7 @@ bool prepare_tonegen(Call *c, AudioEndpoint *ae) {
   }
 
   status = pjmedia_tonegen_create(
-        c->inv->pool, PJMEDIA_PIA_SRATE(&ae->stream_cbp.port->info),
+        call->inv->pool, PJMEDIA_PIA_SRATE(&ae->stream_cbp.port->info),
         PJMEDIA_PIA_CCNT(&ae->stream_cbp.port->info),
         PJMEDIA_PIA_SPF(&ae->stream_cbp.port->info),
         PJMEDIA_PIA_BITS(&ae->stream_cbp.port->info), 0, &ae->tonegen_cbp.port);
@@ -6574,16 +6574,16 @@ bool prepare_tonegen(Call *c, AudioEndpoint *ae) {
     return false;
   }
 
-  status = pjmedia_conf_add_port(ae->conf, c->inv->pool, ae->tonegen_cbp.port, NULL, &ae->tonegen_cbp.slot);
+  status = pjmedia_conf_add_port(ae->conf, call->inv->pool, ae->tonegen_cbp.port, NULL, &ae->tonegen_cbp.slot);
   if (status != PJ_SUCCESS) {
     set_error("pjmedia_conf_add_port failed");
     return false;
   }
 
-  return connect_feature_port_to_stream_port(c, ae, &ae->tonegen_cbp, CONNECTION_MODE_SOURCE);
+  return connect_feature_port_to_stream_port(call, ae, &ae->tonegen_cbp, CONNECTION_MODE_SOURCE);
 }
 
-bool prepare_wav_player(Call *c, AudioEndpoint *ae, const char *file, unsigned flags, bool end_of_file_event) {
+bool prepare_wav_player(Call *call, AudioEndpoint *ae, const char *file, unsigned flags, bool end_of_file_event) {
   pj_status_t status;
 
   unsigned wav_ptime;
@@ -6591,7 +6591,7 @@ bool prepare_wav_player(Call *c, AudioEndpoint *ae, const char *file, unsigned f
               PJMEDIA_PIA_SRATE(&ae->stream_cbp.port->info);
 
   status = pjmedia_wav_player_port_create(
-                  c->inv->pool, 
+                  call->inv->pool, 
                   file,
                   wav_ptime,
                   flags,
@@ -6605,27 +6605,27 @@ bool prepare_wav_player(Call *c, AudioEndpoint *ae, const char *file, unsigned f
   }
 
   if (end_of_file_event) {
-    status = pjmedia_wav_player_set_eof_cb2(ae->wav_player_cbp.port, (void*)c, on_end_of_file);
+    status = pjmedia_wav_player_set_eof_cb2(ae->wav_player_cbp.port, (void*)call, on_end_of_file);
     if (status != PJ_SUCCESS) {
       set_error("pjmedia_wav_player_set_eof_cb2 failed");
       return false;
     }
   }
 
-  status = pjmedia_conf_add_port(ae->conf, c->inv->pool, ae->wav_player_cbp.port, NULL, &ae->wav_player_cbp.slot);
+  status = pjmedia_conf_add_port(ae->conf, call->inv->pool, ae->wav_player_cbp.port, NULL, &ae->wav_player_cbp.slot);
   if (status != PJ_SUCCESS) {
     set_error("pjmedia_conf_add_port failed");
     return false;
   }
 
-  return connect_feature_port_to_stream_port(c, ae, &ae->wav_player_cbp, CONNECTION_MODE_SOURCE);
+  return connect_feature_port_to_stream_port(call, ae, &ae->wav_player_cbp, CONNECTION_MODE_SOURCE);
 }
 
-bool prepare_wav_writer(Call *c, AudioEndpoint *ae, const char *file) {
+bool prepare_wav_writer(Call *call, AudioEndpoint *ae, const char *file) {
   pj_status_t status;
 
   status = pjmedia_wav_writer_port_create(
-      c->inv->pool, file, PJMEDIA_PIA_SRATE(&ae->stream_cbp.port->info),
+      call->inv->pool, file, PJMEDIA_PIA_SRATE(&ae->stream_cbp.port->info),
       PJMEDIA_PIA_CCNT(&ae->stream_cbp.port->info), PJMEDIA_PIA_SPF(&ae->stream_cbp.port->info),
       PJMEDIA_PIA_BITS(&ae->stream_cbp.port->info), PJMEDIA_FILE_WRITE_PCM, 0,
       (pjmedia_port **)&ae->wav_writer_cbp.port);
@@ -6634,66 +6634,66 @@ bool prepare_wav_writer(Call *c, AudioEndpoint *ae, const char *file) {
     return false;
   }
   
-  status = pjmedia_conf_add_port(ae->conf, c->inv->pool, ae->wav_writer_cbp.port, NULL, &ae->wav_writer_cbp.slot);
+  status = pjmedia_conf_add_port(ae->conf, call->inv->pool, ae->wav_writer_cbp.port, NULL, &ae->wav_writer_cbp.slot);
   if (status != PJ_SUCCESS) {
     set_error("pjmedia_conf_add_port failed");
     return false;
   }
 
-  return connect_feature_port_to_stream_port(c, ae, &ae->wav_writer_cbp, CONNECTION_MODE_SINK);
+  return connect_feature_port_to_stream_port(call, ae, &ae->wav_writer_cbp, CONNECTION_MODE_SINK);
 }
 
-bool prepare_dtmfdet(Call *c, AudioEndpoint *ae) {
+bool prepare_dtmfdet(Call *call, AudioEndpoint *ae) {
   pj_status_t status;
   status = pjmedia_dtmfdet_create(
-      c->inv->pool, 
+      call->inv->pool, 
       PJMEDIA_PIA_SRATE(&ae->stream_cbp.port->info),
       PJMEDIA_PIA_CCNT(&ae->stream_cbp.port->info),
       PJMEDIA_PIA_SPF(&ae->stream_cbp.port->info),
       PJMEDIA_PIA_BITS(&ae->stream_cbp.port->info), 
-      on_inband_dtmf, c, &ae->dtmfdet_cbp.port);
+      on_inband_dtmf, call, &ae->dtmfdet_cbp.port);
   if (status != PJ_SUCCESS) {
     set_error("pjmedia_dtmfdet_create failed");
       return false;
   }
   
-  status = pjmedia_conf_add_port(ae->conf, c->inv->pool, ae->dtmfdet_cbp.port, NULL, &ae->dtmfdet_cbp.slot);
+  status = pjmedia_conf_add_port(ae->conf, call->inv->pool, ae->dtmfdet_cbp.port, NULL, &ae->dtmfdet_cbp.slot);
   if (status != PJ_SUCCESS) {
     set_error("pjmedia_conf_add_port failed");
     return false;
   }
 
-  return connect_feature_port_to_stream_port(c, ae, &ae->dtmfdet_cbp, CONNECTION_MODE_SINK);
+  return connect_feature_port_to_stream_port(call, ae, &ae->dtmfdet_cbp, CONNECTION_MODE_SINK);
 }
 
-bool prepare_fax(Call *c, AudioEndpoint *ae, bool is_sender, const char *file,
+bool prepare_fax(Call *call, AudioEndpoint *ae, bool is_sender, const char *file,
                  unsigned flags) {
   pj_status_t status;
 
   status = pjmedia_fax_port_create(
-      c->inv->pool,
+      call->inv->pool,
       PJMEDIA_PIA_SRATE(&ae->stream_cbp.port->info),
       PJMEDIA_PIA_CCNT(&ae->stream_cbp.port->info),
       PJMEDIA_PIA_SPF(&ae->stream_cbp.port->info),
       PJMEDIA_PIA_BITS(&ae->stream_cbp.port->info),
-      on_fax_result, c, is_sender, file,
+      on_fax_result, call, is_sender, file,
       flags, &ae->fax_cbp.port);
   if (status != PJ_SUCCESS) {
     set_error("pjmedia_fax_port_create failed");
     return false;
   }
 
-  status = pjmedia_conf_add_port(ae->conf, c->inv->pool, ae->fax_cbp.port, NULL, &ae->fax_cbp.slot);
+  status = pjmedia_conf_add_port(ae->conf, call->inv->pool, ae->fax_cbp.port, NULL, &ae->fax_cbp.slot);
   if (status != PJ_SUCCESS) {
     set_error("pjmedia_conf_add_port failed");
     return false;
   }
 
-  return connect_feature_port_to_stream_port(c, ae, &ae->fax_cbp, CONNECTION_MODE_SOURCE_AND_SINK);
+  return connect_feature_port_to_stream_port(call, ae, &ae->fax_cbp, CONNECTION_MODE_SOURCE_AND_SINK);
 }
 
-bool prepare_flite(Call *c, AudioEndpoint *ae, const char *voice, bool end_of_speech_event) {
-  printf("prepare_flite call.id=%i\n", c->id);
+bool prepare_flite(Call *call, AudioEndpoint *ae, const char *voice, bool end_of_speech_event) {
+  printf("prepare_flite call.id=%i\n", call->id);
   pj_status_t status;
 
   if(ae->flite_cbp.port) {
@@ -6702,7 +6702,7 @@ bool prepare_flite(Call *c, AudioEndpoint *ae, const char *voice, bool end_of_sp
   }
 
   status = pjmedia_flite_port_create(
-        c->inv->pool, PJMEDIA_PIA_SRATE(&ae->stream_cbp.port->info),
+        call->inv->pool, PJMEDIA_PIA_SRATE(&ae->stream_cbp.port->info),
         PJMEDIA_PIA_CCNT(&ae->stream_cbp.port->info),
         PJMEDIA_PIA_SPF(&ae->stream_cbp.port->info),
         PJMEDIA_PIA_BITS(&ae->stream_cbp.port->info), voice, &ae->flite_cbp.port);
@@ -6712,20 +6712,20 @@ bool prepare_flite(Call *c, AudioEndpoint *ae, const char *voice, bool end_of_sp
   }
 
   if (end_of_speech_event) {
-    status = pjmedia_flite_port_set_eof_cb(ae->flite_cbp.port, (void*)c, on_end_of_speech);
+    status = pjmedia_flite_port_set_eof_cb(ae->flite_cbp.port, (void*)call, on_end_of_speech);
     if (status != PJ_SUCCESS) {
       set_error("pjmedia_flite_port_set_eof_cb failed");
       return false;
     }
   }
 
-  status = pjmedia_conf_add_port(ae->conf, c->inv->pool, ae->flite_cbp.port, NULL, &ae->flite_cbp.slot);
+  status = pjmedia_conf_add_port(ae->conf, call->inv->pool, ae->flite_cbp.port, NULL, &ae->flite_cbp.slot);
   if (status != PJ_SUCCESS) {
     set_error("pjmedia_conf_add_port failed");
     return false;
   }
 
-  return connect_feature_port_to_stream_port(c, ae, &ae->flite_cbp, CONNECTION_MODE_SOURCE);
+  return connect_feature_port_to_stream_port(call, ae, &ae->flite_cbp, CONNECTION_MODE_SOURCE);
 }
 
 
@@ -8115,8 +8115,8 @@ static int g_now;
 
 void check_digit_buffer(Call *call, int mode) {
   // addon_log(L_DBG, "check_digit_buffer g_now=%i for call_id=%i and mode=%i
-  // timestamp=%i len=%i\n", g_now, c->id, mode, c->last_digit_timestamp[mode],
-  // c->DigitBufferLength[mode]);
+  // timestamp=%i len=%i\n", g_now, call->id, mode, call->last_digit_timestamp[mode],
+  // call->DigitBufferLength[mode]);
   char evt[1024];
 
   for (int i = 0; i < call->media_count; i++) {
@@ -8140,10 +8140,10 @@ void check_digit_buffer(Call *call, int mode) {
 }
 
 void check_digit_buffers(long id, long val) {
-  Call *c = (Call *)val;
+  Call *call = (Call *)val;
 
-  check_digit_buffer(c, DTMF_MODE_RFC2833);
-  check_digit_buffer(c, DTMF_MODE_INBAND);
+  check_digit_buffer(call, DTMF_MODE_RFC2833);
+  check_digit_buffer(call, DTMF_MODE_INBAND);
 }
 
 static int digit_buffer_thread(void *arg) {
