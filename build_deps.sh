@@ -82,6 +82,24 @@ then
 fi
 
 
+cd $START_DIR/3rdParty
+if [[ ! -d pocketsphinx ]]
+then
+    POCKETSPHINX_VERSION=5.0.3
+    rm -f v${POCKETSPHINX_VERSION}.tar.gz
+    wget https://github.com/cmusphinx/pocketsphinx/archive/refs/tags/v${POCKETSPHINX_VERSION}.tar.gz 
+    tar xf v${POCKETSPHINX_VERSION}.tar.gz
+    rm -f v${POCKETSPHINX_VERSION}.tar.gz
+    mv pocketsphinx-${POCKETSPHINX_VERSION} pocketsphinx
+    cd pocketsphinx
+    cmake -S . -B build
+    cmake --build build
+
+    rm -fr ../pocketsphinx
+    mkdir -p ../pocketsphinx
+    cp -r model/ ../pocketsphinx/
+fi
+
 
 #cd $START_DIR/3rdParty
 #if [[ ! -d openssl ]]

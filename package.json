@@ -44,6 +44,7 @@
     "README.md",
     "DEV.md",
     "samples",
-    "prebuilds"
+    "prebuilds",
+    "pocketsphinx"
   ]
 }

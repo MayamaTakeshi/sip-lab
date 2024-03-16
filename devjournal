@@ -2561,3 +2561,32 @@ I tried forcing 160, and with this, nothing was detected.
 Then I tried forcing 320 and with this it worked (got 'are you' for kall and 'how are you' for kal16)
 So in the pocketsphinx_port.c we will need to buffer data to the desired frame_size before feeeding it to ps.
 
+-------------------------
+2024/03/16 takeshi:
+
+Regarding start_speech_recog, I tested debian 11 apt package but it is old and will not compile with code written for latest pocketsphinx version:
+
+$ apt install libpocketsphinx-dev
+
+$ gcc -o stream_from_file stream_from_file.c -I /usr/include/pocketsphinx/ -lpocketsphinx -lm
+stream_from_file.c: In function ‘main’:
+stream_from_file.c:78:5: error: unknown type name ‘ps_config_t’
+   78 |     ps_config_t *config;
+      |     ^~~~~~~~~~~
+stream_from_file.c:79:5: error: unknown type name ‘ps_endpointer_t’
+   79 |     ps_endpointer_t *ep;
+      |     ^~~~~~~~~~~~~~~
+
+$ cat /etc/issue
+Debian GNU/Linux 11 \n \l
+
+$ dpkg -l |grep pocketsphinx
+ii  libpocketsphinx-dev:amd64        0.8+5prealpha+1-13                    amd64        Speech recognition tool - front-end library development files
+ii  libpocketsphinx3:amd64           0.8+5prealpha+1-13                    amd64        Speech recognition tool - front-end library
+ii  pocketsphinx-en-us               0.8+5prealpha+1-13                    all          Speech recognition tool - US English language model
+
+So we will need to build pocketsphinx from source and link statically to it.
+
+Regarding the pocketsphinx model we will distribute the one that comes with it.
+We will store it within our module and index.js will set the path to it when start_speech_recog is specified without passing it.
+
