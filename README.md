@@ -12,12 +12,12 @@ It permits to:
   - send/receive fax (T.30 only)
   - send/receive MRCPv2 messages (TCP only, no TLS)
   - send/receive audio using SRTP
-  - generate speech from text into a call (using flite)
+  - do speech synth using flite
+  - do speech recog using pocketsphinx (but only works well with sampling rate of 16000)
 
 TODO:
   - add support for video playing/recording from/to file
-  - add support for speech recognition using pocketsphinx
-  - add support for speech synth/recog via websocket server
+  - add support for speech synth/recog via websocket server to permit to access Google Speech, Whisper, Amazon Poly etc.
   - add support for T.38 fax
   - add support for SIP over WebSocket
   - add support for WebRTC
