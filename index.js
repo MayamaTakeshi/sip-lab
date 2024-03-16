@@ -68,6 +68,24 @@ addon.call = {
   stop_fax: (c_id, params) => { return addon.call_stop_fax(c_id, JSON.stringify(params ? params : {})) },
   start_speech_synth: (c_id, params) => { return addon.call_start_speech_synth(c_id, JSON.stringify(params)) },
   stop_speech_synth: (c_id, params) => { return addon.call_stop_speech_synth(c_id, JSON.stringify(params ? params : {})) },
+
+  start_speech_recog: (c_id, params) => { 
+    var ps = {}
+    if(params) {
+      ps = {...params}
+    }
+
+    if(ps.model_path) {
+      process.env.POCKETSPHINX_PATH = ps.model_path
+      delete ps.model_path
+    } else {
+      process.env.POCKETSPHINX_PATH = __dirname + "/pocketsphinx/model"
+    }
+    return addon.call_start_speech_recog(c_id, JSON.stringify(ps))
+  },
+   
+  stop_speech_recog: (c_id, params) => { return addon.call_stop_speech_recog(c_id, JSON.stringify(params ? params : {})) },
+
   get_stream_stat: (c_id, params) => { return addon.call_get_stream_stat(c_id, JSON.stringify(params ? params : {})) },
   //refer: (c_id, params) => { return addon.call_refer(c_id, JSON.stringify(params)) },
   get_info: addon.call_get_info,

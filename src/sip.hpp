@@ -61,6 +61,9 @@ int pjw_call_start_speech_synth(long call_id, const char *json);
 
 int pjw_call_stop_speech_synth(long call_id, const char *json);
 
+int pjw_call_start_speech_recog(long call_id, const char *json);
+
+int pjw_call_stop_speech_recog(long call_id, const char *json);
 int pjw_call_get_stream_stat(long call_id, const char *json, char *out_stats);
 
 // int pjw_call_refer(long call_id, const char *json, long

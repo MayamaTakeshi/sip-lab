@@ -10,7 +10,7 @@ PJ_DEF(pj_status_t) pjmedia_pocketsphinx_port_create( pj_pool_t *pool,
 				unsigned channel_count,
 				unsigned samples_per_frame,
 				unsigned bits_per_sample,
-                void (*cb)(pjmedia_port*, void *user_data, char digit),
+                void (*cb)(pjmedia_port*, void *user_data, char *transcript),
                 void *cb_user_data,
 				pjmedia_port **p_port);
 

@@ -23,6 +23,7 @@
 #include "dtmfdet.h"
 #include "fax_port.h"
 #include "flite_port.h"
+#include "pocketsphinx_port.h"
 
 #include <ctime>
 
@@ -327,6 +328,7 @@ struct AudioEndpoint {
   ConfBridgePort dtmfdet_cbp;
   ConfBridgePort fax_cbp;
   ConfBridgePort flite_cbp;
+  ConfBridgePort pocketsphinx_cbp;
 };
 
 struct VideoEndpoint {
@@ -618,6 +620,7 @@ bool prepare_wav_player(Call *call, AudioEndpoint *ae, const char *file, unsigne
 bool prepare_wav_writer(Call *call, AudioEndpoint *ae, const char *file);
 bool prepare_fax(Call *call, AudioEndpoint *ae, bool is_sender, const char *file, unsigned flags);
 bool prepare_flite(Call *call, AudioEndpoint *ae, const char *voice, bool end_of_speech_event);
+bool prepare_pocketsphinx(Call *call, AudioEndpoint *ae);
 
 void prepare_error_event(ostringstream *oss, char *scope, char *details);
 // void prepare_pjsipcall_error_event(ostringstream *oss, char *scope, char
@@ -637,6 +640,7 @@ pj_status_t audio_endpoint_stop_play_wav(Call *call, AudioEndpoint *ae);
 pj_status_t audio_endpoint_stop_record_wav(Call *call, AudioEndpoint *ae);
 pj_status_t audio_endpoint_stop_fax(Call *call, AudioEndpoint *ae);
 pj_status_t audio_endpoint_stop_speech_synth(Call *call, AudioEndpoint *ae);
+pj_status_t audio_endpoint_stop_speech_recog(Call *call, AudioEndpoint *ae);
 
 static pjsip_module mod_tester = {
     NULL,
@@ -881,6 +885,22 @@ static void on_end_of_speech(pjmedia_port *port, void *user_data) {
   dispatch_event(evt);
 }
 
+static void on_speech_transcript(pjmedia_port*, void *user_data, char* transcript) {
+  if (g_shutting_down)
+    return;
+
+  long call_id;
+  if (!g_call_ids.get_id((long)user_data, call_id)) {
+    addon_log(
+        L_DBG,
+        "on_inband_dtmf: Failed to get call_id. Event will not be notified.\n");
+    return;
+  }
+ 
+  char evt[1024];
+  make_evt_speech_transcript(evt, sizeof(evt), call_id, transcript);
+  dispatch_event(evt);
+}
 
 void dispatch_event(const char *evt) {
   addon_log(L_DBG, "dispach_event called with evt=%s\n", evt);
@@ -3898,6 +3918,121 @@ out:
   return 0;
 }
 
+pj_status_t audio_endpoint_start_speech_recog(Call *call, AudioEndpoint *ae) {
+  pj_status_t status;
+
+  if(!ae->stream_cbp.port) {
+    set_error("stream port is not ready yet");
+    return -1;
+  }
+
+  // First stop and destroy existing port.
+  status = audio_endpoint_stop_speech_recog(call, ae);
+  if(status != PJ_SUCCESS) {
+    return -1;
+  }
+
+  if (!prepare_pocketsphinx(call, ae)) {
+    return -1;
+  }
+
+  return PJ_SUCCESS;
+}
+
+int pjw_call_start_speech_recog(long call_id, const char *json) {
+  PJW_LOCK();
+  clear_error();
+
+  long val;
+  Call *call;
+
+  pj_status_t status;
+
+  MediaEndpoint *me;
+  AudioEndpoint *ae;
+  int ae_count;
+  int res;
+
+  int media_id = -1;
+
+  char *voice;
+
+  char *text;
+
+  bool end_of_speech_event = false;
+
+  unsigned flags = 0;
+
+  bool no_loop = false;
+
+  char buffer[MAX_JSON_INPUT];
+
+  Document document;
+
+  const char *valid_params[] = {"media_id", ""};
+
+  if (!g_call_ids.get(call_id, val)) {
+    set_error("Invalid call_id");
+    goto out;
+  }
+  call = (Call *)val;
+
+  ae_count = count_media_by_type(call, ENDPOINT_TYPE_AUDIO);
+
+  if (ae_count == 0) {
+    set_error("No audio endpoint");
+    goto out;
+  }
+
+  if (!parse_json(document, json, buffer, MAX_JSON_INPUT)) {
+    goto out;
+  }
+
+  if (!validate_params(document, valid_params)) {
+    goto out;
+  }
+
+  res = json_get_int_param(document, "media_id", true, &media_id);
+  if (res <= 0) {
+    goto out;
+  }
+
+  if (NOT_FOUND_OPTIONAL == res) {
+    // start on all audio media endpoints
+    for (int i = 0; i < call->media_count; i++) {
+      MediaEndpoint *me = (MediaEndpoint *)call->media[i];
+      if (me->type == ENDPOINT_TYPE_AUDIO) {
+        AudioEndpoint *ae = (AudioEndpoint *)me->endpoint.audio;
+        status = audio_endpoint_start_speech_recog(call, ae);
+        if (status != PJ_SUCCESS) goto out;
+      }
+    }
+  } else {
+    if ((int)media_id >= call->media_count) {
+      set_error("invalid media_id");
+      goto out;
+    }
+
+    me = (MediaEndpoint *)call->media[media_id];
+    if (ENDPOINT_TYPE_AUDIO != me->type) {
+      set_error("media_endpoint is not audio endpoint");
+      goto out;
+    }
+
+    ae = (AudioEndpoint *)me->endpoint.audio;
+
+    audio_endpoint_start_speech_recog(call, ae);
+  }
+
+out:
+  PJW_UNLOCK();
+  if (pjw_errorstring[0]) {
+    return -1;
+  }
+
+  return 0;
+}
+
 pj_status_t call_stop_op_on_all_audio_endpoints(Call *call,
                                          audio_endpoint_stop_op_t op) {
   addon_log(L_DBG, "call_stop_op_on_audio_endpoints media_count=%d\n",
@@ -3991,6 +4126,10 @@ pj_status_t audio_endpoint_stop_speech_synth(Call *call, AudioEndpoint *ae) {
   return audio_endpoint_remove_port(call, ae, &ae->flite_cbp);
 }
 
+pj_status_t audio_endpoint_stop_speech_recog(Call *call, AudioEndpoint *ae) {
+  return audio_endpoint_remove_port(call, ae, &ae->pocketsphinx_cbp);
+}
+
 pj_status_t audio_endpoint_stop_play_wav(Call *call, AudioEndpoint *ae) {
   return audio_endpoint_remove_port(call, ae, &ae->wav_player_cbp);
 }
@@ -4007,6 +4146,10 @@ pj_status_t audio_endpoint_stop_fax(Call *call, AudioEndpoint *ae) {
 
 int pjw_call_stop_speech_synth(long call_id, const char *json) {
   return audio_endpoint_stop_op(call_id, json, audio_endpoint_stop_speech_synth);
+}
+
+int pjw_call_stop_speech_recog(long call_id, const char *json) {
+  return audio_endpoint_stop_op(call_id, json, audio_endpoint_stop_speech_recog);
 }
 
 int pjw_call_stop_play_wav(long call_id, const char *json) {
@@ -4503,6 +4646,7 @@ void close_audio_endpoint_ports_and_conf(Call *call, AudioEndpoint *ae) {
     audio_endpoint_remove_port(call, ae, &ae->dtmfdet_cbp);
     audio_endpoint_remove_port(call, ae, &ae->fax_cbp);
     audio_endpoint_remove_port(call, ae, &ae->flite_cbp);
+    audio_endpoint_remove_port(call, ae, &ae->pocketsphinx_cbp);
 
     if (ae->master_port) {
         status = pjmedia_master_port_stop(ae->master_port);
@@ -4738,6 +4882,10 @@ bool restart_media_stream(Call *call, MediaEndpoint *me,
 
     if(ae->flite_cbp.port) {
       if(!connect_feature_port_to_stream_port(call, ae, &ae->flite_cbp, CONNECTION_MODE_SOURCE)) return false;
+    }
+
+    if(ae->pocketsphinx_cbp.port) {
+      if(!connect_feature_port_to_stream_port(call, ae, &ae->pocketsphinx_cbp, CONNECTION_MODE_SINK)) return false;
     }
   }
   
@@ -6728,6 +6876,36 @@ bool prepare_flite(Call *call, AudioEndpoint *ae, const char *voice, bool end_of
   return connect_feature_port_to_stream_port(call, ae, &ae->flite_cbp, CONNECTION_MODE_SOURCE);
 }
 
+bool prepare_pocketsphinx(Call *call, AudioEndpoint *ae) {
+  printf("prepare_pocketsphinx call.id=%i\n", call->id);
+  pj_status_t status;
+
+  if(ae->pocketsphinx_cbp.port) {
+    printf("already prepared\n");
+    return true;
+  }
+
+  status = pjmedia_pocketsphinx_port_create(
+        call->inv->pool, PJMEDIA_PIA_SRATE(&ae->stream_cbp.port->info),
+        PJMEDIA_PIA_CCNT(&ae->stream_cbp.port->info),
+        PJMEDIA_PIA_SPF(&ae->stream_cbp.port->info),
+        PJMEDIA_PIA_BITS(&ae->stream_cbp.port->info), 
+        on_speech_transcript,
+        call,
+        &ae->pocketsphinx_cbp.port);
+  if (status != PJ_SUCCESS) {
+    set_error("pjmedia_pocketsphinx_port_create failed");
+    return false;
+  }
+
+  status = pjmedia_conf_add_port(ae->conf, call->inv->pool, ae->pocketsphinx_cbp.port, NULL, &ae->pocketsphinx_cbp.slot);
+  if (status != PJ_SUCCESS) {
+    set_error("pjmedia_conf_add_port failed");
+    return false;
+  }
+
+  return connect_feature_port_to_stream_port(call, ae, &ae->pocketsphinx_cbp, CONNECTION_MODE_SINK);
+}
 
 void on_rx_notify(pjsip_evsub *sub, pjsip_rx_data *rdata, int *p_st_code,
                   pj_str_t **p_st_text, pjsip_hdr *res_hdr,

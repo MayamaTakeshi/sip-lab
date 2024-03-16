@@ -92,12 +92,13 @@ then
     rm -f v${POCKETSPHINX_VERSION}.tar.gz
     mv pocketsphinx-${POCKETSPHINX_VERSION} pocketsphinx
     cd pocketsphinx
+    sed -i '/include(GNUInstallDirs)/a \\nset(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC")' CMakeLists.txt
     cmake -S . -B build
     cmake --build build
 
-    rm -fr ../pocketsphinx
-    mkdir -p ../pocketsphinx
-    cp -r model/ ../pocketsphinx/
+    rm -fr ../../pocketsphinx
+    mkdir -p ../../pocketsphinx
+    cp -r model/ ../../pocketsphinx/
 fi
 
 
