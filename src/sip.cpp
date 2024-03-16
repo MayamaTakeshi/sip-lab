@@ -893,7 +893,7 @@ static void on_speech_transcript(pjmedia_port*, void *user_data, char* transcrip
   if (!g_call_ids.get_id((long)user_data, call_id)) {
     addon_log(
         L_DBG,
-        "on_inband_dtmf: Failed to get call_id. Event will not be notified.\n");
+        "on_speech_transcript: Failed to get call_id. Event will not be notified.\n");
     return;
   }
  

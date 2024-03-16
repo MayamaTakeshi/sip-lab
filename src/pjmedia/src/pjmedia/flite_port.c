@@ -191,12 +191,12 @@ static pj_status_t flite_get_frame(pjmedia_port *port,
     struct flite_t *flite = (struct flite_t*)port;
 
     if(!flite->w) {
-        printf("flite no data\n");
+        //printf("flite no data\n");
         frame->type = PJMEDIA_FRAME_TYPE_NONE;
         return PJ_SUCCESS;
     }
 
-    printf("written_samples=%i num_samples=%i\n", flite->written_samples, flite->w->num_samples);
+    //printf("written_samples=%i num_samples=%i\n", flite->written_samples, flite->w->num_samples);
     if (flite->written_samples + PJMEDIA_PIA_SPF(&port->info) > (unsigned)flite->w->num_samples) {
         printf("flite end of speech\n");
 
@@ -232,7 +232,7 @@ static pj_status_t flite_get_frame(pjmedia_port *port,
     memcpy(frame->buf, flite->w->samples + flite->written_samples, PJMEDIA_PIA_SPF(&port->info)*2);
     flite->written_samples += PJMEDIA_PIA_SPF(&port->info);
     frame->type = PJMEDIA_FRAME_TYPE_AUDIO;
-    printf("flite data written samples=%i\n", PJMEDIA_PIA_SPF(&port->info));
+    //printf("flite data written samples=%i\n", PJMEDIA_PIA_SPF(&port->info));
 
     return PJ_SUCCESS;
 }

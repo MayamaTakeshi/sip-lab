@@ -57,6 +57,8 @@ struct pocketsphinx_t
     pj_bool_t subscribed;
     void (*cb)(pjmedia_port*, void*, char*);
     void *cb_user_data;
+
+    char transcript[4096];
 };
 
 static pj_status_t speech_on_event(pjmedia_event *event,
@@ -66,7 +68,7 @@ static pj_status_t speech_on_event(pjmedia_event *event,
 
     if (event->type == PJMEDIA_EVENT_CALLBACK) {
         if (port->cb)
-            (*port->cb)(&port->base, port->base.port_data.pdata, "transcript");
+            (*port->cb)(&port->base, port->cb_user_data, port->transcript);
     }
     
     return PJ_SUCCESS;
@@ -127,6 +129,7 @@ PJ_DEF(pj_status_t) pjmedia_pocketsphinx_port_create( pj_pool_t *pool,
     TRACE_((THIS_FILE, "pocketsphinx port created: %u/%u/%u/%u", clock_rate, 
 	    channel_count, samples_per_frame, bits_per_sample));
 
+    printf("pocketsphinx_create in_spf=%i out_spf=%i\n", port->in_spf, port->out_spf);
     *p_port = &port->base; 
     return PJ_SUCCESS;
 }
@@ -138,21 +141,45 @@ void feed(struct pocketsphinx_t *port, short *frame) {
     if (speech != NULL) {
         const char *hyp;
         if (!prev_in_speech) {
-            printf("Speech start at %.2f\n", ps_endpointer_speech_start(port->ep));
+            printf("pocketsphinx speech start at %.2f\n", ps_endpointer_speech_start(port->ep));
             ps_start_utt(port->decoder);
         }
         if (ps_process_raw(port->decoder, speech, port->out_spf, FALSE, FALSE) < 0) {
-            TRACE_(("ps_process_raw() failed\n"));
+            printf("pocketsphinx ps_process_raw() failed\n");
             return;
         }
         if ((hyp = ps_get_hyp(port->decoder, NULL)) != NULL) {
-            printf("PARTIAL RESULT: %s\n", hyp);
+            //printf("pocketsphinx partial result: %s\n", hyp);
         }
         if (!ps_endpointer_in_speech(port->ep)) {
-            printf(stdout, "Speech end at %.2f\n", ps_endpointer_speech_end(port->ep));
+            printf("Speech end at %.2f\n", ps_endpointer_speech_end(port->ep));
             ps_end_utt(port->decoder);
             if ((hyp = ps_get_hyp(port->decoder, NULL)) != NULL) {
-                printf("%s\n", hyp);
+                printf("pocketsphinx speech: %s\n", hyp);
+                if(strlen(hyp) == 0) return;
+
+                strncpy(port->transcript, hyp, sizeof(port->transcript) - 1);
+
+                // Ensure the destination string is null-terminated
+                port->transcript[sizeof(port->transcript) - 1] = '\0';
+
+                if(port->cb) {
+                    if (!port->subscribed) {
+                        pj_status_t status = pjmedia_event_subscribe(NULL, &speech_on_event,
+                                                         port, port);
+                        port->subscribed = (status == PJ_SUCCESS)? PJ_TRUE:
+                                            PJ_FALSE;
+                    }
+
+                    if (port->subscribed) {
+                        pjmedia_event event;
+
+                        pjmedia_event_init(&event, PJMEDIA_EVENT_CALLBACK,
+                                           NULL, port);
+                        pjmedia_event_publish(NULL, port, &event,
+                                              PJMEDIA_EVENT_PUBLISH_POST_EVENT);
+                    }
+                }
             }
         }
     }
@@ -197,11 +224,13 @@ static pj_status_t pocketsphinx_put_frame(pjmedia_port *this_port,
     struct pocketsphinx_t *port = (struct pocketsphinx_t*) this_port;
 
     if(port->in_spf == port->out_spf) {
+        //printf("feed\n");
         feed(port, (short*)frame->buf);
         return;
     }
 
     if(port->in_spf > port->out_spf) {
+        //printf("feed_all\n");
         feed_all(port, frame);
         return;
     }
@@ -209,11 +238,13 @@ static pj_status_t pocketsphinx_put_frame(pjmedia_port *this_port,
     unsigned samples = frame->size / 2;
     if(samples + port->sample_count >= port->out_spf) {
         // enough to feed once
+        //printf("feed_one\n");
         feed_one(port, frame);
         return;
     }
             
     // not enough to feed. 
+    //printf("not enough to feed\n");
     memcpy((short*)port->samples + port->sample_count, frame->buf, samples * sizeof(short));
     port->sample_count += samples;
 
@@ -231,6 +262,11 @@ static pj_status_t pocketsphinx_on_destroy(pjmedia_port *this_port)
     ps_free(port->decoder);
     ps_config_free(port->config);
  
+    if (port->subscribed) {
+        pjmedia_event_unsubscribe(NULL, &speech_on_event, port, port);
+        port->subscribed = PJ_FALSE;
+    }
+
     return PJ_SUCCESS;
 }
 
