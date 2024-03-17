@@ -64,6 +64,9 @@ do
         duration=$(echo "$end_time - $start_time" | bc)
 	formatted_duration=$(printf "%.2f seconds" $duration)
 	successful_tests+=("$i: duration=$formatted_duration")
+
+	echo
+	echo "$i failed"
     fi
 done
 

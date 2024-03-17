@@ -45,6 +45,7 @@
     "DEV.md",
     "samples",
     "prebuilds",
-    "pocketsphinx"
+    "pocketsphinx",
+    "runtests"
   ]
 }

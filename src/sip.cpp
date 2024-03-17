@@ -4126,14 +4126,6 @@ out:
   return 0;
 }
 
-pj_status_t audio_endpoint_stop_speech_synth(Call *call, AudioEndpoint *ae) {
-  return audio_endpoint_remove_port(call, ae, &ae->feature_cbps[FP_SPEECH_SYNTH]);
-}
-
-pj_status_t audio_endpoint_stop_speech_recog(Call *call, AudioEndpoint *ae) {
-  return audio_endpoint_remove_port(call, ae, &ae->feature_cbps[FP_SPEECH_RECOG]);
-}
-
 pj_status_t audio_endpoint_stop_play_wav(Call *call, AudioEndpoint *ae) {
   return audio_endpoint_remove_port(call, ae, &ae->feature_cbps[FP_WAV_PLAYER]);
 }
@@ -4146,15 +4138,14 @@ pj_status_t audio_endpoint_stop_fax(Call *call, AudioEndpoint *ae) {
   return audio_endpoint_remove_port(call, ae, &ae->feature_cbps[FP_FAX]);
 }
 
-
-
-int pjw_call_stop_speech_synth(long call_id, const char *json) {
-  return audio_endpoint_stop_op(call_id, json, audio_endpoint_stop_speech_synth);
+pj_status_t audio_endpoint_stop_speech_synth(Call *call, AudioEndpoint *ae) {
+  return audio_endpoint_remove_port(call, ae, &ae->feature_cbps[FP_SPEECH_SYNTH]);
 }
 
-int pjw_call_stop_speech_recog(long call_id, const char *json) {
-  return audio_endpoint_stop_op(call_id, json, audio_endpoint_stop_speech_recog);
+pj_status_t audio_endpoint_stop_speech_recog(Call *call, AudioEndpoint *ae) {
+  return audio_endpoint_remove_port(call, ae, &ae->feature_cbps[FP_SPEECH_RECOG]);
 }
+
 
 int pjw_call_stop_play_wav(long call_id, const char *json) {
   return audio_endpoint_stop_op(call_id, json, audio_endpoint_stop_play_wav);
@@ -4166,6 +4157,14 @@ int pjw_call_stop_record_wav(long call_id, const char *json) {
 
 int pjw_call_stop_fax(long call_id, const char *json) {
   return audio_endpoint_stop_op(call_id, json, audio_endpoint_stop_fax);
+}
+
+int pjw_call_stop_speech_synth(long call_id, const char *json) {
+  return audio_endpoint_stop_op(call_id, json, audio_endpoint_stop_speech_synth);
+}
+
+int pjw_call_stop_speech_recog(long call_id, const char *json) {
+  return audio_endpoint_stop_op(call_id, json, audio_endpoint_stop_speech_recog);
 }
 
 
@@ -6883,7 +6882,7 @@ bool prepare_flite(Call *call, AudioEndpoint *ae, const char *voice, bool end_of
 bool prepare_pocketsphinx(Call *call, AudioEndpoint *ae) {
   pj_status_t status;
 
-  ConfBridgePort *fp = &ae->feature_cbps[FP_SPEECH_SYNTH];
+  ConfBridgePort *fp = &ae->feature_cbps[FP_SPEECH_RECOG];
 
   if(fp->port) {
     printf("already prepared\n");
