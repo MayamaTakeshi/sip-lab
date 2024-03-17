@@ -24,6 +24,7 @@
 #include <pj/assert.h>
 #include <pj/pool.h>
 #include <pj/string.h>
+#include <pj/log.h>
 
 #define SIGNATURE   PJMEDIA_SIGNATURE('w', 's', 's', 'p')
 #define THIS_FILE   "ws_speech_port.c"
@@ -131,9 +132,7 @@ static pj_bool_t on_rx_msg(pj_websock_t *c,
 static void on_state_change(pj_websock_t *c, int state)
 {
     char buf[1000];
-    PJ_LOG(4, (THIS_FILE, "%s() %s %s", __FUNCTION__,
-               pj_websock_print(c, buf, sizeof(buf)),
-               pj_websock_state_str(state)));
+    printf("%s() %s %s", __FUNCTION__, pj_websock_print(c, buf, sizeof(buf)), pj_websock_state_str(state));
 }
 
 
@@ -156,9 +155,13 @@ PJ_DEF(pj_status_t) pjmedia_ws_speech_port_create(pj_pool_t *pool,
 				unsigned samples_per_frame,
 				unsigned bits_per_sample,
                 struct pj_websock_endpoint *ws_endpt,
-                char *server_url,
+                const char *server_url,
+                const char *voice,
+                const char *text,
                 void (*cb)(pjmedia_port*, void *user_data, enum ws_speech_event, char *transcript),
                 void *cb_user_data,
+                unsigned flags,
+                pj_bool_t end_of_speech_event,
 				pjmedia_port **p_port)
 {
     struct ws_speech_t *port;
@@ -200,8 +203,7 @@ PJ_DEF(pj_status_t) pjmedia_ws_speech_port_create(pj_pool_t *pool,
         pj_websock_connect(port->ws_endpt, server_url, &ws_cb, port, &hdr, 1, &port->wc);
     }
 
-    TRACE_((THIS_FILE, "ws_speech port created: %u/%u/%u/%u", clock_rate, 
-	    channel_count, samples_per_frame, bits_per_sample));
+    printf("ws_speech port created: %u/%u/%u/%u", clock_rate, channel_count, samples_per_frame, bits_per_sample);
 
     *p_port = &port->base; 
     return PJ_SUCCESS;
