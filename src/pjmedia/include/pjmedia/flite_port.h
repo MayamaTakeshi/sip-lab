@@ -5,7 +5,7 @@
 
 PJ_BEGIN_DECL
 
-enum pjmedia_filte_option
+enum pjmedia_flite_option
 {
   PJMEDIA_SPEECH_NO_LOOP = 1
 };

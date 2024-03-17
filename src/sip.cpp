@@ -20,10 +20,13 @@
 #include "idmanager.hpp"
 #include "event_templates.hpp"
 
+#include "websock.h"
+
 #include "dtmfdet.h"
 #include "fax_port.h"
 #include "flite_port.h"
 #include "pocketsphinx_port.h"
+#include "ws_speech_port.h"
 
 #include <ctime>
 
@@ -60,9 +63,14 @@ IdManager g_dialog_ids(IDS_MAX);
 #define DEFAULT_CODEC_QUALITY (5)
 
 static pjsip_endpoint *g_sip_endpt;
-static pj_caching_pool cp;
+static pj_caching_pool g_cp;
 static pj_pool_t *g_pool;
 static pjmedia_endpt *g_med_endpt;
+static pj_timer_heap_t *g_timer_heap = NULL;
+static pj_websock_endpoint *g_ws_endpt = NULL;
+
+#define CERT_FILE "./cert/test.pem"
+#define CERT_KEY  "./cert/test.key"
 
 // static pj_thread_t *g_thread = NULL;
 // static pj_bool_t g_thread_quit_flag;
@@ -623,8 +631,8 @@ bool prepare_dtmfdet(Call *call, AudioEndpoint *ae);
 bool prepare_wav_player(Call *call, AudioEndpoint *ae, const char *file, unsigned flags, bool end_of_file_event);
 bool prepare_wav_writer(Call *call, AudioEndpoint *ae, const char *file);
 bool prepare_fax(Call *call, AudioEndpoint *ae, bool is_sender, const char *file, unsigned flags);
-bool prepare_flite(Call *call, AudioEndpoint *ae, const char *voice, bool end_of_speech_event);
-bool prepare_pocketsphinx(Call *call, AudioEndpoint *ae);
+bool prepare_speech_synth(Call *call, AudioEndpoint *ae, const char *voice, bool end_of_speech_event);
+bool prepare_speech_recog(Call *call, AudioEndpoint *ae);
 
 void prepare_error_event(ostringstream *oss, char *scope, char *details);
 // void prepare_pjsipcall_error_event(ostringstream *oss, char *scope, char
@@ -1232,27 +1240,37 @@ int __pjw_init() {
     return 1;
   }
 
+  unsigned log_decor = pj_log_get_decor();
+  log_decor |= PJ_LOG_HAS_LEVEL_TEXT;
+  log_decor |= PJ_LOG_HAS_SENDER;
+  pj_log_set_decor(log_decor);
+
+
   status = pjlib_util_init();
   if (status != PJ_SUCCESS) {
     addon_log(L_DBG, "pj_lib_util_init failed\n");
     return 1;
   }
 
+  pj_time_val now;
+  pj_gettimeofday(&now);
+  pj_srand((unsigned)now.sec);
+
   pthread_mutex_init(&g_mutex, NULL);
 
   pj_log_set_level(0);
 
-  pj_caching_pool_init(&cp, &pj_pool_factory_default_policy, 0);
+  pj_caching_pool_init(&g_cp, &pj_pool_factory_default_policy, 0);
 
   char *sip_endpt_name = (char *)"mysip";
 
-  status = pjsip_endpt_create(&cp.factory, sip_endpt_name, &g_sip_endpt);
+  status = pjsip_endpt_create(&g_cp.factory, sip_endpt_name, &g_sip_endpt);
   if (status != PJ_SUCCESS) {
     addon_log(L_DBG, "pjsip_endpt_create failed\n");
     return 1;
   }
 
-  g_pool = pj_pool_create(&cp.factory, "tester", 1000, 1000, NULL);
+  g_pool = pj_pool_create(&g_cp.factory, "tester", 1000, 1000, NULL);
 
   /* Create event manager */
   status = pjmedia_event_mgr_create(g_pool, 0, NULL);
@@ -1351,10 +1369,10 @@ int __pjw_init() {
     return 1;
   }
 #if PJ_HAS_THREADS
-  status = pjmedia_endpt_create2(&cp.factory, NULL, 1, &g_med_endpt);
+  status = pjmedia_endpt_create2(&g_cp.factory, NULL, 1, &g_med_endpt);
 #else
   status = pjmedia_endpt_create2(
-      &cp.factory, pjsip_endpt_get_ioqueue(g_sip_endpt), 0, &g_med_endpt);
+      &g_cp.factory, pjsip_endpt_get_ioqueue(g_sip_endpt), 0, &g_med_endpt);
 #endif
   if (status != PJ_SUCCESS) {
     addon_log(L_DBG, "pjmedia_endpt_create failed\n");
@@ -1444,6 +1462,33 @@ int __pjw_init() {
 
   if (!start_digit_buffer_thread()) {
     addon_log(L_DBG, "start_digit_buffer_thread() failed\n");
+    return 1;
+  }
+
+  status = pj_timer_heap_create(g_pool, 128, &g_timer_heap);
+  if (status != PJ_SUCCESS) {
+    addon_log(L_DBG, "create timer heap error");
+    return 1;
+  } 
+
+
+  pj_websock_ssl_cert cert;
+  pj_bzero(&cert, sizeof(cert));
+  cert.ca_file = pj_str(CERT_FILE);
+  cert.cert_file = pj_str(CERT_FILE);
+  cert.private_file = pj_str(CERT_KEY);
+
+  pj_websock_endpt_cfg opt;
+  pj_websock_endpt_cfg_default(&opt);
+  opt.pf = &g_cp.factory;
+  opt.ioq = pjsip_endpt_get_ioqueue(g_sip_endpt);
+  opt.timer_heap = g_timer_heap;
+  opt.cert = &cert;
+  opt.async_cnt = 3;
+
+  status = pj_websock_endpt_create(&opt, &g_ws_endpt);
+  if (status != PJ_SUCCESS) {
+    addon_log(L_DBG, "create websock endpoint error");
     return 1;
   }
 
@@ -3789,7 +3834,7 @@ pj_status_t audio_endpoint_start_speech_synth(Call *call, AudioEndpoint *ae, con
     return -1;
   }
 
-  if (!prepare_flite(call, ae, voice, end_of_speech_event)) {
+  if (!prepare_speech_synth(call, ae, voice, end_of_speech_event)) {
     return -1;
   }
 
@@ -3936,7 +3981,7 @@ pj_status_t audio_endpoint_start_speech_recog(Call *call, AudioEndpoint *ae) {
     return -1;
   }
 
-  if (!prepare_pocketsphinx(call, ae)) {
+  if (!prepare_speech_recog(call, ae)) {
     return -1;
   }
 
@@ -6838,7 +6883,7 @@ bool prepare_fax(Call *call, AudioEndpoint *ae, bool is_sender, const char *file
   return connect_feature_port_to_stream_port(call, ae, fp);
 }
 
-bool prepare_flite(Call *call, AudioEndpoint *ae, const char *voice, bool end_of_speech_event) {
+bool prepare_speech_synth(Call *call, AudioEndpoint *ae, const char *voice, bool end_of_speech_event) {
   pj_status_t status;
 
   ConfBridgePort *fp = &ae->feature_cbps[FP_SPEECH_SYNTH];
@@ -6879,7 +6924,7 @@ bool prepare_flite(Call *call, AudioEndpoint *ae, const char *voice, bool end_of
   return connect_feature_port_to_stream_port(call, ae, fp);
 }
 
-bool prepare_pocketsphinx(Call *call, AudioEndpoint *ae) {
+bool prepare_speech_recog(Call *call, AudioEndpoint *ae) {
   pj_status_t status;
 
   ConfBridgePort *fp = &ae->feature_cbps[FP_SPEECH_RECOG];
@@ -8354,7 +8399,7 @@ static int digit_buffer_thread(void *arg) {
 bool start_digit_buffer_thread() {
   pj_status_t status;
   pj_pool_t *pool =
-      pj_pool_create(&cp.factory, "digit_buffer_checker", 1000, 1000, NULL);
+      pj_pool_create(&g_cp.factory, "digit_buffer_checker", 1000, 1000, NULL);
   pj_thread_t *t;
   status = pj_thread_create(pool, "digit_buffer_checker", &digit_buffer_thread,
                             NULL, 0, 0, &t);
