@@ -5059,19 +5059,6 @@ static void on_media_update(pjsip_inv_session *inv, pj_status_t status) {
 static void on_state_changed(pjsip_inv_session *inv, pjsip_event *e) {
   addon_log(L_DBG, "on_state_changed\n");
 
-  // The below is just to document know-how for future improvements
-  /*
-  addon_log(L_DBG, "on_state_changed e->type=%i\n", e->type);
-  if(e->type == PJSIP_EVENT_TSX_STATE && e->body.tsx_state.type ==
-  PJSIP_EVENT_RX_MSG) {
-          // Read http://trac.pjsip.org/repos/wiki/SIP_Message_Buffer_Event
-          addon_log(L_DBG, "Msg=%s\n",
-  e->body.tsx_state.src.rdata->msg_info.msg_buf);
-  }
-  */
-
-  printf("e->type=%d\n", e->type);
-
   /*
       pj_str_t *method_name = &rdata->msg_info.msg->line.req.method.name;
       addon_log(L_DBG, "on_rx_request %.*s\n", method_name->slen,
@@ -5129,7 +5116,7 @@ static void on_state_changed(pjsip_inv_session *inv, pjsip_event *e) {
     char evt[2048];
     int sip_msg_len = 0;
     char *sip_msg = (char *)"";
-    if (e->type == PJSIP_EVENT_TSX_STATE) {
+    if(e->type == PJSIP_EVENT_TSX_STATE && e->body.tsx_state.type == PJSIP_EVENT_RX_MSG) {
       sip_msg_len = e->body.rx_msg.rdata->msg_info.len;
       sip_msg = e->body.rx_msg.rdata->msg_info.msg_buf;
     }
