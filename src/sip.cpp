@@ -2814,6 +2814,7 @@ void build_transport_tag_from_pjsip_transport(char *dest, pjsip_transport *t) {
   assert(t->local_name.host.slen < 16);
   strncpy(address, t->local_name.host.ptr, t->local_name.host.slen);
   address[t->local_name.host.slen] = 0;
+  printf("build_transport_tag_from_pjsip_transport address=%s\n", address);
 
   if (t->key.type == PJSIP_TRANSPORT_UDP) {
     type = "udp";
@@ -5357,7 +5358,7 @@ static pj_bool_t on_rx_request(pjsip_rx_data *rdata) {
 
     long transport_id;
 
-    // printf("tag=%s\n", tag);
+    //printf("on_rx_request transport_tag=%s\n", tag);
 
     TransportMap::iterator iter = g_TransportMap.find(tag);
     if (iter != g_TransportMap.end()) {
@@ -5468,7 +5469,7 @@ static pj_bool_t on_rx_request(pjsip_rx_data *rdata) {
 
   long transport_id;
 
-  // printf("tag=%s\n", tag);
+  printf("on_rx_request INVITE transport_tag=%s\n", tag);
 
   TransportMap::iterator iter = g_TransportMap.find(tag);
   if (iter != g_TransportMap.end()) {
