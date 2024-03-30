@@ -1,4 +1,5 @@
 #include <arpa/inet.h>
+#include <netdb.h>
 
 #include "sip.hpp"
 
@@ -2800,9 +2801,47 @@ bool dlg_set_transport_by_t(Transport *t, pjsip_dialog *dlg) {
   return true;
 }
 
-void build_transport_tag(char *dest, const char *type, const char *address,
+bool is_ip_address(const char *hostname) {
+    struct sockaddr_in sa;
+    return inet_pton(AF_INET, hostname, &(sa.sin_addr)) != 0;
+}
+
+void build_transport_tag(char *dest, const char *type, const char *hostname,
                          int port) {
-  sprintf(dest, "%s:%s:%d", type, address, port);
+  struct addrinfo hints, * res, *p;
+  
+  if(is_ip_address(hostname)) {
+    sprintf(dest, "%s:%s:%d", type, hostname, port);
+    return;
+  }
+
+  memset(&hints, 0, sizeof(hints));
+  hints.ai_family = AF_UNSPEC; // AF_INET or AF_INET6 to force version
+  hints.ai_socktype = SOCK_STREAM;
+
+  // Resolve the domain name
+  int status = getaddrinfo(hostname, NULL, &hints, &res);
+  if (status != 0) {
+    printf("build_transport_tag getaddrinfo: %s\n", gai_strerror(status));
+    sprintf(dest, "%s:%s:%d", type, hostname, port);
+  } else {
+    for (p = res; p != NULL; p = p->ai_next) {
+      void *addr;
+      if (p->ai_family == AF_INET) { // IPv4
+        struct sockaddr_in *ipv4 = (struct sockaddr_in *)p->ai_addr;
+        addr = &(ipv4->sin_addr);
+      } else { // IPv6
+        struct sockaddr_in6 *ipv6 = (struct sockaddr_in6 *)p->ai_addr;
+        addr = &(ipv6->sin6_addr);
+      }
+      char ipstr[INET6_ADDRSTRLEN];
+      inet_ntop(p->ai_family, addr, ipstr, sizeof(ipstr));
+      sprintf(dest, "%s:%s:%d", type, ipstr, port);
+      break;
+    }
+  }
+
+  freeaddrinfo(res);
 }
 
 void build_transport_tag_from_pjsip_transport(char *dest, pjsip_transport *t) {
