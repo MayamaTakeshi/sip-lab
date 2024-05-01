@@ -1510,8 +1510,8 @@ pjsip_transport *create_udp_transport(pjsip_endpoint *sip_endpt,
   // pj_status_t status;
   pjsip_transport *transport;
 
-  int port = 5060;
   for (int i = 0; i < 1000; ++i) {
+    int port = 5060;
     port += i;
     transport = allocate_udp_transport(sip_endpt, ipaddr, port);
     if (transport) {
@@ -1558,8 +1558,8 @@ pjsip_tpfactory *create_tcp_tpfactory(pjsip_endpoint *sip_endpt,
   // pj_status_t status;
   pjsip_tpfactory *tpfactory;
 
-  int port = 6060;
   for (int i = 0; i < 1000; ++i) {
+    int port = 6060;
     port += i;
     tpfactory = allocate_tcp_tpfactory(sip_endpt, ipaddr, port);
     if (tpfactory) {
@@ -1609,8 +1609,8 @@ pjsip_tpfactory *create_tls_tpfactory(pjsip_endpoint *sip_endpt,
   // pj_status_t status;
   pjsip_tpfactory *tpfactory;
 
-  int port = 6060;
   for (int i = 0; i < 1000; ++i) {
+    int port = 6060;
     port += i;
     tpfactory = allocate_tls_tpfactory(sip_endpt, ipaddr, port);
     if (tpfactory) {
