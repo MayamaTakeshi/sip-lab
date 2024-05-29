@@ -4684,10 +4684,6 @@ void close_audio_endpoint_ports_and_conf(Call *call, AudioEndpoint *ae) {
 
     audio_endpoint_remove_port(call, ae, &ae->stream_cbp);
 
-    for(int i=0 ; i<MAX_FP ; i++) {
-        audio_endpoint_remove_port(call, ae, &ae->feature_cbps[i]);
-    }
-
     if (ae->master_port) {
         status = pjmedia_master_port_stop(ae->master_port);
         if(status != PJ_SUCCESS) {
@@ -4698,6 +4694,10 @@ void close_audio_endpoint_ports_and_conf(Call *call, AudioEndpoint *ae) {
             addon_log(L_DBG, "pjmedia_master_port_destroy failed\n");
         }
         ae->master_port = NULL;
+    }
+
+    for(int i=0 ; i<MAX_FP ; i++) {
+        audio_endpoint_remove_port(call, ae, &ae->feature_cbps[i]);
     }
 
     if (ae->conf) {
