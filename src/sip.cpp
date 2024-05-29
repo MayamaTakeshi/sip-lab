@@ -4682,8 +4682,6 @@ bool start_tcp_media(Call *call, MediaEndpoint *me,
 void close_audio_endpoint_ports_and_conf(Call *call, AudioEndpoint *ae) {
     pj_status_t status;
 
-    audio_endpoint_remove_port(call, ae, &ae->stream_cbp);
-
     if (ae->master_port) {
         status = pjmedia_master_port_stop(ae->master_port);
         if(status != PJ_SUCCESS) {
@@ -4695,6 +4693,8 @@ void close_audio_endpoint_ports_and_conf(Call *call, AudioEndpoint *ae) {
         }
         ae->master_port = NULL;
     }
+
+    audio_endpoint_remove_port(call, ae, &ae->stream_cbp);
 
     for(int i=0 ; i<MAX_FP ; i++) {
         audio_endpoint_remove_port(call, ae, &ae->feature_cbps[i]);
@@ -4750,6 +4750,19 @@ bool restart_media_stream(Call *call, MediaEndpoint *me,
 
   pjmedia_port *old_port = ae->stream_cbp.port;
   pjmedia_port *new_port;
+
+  bool master_port_was_stopped = false;
+
+  if(ae->master_port) {
+    status = pjmedia_master_port_stop(ae->master_port);
+    if(status != PJ_SUCCESS) {
+      make_evt_media_update(evt, sizeof(evt), call->id,
+                           "setup_failed (pjmedia_master_port_stop failed)", "");
+      dispatch_event(evt);
+      return false;
+    }
+    master_port_was_stopped = true;
+  }
 
   status =
       pjmedia_stream_info_from_sdp(&stream_info, call->inv->dlg->pool,
@@ -4906,7 +4919,17 @@ bool restart_media_stream(Call *call, MediaEndpoint *me,
         }
     }
   }
-  
+
+  if(master_port_was_stopped) {
+    status = pjmedia_master_port_start(ae->master_port);
+    if(status != PJ_SUCCESS) {
+      make_evt_media_update(evt, sizeof(evt), call->id,
+                             "setup_failed (pjmedia_master_port_start failed)", "");
+      dispatch_event(evt);
+      return false;
+    }
+  }
+     
   return true;
 }
 
