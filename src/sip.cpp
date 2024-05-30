@@ -638,7 +638,7 @@ bool prepare_wav_player(Call *call, AudioEndpoint *ae, const char *file, unsigne
 bool prepare_wav_writer(Call *call, AudioEndpoint *ae, const char *file);
 bool prepare_fax(Call *call, AudioEndpoint *ae, bool is_sender, const char *file, unsigned flags);
 bool prepare_speech_synth(Call *call, AudioEndpoint *ae, const char *server_url, const char *engine, const char *voice, const char *language, const char *text, int times);
-bool prepare_speech_recog(Call *call, AudioEndpoint *ae);
+bool prepare_speech_recog(Call *call, AudioEndpoint *ae, const char *server_url, const char *engine, const char *language);
 
 void prepare_error_event(ostringstream *oss, char *scope, char *details);
 // void prepare_pjsipcall_error_event(ostringstream *oss, char *scope, char
@@ -4053,7 +4053,7 @@ out:
   return 0;
 }
 
-pj_status_t audio_endpoint_start_speech_recog(Call *call, AudioEndpoint *ae) {
+pj_status_t audio_endpoint_start_speech_recog(Call *call, AudioEndpoint *ae, const char *server_url, const char *engine, const char *language) {
   pj_status_t status;
 
   if(!ae->stream_cbp.port) {
@@ -4067,7 +4067,7 @@ pj_status_t audio_endpoint_start_speech_recog(Call *call, AudioEndpoint *ae) {
     return -1;
   }
 
-  if (!prepare_speech_recog(call, ae)) {
+  if (!prepare_speech_recog(call, ae, server_url, engine, language)) {
     return -1;
   }
 
@@ -4090,11 +4090,17 @@ int pjw_call_start_speech_recog(long call_id, const char *json) {
 
   int media_id = -1;
 
+  char *server_url = NULL;
+
+  char *engine = NULL;
+
+  char *language = NULL;
+
   char buffer[MAX_JSON_INPUT];
 
   Document document;
 
-  const char *valid_params[] = {"media_id", ""};
+  const char *valid_params[] = {"server_url", "engine", "language", "media_id", ""};
 
   if (!g_call_ids.get(call_id, val)) {
     set_error("Invalid call_id");
@@ -4117,9 +4123,39 @@ int pjw_call_start_speech_recog(long call_id, const char *json) {
     goto out;
   }
 
+  if (json_get_string_param(document, "server_url", true, &server_url) <= 0) {
+    goto out;
+  }
+
+  if (json_get_string_param(document, "engine", true, &engine) <= 0) {
+    goto out;
+  }
+
+  if (json_get_string_param(document, "language", true, &language) <= 0) {
+    goto out;
+  }
+
   res = json_get_int_param(document, "media_id", true, &media_id);
   if (res <= 0) {
     goto out;
+  }
+
+  if(server_url || engine || language) {
+    // If any is set then all must be set and must be non-empty string (required by ws_speech_port)
+    if(!server_url || !server_url[0]) {
+      set_error("server_url must be present and cannot be empty string"); 
+      goto out;
+    }
+
+    if(!engine || !engine[0]) {
+      set_error("engine must be present and cannot be empty string"); 
+      goto out;
+    }
+
+    if(!language || !language[0]) {
+      set_error("language must be present and cannot be empty string"); 
+      goto out;
+    }
   }
 
   if (NOT_FOUND_OPTIONAL == res) {
@@ -4128,7 +4164,7 @@ int pjw_call_start_speech_recog(long call_id, const char *json) {
       MediaEndpoint *me = (MediaEndpoint *)call->media[i];
       if (me->type == ENDPOINT_TYPE_AUDIO) {
         AudioEndpoint *ae = (AudioEndpoint *)me->endpoint.audio;
-        status = audio_endpoint_start_speech_recog(call, ae);
+        status = audio_endpoint_start_speech_recog(call, ae, server_url, engine, language);
         if (status != PJ_SUCCESS) goto out;
       }
     }
@@ -4146,7 +4182,7 @@ int pjw_call_start_speech_recog(long call_id, const char *json) {
 
     ae = (AudioEndpoint *)me->endpoint.audio;
 
-    audio_endpoint_start_speech_recog(call, ae);
+    audio_endpoint_start_speech_recog(call, ae, server_url, engine, language);
   }
 
 out:
@@ -7033,7 +7069,7 @@ bool prepare_speech_synth(Call *call, AudioEndpoint *ae, const char *server_url,
             call,
             &fp->port);
     if (status != PJ_SUCCESS) {
-      set_error("pjmedia_ws_speech_port_create failed");
+      set_error("pjmedia_ws_speech_port_create for synth failed");
       return false;
     }
 
@@ -7055,7 +7091,7 @@ bool prepare_speech_synth(Call *call, AudioEndpoint *ae, const char *server_url,
   return PJ_SUCCESS;
 }
 
-bool prepare_speech_recog(Call *call, AudioEndpoint *ae) {
+bool prepare_speech_recog(Call *call, AudioEndpoint *ae, const char *server_url, const char *engine, const char *language) {
   pj_status_t status;
 
   ConfBridgePort *fp = &ae->feature_cbps[FP_SPEECH_RECOG];
@@ -7065,17 +7101,42 @@ bool prepare_speech_recog(Call *call, AudioEndpoint *ae) {
     return true;
   }
 
-  status = pjmedia_pocketsphinx_port_create(
-        call->inv->pool, PJMEDIA_PIA_SRATE(&ae->stream_cbp.port->info),
-        PJMEDIA_PIA_CCNT(&ae->stream_cbp.port->info),
-        PJMEDIA_PIA_SPF(&ae->stream_cbp.port->info),
-        PJMEDIA_PIA_BITS(&ae->stream_cbp.port->info), 
-        on_speech_transcript,
-        call,
-        &fp->port);
-  if (status != PJ_SUCCESS) {
-    set_error("pjmedia_pocketsphinx_port_create failed");
-    return false;
+  if(!server_url) {
+      status = pjmedia_pocketsphinx_port_create(
+            call->inv->pool, PJMEDIA_PIA_SRATE(&ae->stream_cbp.port->info),
+            PJMEDIA_PIA_CCNT(&ae->stream_cbp.port->info),
+            PJMEDIA_PIA_SPF(&ae->stream_cbp.port->info),
+            PJMEDIA_PIA_BITS(&ae->stream_cbp.port->info), 
+            on_speech_transcript,
+            call,
+            &fp->port);
+      if (status != PJ_SUCCESS) {
+        set_error("pjmedia_pocketsphinx_port_create failed");
+        return false;
+      }
+  } else {
+    status = pjmedia_ws_speech_port_create(
+            call->inv->pool,
+            PJMEDIA_PIA_SRATE(&ae->stream_cbp.port->info),
+            PJMEDIA_PIA_CCNT(&ae->stream_cbp.port->info),
+            PJMEDIA_PIA_SPF(&ae->stream_cbp.port->info),
+            PJMEDIA_PIA_BITS(&ae->stream_cbp.port->info),
+            g_ws_endpt,
+            server_url,
+            NULL,
+            NULL,
+            NULL,
+            NULL,
+            NULL,
+            engine,
+            language,
+            on_ws_speech_event,
+            call,
+            &fp->port);
+    if (status != PJ_SUCCESS) {
+      set_error("pjmedia_ws_speech_port_create for recog failed");
+      return false;
+    }
   }
 
   status = pjmedia_conf_add_port(ae->conf, call->inv->pool, fp->port, NULL, &fp->slot);

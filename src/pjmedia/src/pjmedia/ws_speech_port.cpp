@@ -66,6 +66,7 @@ struct ws_speech_t
     char transcript[4096];
 
     pj_websock_t *wc;
+    bool connected;
 
     int sample_rate;
 
@@ -82,6 +83,8 @@ struct ws_speech_t
 
 static pj_bool_t on_connect_complete(pj_websock_t *c, pj_status_t status)
 {
+    printf("ws_speech_port on_connect_complete\n");
+
     char buf[1000];
     PJ_PERROR(4, (THIS_FILE, status, "%s() %s", __FUNCTION__,
                   pj_websock_print(c, buf, sizeof(buf))));
@@ -124,9 +127,39 @@ static pj_bool_t on_connect_complete(pj_websock_t *c, pj_status_t status)
          
         printf("\nsending cmd: %.*s\n", buffer.GetLength(), buffer.GetString());
         pj_websock_send(c, PJ_WEBSOCK_OP_TEXT, PJ_TRUE, PJ_TRUE, (void*)buffer.GetString(), buffer.GetLength());
-    } else {
-        printf("port->ss_engine not set\n");
     }
+
+    if(port->sr_engine) {
+        rapidjson::Document document;
+        document.SetObject();
+
+        // Obtain the allocator from the document
+        rapidjson::Document::AllocatorType& allocator = document.GetAllocator();
+
+        // Add the "cmd" member to the document
+        document.AddMember("cmd", "start_speech_recog", allocator);
+
+        // Create the "args" object
+        rapidjson::Value args(rapidjson::kObjectType);
+
+        // Add members to the "args" object
+        args.AddMember("sampleRate", port->sample_rate, allocator);
+        args.AddMember("engine", rapidjson::Value(port->sr_engine, allocator), allocator);
+        args.AddMember("language", rapidjson::Value(port->sr_language, allocator), allocator);
+
+        // Add the "args" object to the document
+        document.AddMember("args", args, allocator);
+
+        // Stringify the JSON document
+        rapidjson::StringBuffer buffer;
+        rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+        document.Accept(writer);
+         
+        printf("\nsending cmd: %.*s\n", buffer.GetLength(), buffer.GetString());
+        pj_websock_send(c, PJ_WEBSOCK_OP_TEXT, PJ_TRUE, PJ_TRUE, (void*)buffer.GetString(), buffer.GetLength());
+    }
+
+    port->connected = true;
 
     return PJ_TRUE;
 }
@@ -311,8 +344,8 @@ static pj_status_t put_frame(pjmedia_port *this_port, pjmedia_frame *frame) {
 
     struct ws_speech_t *port = (struct ws_speech_t*) this_port;
 
-    if(port->wc) {
-        //TODO: write binary data to socket
+    if(port->wc && port->connected) {
+        pj_websock_send(port->wc, PJ_WEBSOCK_OP_BIN, PJ_TRUE, PJ_TRUE, frame->buf, frame->size); 
     }
 
     return PJ_SUCCESS;
