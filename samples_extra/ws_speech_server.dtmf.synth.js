@@ -9,6 +9,8 @@ async function test() {
     //sip.set_log_level(6)
     sip.dtmf_aggregation_on(500)
 
+    sip.set_codecs("PCMU/8000/1:128")
+
     z.trap_events(sip.event_source, 'event', (evt) => {
         var e = evt.args[0]
         return e
@@ -105,47 +107,24 @@ async function test() {
         },
     ], 1000)
 
-    await z.sleep(500)
-
     sip.call.start_record_wav(oc.id, {file: './oc.wav'})
     sip.call.start_record_wav(ic.id, {file: './ic.wav'})
 
-    sip.call.send_dtmf(oc.id, {digits: '1234', mode: 1})
-    sip.call.send_dtmf(ic.id, {digits: '1234', mode: 1})
+    await z.sleep(100)
 
-    await z.wait([
-	{
-		event: 'dtmf',
-		call_id: ic.id,
-		digits: '1234',
-		mode: 1,
-		media_id: 0
-	},
-	{
-		event: 'dtmf',
-		call_id: oc.id,
-		digits: '1234',
-		mode: 1,
-		media_id: 0
-	},
-    ], 3000)
-
-    sip.call.start_speech_synth(oc.id, {voice: 'slt', text: 'Hello World.'})
-    sip.call.start_speech_synth(ic.id, {voice: 'kal', text: 'How are you?'})
+    sip.call.start_speech_synth(oc.id, {server_url: 'ws://0.0.0.0:8080', engine: 'dtmf-gen', voice: 'dtmf', language: 'dtmf', text: '1234', times: 1})
 
     await z.wait([
         {
-            event: 'end_of_speech',
+            event: 'dtmf',
             call_id: ic.id,
-        },
-        {
-            event: 'end_of_speech',
-            call_id: oc.id,
+            digits: '1234',
+            mode: 1,
+            media_id: 0
         },
     ], 3000)
 
     sip.call.stop_speech_synth(oc.id) // this is not actually necessary. It is used just to confirm the command works
-    sip.call.stop_speech_synth(ic.id) // this is not actually necessary. It is used just to confirm the command works
 
     sip.call.stop_record_wav(oc.id)
     sip.call.stop_record_wav(ic.id)
@@ -172,7 +151,7 @@ async function test() {
         },
     ], 1000)
 
-    await z.sleep(1000)
+    await z.sleep(100)
 
     console.log("Success")
 

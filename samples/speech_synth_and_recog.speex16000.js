@@ -117,8 +117,8 @@ async function test() {
 
     await z.sleep(100)
 
-    sip.call.start_speech_synth(oc.id, {voice: 'kal16', text: 'Good morning.', end_of_speech_event: true, no_loop: true})
-    sip.call.start_speech_synth(ic.id, {voice: 'kal16', text: 'How are you?', end_of_speech_event: true, no_loop: true})
+    sip.call.start_speech_synth(oc.id, {voice: 'kal16', text: 'Good morning.'})
+    sip.call.start_speech_synth(ic.id, {voice: 'kal16', text: 'How are you?'})
 
     await z.wait([
         {

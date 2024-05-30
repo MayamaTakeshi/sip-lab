@@ -102,6 +102,15 @@ then
 fi
 
 
+cd $START_DIR/3rdParty
+if [[ ! -d pjwebsock ]]
+then
+    git clone https://github.com/jimying/pjwebsock
+    cd pjwebsock
+    git checkout a0616ea27f01d5e3bdfd5b801fb1499473a0b0cb
+fi
+
+
 #cd $START_DIR/3rdParty
 #if [[ ! -d openssl ]]
 #then

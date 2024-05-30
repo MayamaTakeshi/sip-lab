@@ -115,7 +115,7 @@ async function test() {
     sip.call.start_speech_recog(oc.id)
     sip.call.start_speech_recog(ic.id)
 
-    await z.sleep(100)
+    await z.sleep(200)
 
     sip.call.start_play_wav(oc.id, {file: 'samples/artifacts/hello_good_morning.wav', end_of_file_event: true, no_loop: true})
     sip.call.start_play_wav(ic.id, {file: 'samples/artifacts/hello_good_morning.wav', end_of_file_event: true, no_loop: true})
@@ -139,7 +139,7 @@ async function test() {
             call_id: ic.id,
             //transcript: 'hello good morning', // bad transcript (will not match)
         },
-    ], 4000)
+    ], 5000)
 
     sip.call.stop_record_wav(oc.id)
     sip.call.stop_record_wav(ic.id)

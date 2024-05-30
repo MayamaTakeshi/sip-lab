@@ -5,7 +5,7 @@
 
 PJ_BEGIN_DECL
 
-enum pjmedia_filte_option
+enum pjmedia_flite_option
 {
   PJMEDIA_SPEECH_NO_LOOP = 1
 };
@@ -25,7 +25,7 @@ PJ_DEF(pj_status_t) pjmedia_flite_port_set_eof_cb(pjmedia_port *port,
 
 PJ_DEF(pj_status_t) pjmedia_flite_port_speak( pjmedia_port *port,
                                           const char *text,
-                                          unsigned options);
+                                          int times);
 
 PJ_END_DECL
 
