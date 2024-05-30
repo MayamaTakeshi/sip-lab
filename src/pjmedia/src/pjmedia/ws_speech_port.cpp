@@ -26,6 +26,10 @@
 #include <pj/string.h>
 #include <pj/log.h>
 
+#include "rapidjson/document.h"
+#include "rapidjson/writer.h"
+#include "rapidjson/stringbuffer.h"
+
 #define SIGNATURE   PJMEDIA_SIGNATURE('w', 's', 's', 'p')
 #define THIS_FILE   "ws_speech_port.c"
 
@@ -43,7 +47,8 @@ static pj_status_t get_frame(pjmedia_port *this_port,
 
 static pj_status_t on_destroy(pjmedia_port *this_port);
 
-#define SPEECH_BUFFER_SIZE 25600
+#define SPEECH_BUFFER_SIZE 8192
+#define MINIMAl_BUFFERING 3
 
 struct ws_speech_t
 {
@@ -54,12 +59,24 @@ struct ws_speech_t
     void (*cb)(pjmedia_port*, void*, enum ws_speech_event, char*);
     void *cb_user_data;
 
-    char speech_buffer[SPEECH_BUFFER_SIZE];
-    short size; 
+    char buffer[SPEECH_BUFFER_SIZE];
+    short buffer_top;
+    int buffering_count;
 
     char transcript[4096];
 
     pj_websock_t *wc;
+
+    int sample_rate;
+
+    char *ss_engine;
+    char *ss_voice;
+    char *ss_language;
+    char *ss_text;
+    int ss_times;
+
+    char *sr_engine;
+    char *sr_language;
 };
 
 
@@ -74,6 +91,41 @@ static pj_bool_t on_connect_complete(pj_websock_t *c, pj_status_t status)
         port->cb((pjmedia_port*)port, port->cb_user_data, WS_SPEECH_EVENT_CONNECTED, "");
     } else {
         port->cb((pjmedia_port*)port, port->cb_user_data, WS_SPEECH_EVENT_CONNECTION_ERROR, "");
+    }
+
+    if(port->ss_engine) {
+        rapidjson::Document document;
+        document.SetObject();
+
+        // Obtain the allocator from the document
+        rapidjson::Document::AllocatorType& allocator = document.GetAllocator();
+
+        // Add the "cmd" member to the document
+        document.AddMember("cmd", "start_speech_synth", allocator);
+
+        // Create the "args" object
+        rapidjson::Value args(rapidjson::kObjectType);
+
+        // Add members to the "args" object
+        args.AddMember("sampleRate", port->sample_rate, allocator);
+        args.AddMember("engine", rapidjson::Value(port->ss_engine, allocator), allocator);
+        args.AddMember("voice", rapidjson::Value(port->ss_voice, allocator), allocator);
+        args.AddMember("language", rapidjson::Value(port->ss_language, allocator), allocator);
+        args.AddMember("text", rapidjson::Value(port->ss_text, allocator), allocator);
+        args.AddMember("times", port->ss_times, allocator);
+
+        // Add the "args" object to the document
+        document.AddMember("args", args, allocator);
+
+        // Stringify the JSON document
+        rapidjson::StringBuffer buffer;
+        rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+        document.Accept(writer);
+         
+        printf("\nsending cmd: %.*s\n", buffer.GetLength(), buffer.GetString());
+        pj_websock_send(c, PJ_WEBSOCK_OP_TEXT, PJ_TRUE, PJ_TRUE, (void*)buffer.GetString(), buffer.GetLength());
+    } else {
+        printf("port->ss_engine not set\n");
     }
 
     return PJ_TRUE;
@@ -101,15 +153,22 @@ static pj_bool_t on_rx_msg(pj_websock_t *c,
     data = (char *)msg->data;
 
     if (hdr->opcode == PJ_WEBSOCK_OP_TEXT) {
-        PJ_LOG(4, (THIS_FILE,
+       printf( 
                    "RX from %s:\n"
                    "TEXT %s %llu/%llu/%llu [%.*s]",
                    pj_websock_print(c, buf, sizeof(buf)),
                    hdr->mask ? "(masked)" : "", hdr->len, msg->has_read,
-                   msg->data_len, (int)msg->data_len, data));
+                   msg->data_len, (int)msg->data_len, data);
 
         /* echo response */
         // pj_websock_send(c, hdr->opcode, PJ_TRUE, PJ_FALSE, data, hdr->len);
+    } else if (hdr->opcode == PJ_WEBSOCK_OP_BIN) {
+        printf("PJ_WEBSOCK_OP_BIN. top=%i data_len=%i\n", port->buffer_top, msg->data_len);
+        if(port->buffer_top + msg->data_len < SPEECH_BUFFER_SIZE) {
+            memcpy(port->buffer + port->buffer_top, data, msg->data_len);
+            port->buffer_top += msg->data_len;
+            port->buffering_count++;
+        }
     } else if (hdr->opcode == PJ_WEBSOCK_OP_PING) {
         PJ_LOG(4, (THIS_FILE, "RX from %s PING",
                    pj_websock_print(c, buf, sizeof(buf))));
@@ -156,14 +215,18 @@ PJ_DEF(pj_status_t) pjmedia_ws_speech_port_create(pj_pool_t *pool,
 				unsigned bits_per_sample,
                 struct pj_websock_endpoint *ws_endpt,
                 const char *server_url,
-                const char *voice,
-                const char *text,
-                void (*cb)(pjmedia_port*, void *user_data, enum ws_speech_event, char *transcript),
+                const char *ss_engine,
+                const char *ss_voice,
+                const char *ss_language,
+                const char *ss_text,
+                int ss_times,
+                const char *sr_engine,
+                const char *sr_language,
+                void (*cb)(pjmedia_port*, void *user_data, enum ws_speech_event, char *data),
                 void *cb_user_data,
-                unsigned flags,
-                pj_bool_t end_of_speech_event,
 				pjmedia_port **p_port)
 {
+    printf("pjmedia_ws_speech_port_create clock_rate=%i samples_per_frame=%i bits_per_sample=%i\n", clock_rate, samples_per_frame, bits_per_sample);
     struct ws_speech_t *port;
     const pj_str_t name = pj_str("ws_speech");
 
@@ -177,6 +240,40 @@ PJ_DEF(pj_status_t) pjmedia_ws_speech_port_create(pj_pool_t *pool,
 
     port = PJ_POOL_ZALLOC_T(pool, struct ws_speech_t);
     PJ_ASSERT_RETURN(pool != NULL, PJ_ENOMEM);
+
+    port->sample_rate = clock_rate;
+
+    if(ss_engine) {
+      port->ss_engine = (char*)pj_pool_alloc(pool, strlen(ss_engine) + 1);
+      pj_ansi_strcpy(port->ss_engine, ss_engine);
+    }
+
+    if(ss_voice) {
+      port->ss_voice = (char*)pj_pool_alloc(pool, strlen(ss_voice) + 1);
+      pj_ansi_strcpy(port->ss_voice, ss_voice);
+    }
+
+    if(ss_language) {
+      port->ss_language = (char*)pj_pool_alloc(pool, strlen(ss_language) + 1);
+      pj_ansi_strcpy(port->ss_language, ss_language);
+    }
+
+    if(ss_text) {
+      port->ss_text = (char*)pj_pool_alloc(pool, strlen(ss_text) + 1);
+      pj_ansi_strcpy(port->ss_text, ss_text);
+    }
+
+    port->ss_times = ss_times;
+
+    if(sr_engine) {
+      port->sr_engine = (char*)pj_pool_alloc(pool, strlen(sr_engine) + 1);
+      pj_ansi_strcpy(port->sr_engine, sr_engine);
+    }
+
+    if(sr_language) {
+      port->sr_language = (char*)pj_pool_alloc(pool, strlen(sr_language) + 1);
+      pj_ansi_strcpy(port->sr_language, sr_language);
+    }
 
     pjmedia_port_info_init(&port->base.info, &name, SIGNATURE, clock_rate,
 			   channel_count, bits_per_sample, samples_per_frame);
@@ -222,6 +319,7 @@ static pj_status_t put_frame(pjmedia_port *this_port, pjmedia_frame *frame) {
 }
 
 static pj_status_t get_frame(pjmedia_port *this_port, pjmedia_frame *frame) {
+    printf("pjmedia_ws_speech_port get_frame\n");
 	PJ_ASSERT_RETURN(this_port && frame, PJ_EINVAL);
 
     struct ws_speech_t *port = (struct ws_speech_t*)this_port;
@@ -232,13 +330,17 @@ static pj_status_t get_frame(pjmedia_port *this_port, pjmedia_frame *frame) {
         return PJ_SUCCESS;
     }
 
-    /*
-    memcpy(frame->buf, flite->w->samples + flite->written_samples, PJMEDIA_PIA_SPF(&port->info)*2);
-    flite->written_samples += PJMEDIA_PIA_SPF(&port->info);
-    frame->type = PJMEDIA_FRAME_TYPE_AUDIO;
-    */
-    //printf("flite data written samples=%i\n", PJMEDIA_PIA_SPF(&port->info));
+    int len = PJMEDIA_PIA_SPF(&this_port->info)*2;
 
+    if(port->buffering_count >= MINIMAl_BUFFERING && port->buffer_top > 0 && port->buffer_top >= len) {
+        printf("get_frame top=%i\n", port->buffer_top);
+        memcpy(frame->buf, port->buffer, len);
+        port->buffer_top -= len;
+        memcpy(port->buffer, port->buffer + len, port->buffer_top);
+        frame->type = PJMEDIA_FRAME_TYPE_AUDIO;
+    } else {
+        frame->type = PJMEDIA_FRAME_TYPE_NONE;
+    }
     return PJ_SUCCESS;
 }
 

@@ -121,7 +121,7 @@
         'src/pjmedia/src/pjmedia/fax_port.c',
         'src/pjmedia/src/pjmedia/flite_port.c',
         'src/pjmedia/src/pjmedia/pocketsphinx_port.c',
-        'src/pjmedia/src/pjmedia/ws_speech_port.c',
+        'src/pjmedia/src/pjmedia/ws_speech_port.cpp',
         '3rdParty/pjwebsock/websock/http.c',
         '3rdParty/pjwebsock/websock/websock_transport_tcp.c',
         '3rdParty/pjwebsock/websock/websock_transport_tls.c',
