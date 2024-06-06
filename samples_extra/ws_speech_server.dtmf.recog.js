@@ -111,15 +111,24 @@ async function test() {
     sip.call.start_record_wav(ic.id, {file: './ic.wav'})
 
     sip.call.start_speech_recog(oc.id, {server_url: 'ws://0.0.0.0:8080', engine: 'dtmf-det', language: 'dtmf'})
+    sip.call.start_speech_recog(ic.id, {server_url: 'ws://0.0.0.0:8080', engine: 'dtmf-det', language: 'dtmf'})
 
     await z.sleep(200)
 
-    sip.call.send_dtmf(ic.id, {digits: 'abcd', mode: 1})
+    sip.call.send_dtmf(oc.id, {digits: 'abcd', mode: 1})
+    sip.call.send_dtmf(ic.id, {digits: 'dcba', mode: 1})
 
     await z.wait([
         {
             event: 'dtmf',
             call_id: oc.id,
+            digits: 'dcba',
+            mode: 1,
+            media_id: 0
+        },
+        {
+            event: 'dtmf',
+            call_id: ic.id,
             digits: 'abcd',
             mode: 1,
             media_id: 0
