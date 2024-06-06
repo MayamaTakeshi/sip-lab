@@ -113,6 +113,7 @@ async function test() {
     await z.sleep(100)
 
     sip.call.start_speech_synth(oc.id, {server_url: 'ws://0.0.0.0:8080', engine: 'dtmf-gen', voice: 'dtmf', language: 'dtmf', text: '1234', times: 1})
+    sip.call.start_speech_synth(ic.id, {server_url: 'ws://0.0.0.0:8080', engine: 'dtmf-gen', voice: 'dtmf', language: 'dtmf', text: '4321', times: 1})
 
     await z.wait([
         {
@@ -122,9 +123,17 @@ async function test() {
             mode: 1,
             media_id: 0
         },
+        {
+            event: 'dtmf',
+            call_id: oc.id,
+            digits: '4321',
+            mode: 1,
+            media_id: 0
+        },
     ], 3000)
 
     sip.call.stop_speech_synth(oc.id) // this is not actually necessary. It is used just to confirm the command works
+    sip.call.stop_speech_synth(ic.id) // this is not actually necessary. It is used just to confirm the command works
 
     sip.call.stop_record_wav(oc.id)
     sip.call.stop_record_wav(ic.id)

@@ -325,6 +325,7 @@ PJ_DEF(pj_status_t) pjmedia_ws_speech_port_create(pj_pool_t *pool,
     pj_bzero(&cb, sizeof(ws_cb));
     ws_cb.on_connect_complete = on_connect_complete;
     ws_cb.on_rx_msg = on_rx_msg;
+    ws_cb.on_tx_msg = NULL;
     ws_cb.on_state_change = on_state_change;
 
     {
