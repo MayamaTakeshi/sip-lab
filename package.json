@@ -1,6 +1,6 @@
 {
   "name": "sip-lab",
-  "version": "1.28.0",
+  "version": "1.28.1",
   "description": "",
   "main": "index.js",
   "engines": {
@@ -44,6 +44,7 @@
     "README.md",
     "DEV.md",
     "samples",
+    "samples_extra",
     "prebuilds",
     "pocketsphinx",
     "runtests"
