@@ -56,7 +56,7 @@ There are additional samples scripts in folder samples_extra but they require [w
 
 To run ws_speech_server, do this:
 ```
-https://github.com/MayamaTakeshi/ws_speech_server
+git clone https://github.com/MayamaTakeshi/ws_speech_server
 cd ws_speech_server
 npm i
 npm run build
