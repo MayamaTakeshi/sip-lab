@@ -14,10 +14,10 @@ It permits to:
   - send/receive audio using SRTP
   - do speech synth using flite
   - do speech recog using pocketsphinx (but only works well with sampling rate of 16000)
+  - do speech synth/recog using [ws_speech_server](https://github.com/MayamaTakeshi/ws_speech_server) (this permits to use google/amazon/azure/etc speech services)
 
 TODO:
   - add support for video playing/recording from/to file
-  - add support for speech synth/recog via websocket server to permit to access Google Speech, Whisper, Amazon Poly etc.
   - add support for T.38 fax
   - add support for SIP over WebSocket
   - add support for WebRTC
@@ -46,6 +46,34 @@ node samples/simple.js
 The above script has detailed comments. 
 
 Please read it to undestand how to write your own test scripts.
+
+
+### Samples
+
+See general sample scripts in folder samples.
+
+There are additional samples scripts in folder samples_extra but they require [ws_speech_server](https://github.com/MayamaTakeshi/ws_speech_server) to be running locally (and it should be started with GOOGLE_APPLICATION_CREDENTIALS set).
+
+To run ws_speech_server, do this:
+```
+https://github.com/MayamaTakeshi/ws_speech_server
+cd ws_speech_server
+npm i
+npm run build
+cp config/default.js.sample config/default.js
+export GOOGLE_APPLICATION_CREDENTIALS=/path/to/your/credentials/file
+node src/App.bs.js
+```
+
+Then you should be able to test with dtmf language:
+```
+node samples_extra/ws_speech_server.dtmf.js 
+```
+or with google speech service:
+```
+node samples_extra/ws_speech_server.google.js
+```
+
 
 ### About the code
 
