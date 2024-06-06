@@ -40,7 +40,7 @@ npm install sip-lab
 
 Then run some sample script from subfolder samples:
 ```
-node samples/simple.js
+node node_modules/sip-lab/samples/simple.js
 ```
 
 The above script has detailed comments. 
@@ -67,11 +67,11 @@ node src/App.bs.js
 
 Then you should be able to test with dtmf language:
 ```
-node samples_extra/ws_speech_server.dtmf.js 
+node node_modules/sip-lab/samples_extra/ws_speech_server.dtmf.js
 ```
 or with google speech service:
 ```
-node samples_extra/ws_speech_server.google.js
+node node_modules/sip-lab/samples_extra/ws_speech_server.google.js
 ```
 
 
