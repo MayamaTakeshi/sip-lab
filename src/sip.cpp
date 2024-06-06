@@ -584,9 +584,9 @@ pjsip_transport *allocate_udp_transport(pjsip_endpoint *sip_endpt,
                                         pj_str_t *ipaddr, int port);
 
 pjsip_tpfactory *create_tls_tpfactory(pjsip_endpoint *sip_endpt,
-                                      pj_str_t *ipaddr, int *allocated_port);
+                                      pj_str_t *ipaddr, int *allocated_port, char *cert_file, char *privkey_file);
 pjsip_tpfactory *allocate_tls_tpfactory(pjsip_endpoint *sip_endpt,
-                                        pj_str_t *ipaddr, int port);
+                                        pj_str_t *ipaddr, int port, char *cert_file, char *privkey_file);
 
 pjsip_tpfactory *create_tcp_factory(pjsip_endpoint *sip_endpt, pj_str_t *ipaddr,
                                     int *allocated_port);
@@ -1683,7 +1683,7 @@ pjsip_tpfactory *create_tcp_tpfactory(pjsip_endpoint *sip_endpt,
 }
 
 pjsip_tpfactory *allocate_tls_tpfactory(pjsip_endpoint *sip_endpt,
-                                        pj_str_t *ipaddr, int port) {
+                                        pj_str_t *ipaddr, int port, char *cert_file, char *privkey_file) {
   addon_log(L_DBG, "allocate_tls_tpfactory ipaddr=%.*s port=%i\n", ipaddr->slen,
             ipaddr->ptr, port);
   pj_status_t status;
@@ -1705,6 +1705,13 @@ pjsip_tpfactory *allocate_tls_tpfactory(pjsip_endpoint *sip_endpt,
   pjsip_tls_setting tls_opt;
   pjsip_tls_setting_default(&tls_opt);
 
+  if(cert_file) {
+    tls_opt.cert_file = pj_str(cert_file);
+  }
+  if(privkey_file) {
+    tls_opt.privkey_file = pj_str(privkey_file);
+  }
+
   status = pjsip_tls_transport_start2(sip_endpt, &tls_opt, &local_addr, NULL, 1,
                                       &tpfactory);
   if (status != PJ_SUCCESS) {
@@ -1716,14 +1723,14 @@ pjsip_tpfactory *allocate_tls_tpfactory(pjsip_endpoint *sip_endpt,
 }
 
 pjsip_tpfactory *create_tls_tpfactory(pjsip_endpoint *sip_endpt,
-                                      pj_str_t *ipaddr, int *allocated_port) {
+                                      pj_str_t *ipaddr, int *allocated_port, char *cert_file, char *privkey_file) {
   // pj_status_t status;
   pjsip_tpfactory *tpfactory;
 
   for (int i = 0; i < 1000; ++i) {
     int port = 6060;
     port += i;
-    tpfactory = allocate_tls_tpfactory(sip_endpt, ipaddr, port);
+    tpfactory = allocate_tls_tpfactory(sip_endpt, ipaddr, port, cert_file, privkey_file);
     if (tpfactory) {
       *allocated_port = port;
       return tpfactory;
@@ -1752,7 +1759,7 @@ int pjw_transport_create(const char *json, int *out_t_id, char *out_t_address,
 
   char buffer[MAX_JSON_INPUT];
 
-  const char *valid_params[] = {"address", "port", "type", ""};
+  const char *valid_params[] = {"address", "port", "type", "cert_file", "key_file", ""};
 
   Document document;
 
@@ -1861,12 +1868,22 @@ int pjw_transport_create(const char *json, int *out_t_id, char *out_t_address,
     }
   } else {
     pjsip_tpfactory *tpfactory;
-    // int af;
+    
+    char *cert_file = NULL;
+    char *key_file = NULL;
 
+    if (document.HasMember("cert_file") && document["cert_file"].IsString()) {
+        cert_file = (char*)document["cert_file"].GetString();
+    }
+ 
+    if (document.HasMember("key_file") && document["key_file"].IsString()) {
+        key_file = (char*)document["key_file"].GetString();
+    }
+    
     if (port != 0) {
-      tpfactory = allocate_tls_tpfactory(g_sip_endpt, &address, port);
+      tpfactory = allocate_tls_tpfactory(g_sip_endpt, &address, port, cert_file, key_file);
     } else {
-      tpfactory = create_tls_tpfactory(g_sip_endpt, &address, &port);
+      tpfactory = create_tls_tpfactory(g_sip_endpt, &address, &port, cert_file, key_file);
     }
 
     if (!tpfactory) {
