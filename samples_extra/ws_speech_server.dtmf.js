@@ -110,15 +110,21 @@ async function test() {
     sip.call.start_record_wav(oc.id, {file: './oc.wav'})
     sip.call.start_record_wav(ic.id, {file: './ic.wav'})
 
+    sip.call.start_speech_synth(oc.id, {server_url: 'ws://0.0.0.0:8080', engine: 'dtmf-gen', voice: 'dtmf', language: 'dtmf', text: 'abcd', times: 1})
+    sip.call.start_speech_synth(ic.id, {server_url: 'ws://0.0.0.0:8080', engine: 'dtmf-gen', voice: 'dtmf', language: 'dtmf', text: 'dcba', times: 1})
+
     sip.call.start_speech_recog(oc.id, {server_url: 'ws://0.0.0.0:8080', engine: 'dtmf-det', language: 'dtmf'})
     sip.call.start_speech_recog(ic.id, {server_url: 'ws://0.0.0.0:8080', engine: 'dtmf-det', language: 'dtmf'})
 
-    await z.sleep(200)
-
-    sip.call.send_dtmf(oc.id, {digits: 'abcd', mode: 1})
-    sip.call.send_dtmf(ic.id, {digits: 'dcba', mode: 1})
-
     await z.wait([
+        {
+            event: 'speech_synth_complete',
+            call_id: ic.id,
+        },
+        {
+            event: 'speech_synth_complete',
+            call_id: oc.id,
+        },
         {
             event: 'dtmf',
             call_id: oc.id,
@@ -132,6 +138,16 @@ async function test() {
             digits: 'abcd',
             mode: 1,
             media_id: 0
+        },
+        {
+            event: 'speech',
+            call_id: oc.id,
+            transcript: 'dcba'
+        },
+        {
+            event: 'speech',
+            call_id: ic.id,
+            transcript: 'abcd'
         },
     ], 3000)
 

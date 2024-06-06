@@ -111,10 +111,10 @@ int make_evt_speech_synth_complete(char *dest, int size, long call_id) {
       "{\"event\": \"speech_synth_complete\", \"call_id\": %ld}", call_id);
 }
 
-int make_evt_speech_transcript(char *dest, int size, long call_id, char* transcript) {
+int make_evt_speech(char *dest, int size, long call_id, char* transcript) {
   return snprintf(
       dest, size,
-      "{\"event\": \"speech_transcript\", \"call_id\": %ld, \"transcript\": \"%s\"}", call_id, transcript);
+      "{\"event\": \"speech\", \"call_id\": %ld, \"transcript\": \"%s\"}", call_id, transcript);
 }
 
 int make_evt_tcp_msg(char *dest, int size, long call_id, const char *protocol, char *data, int data_len) {
@@ -122,3 +122,10 @@ int make_evt_tcp_msg(char *dest, int size, long call_id, const char *protocol, c
       dest, size,
       "{\"event\": \"%s_msg\", \"call_id\": %ld}\n%.*s", protocol, call_id, data_len, data);
 }
+
+int make_evt_ws_speech_event(char *dest, int size, long call_id, char *data, int data_len) {
+  return snprintf(
+      dest, size,
+      "{\"event\": \"ws_speech_event\", \"call_id\": %ld, \"data\": %.*s}", call_id, data_len, data);
+}
+

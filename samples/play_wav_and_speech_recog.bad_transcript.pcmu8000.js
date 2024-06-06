@@ -130,12 +130,12 @@ async function test() {
             call_id: oc.id,
         },
         {
-            event: 'speech_transcript',
+            event: 'speech',
             call_id: oc.id,
             //transcript: 'hello good morning', // bad transcript (will not match)
         },
         {
-            event: 'speech_transcript',
+            event: 'speech',
             call_id: ic.id,
             //transcript: 'hello good morning', // bad transcript (will not match)
         },

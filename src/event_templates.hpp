@@ -38,8 +38,10 @@ int make_evt_end_of_file(char *dest, int size, long call_id);
 
 int make_evt_speech_synth_complete(char *dest, int size, long call_id);
 
-int make_evt_speech_transcript(char *dest, int size, long call_id, char* transcript);
+int make_evt_speech(char *dest, int size, long call_id, char* transcript);
 
 int make_evt_tcp_msg(char *dest, int size, long call_id, const char *protocol, char *data, int data_len);
+
+int make_evt_ws_speech_event(char *dest, int size, long call_id, char *data, int data_len);
 
 #endif

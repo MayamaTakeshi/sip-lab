@@ -56,7 +56,7 @@ struct ws_speech_t
 
     struct pj_websock_endpoint *ws_endpt;
 
-    void (*cb)(pjmedia_port*, void*, enum ws_speech_event, char*);
+    void (*cb)(pjmedia_port*, void*, enum ws_speech_event, char*, int);
     void *cb_user_data;
 
     char buffer[SPEECH_BUFFER_SIZE];
@@ -91,9 +91,10 @@ static pj_bool_t on_connect_complete(pj_websock_t *c, pj_status_t status)
 
     struct ws_speech_t *port = (struct ws_speech_t*)pj_websock_get_userdata(c);
     if (status == PJ_SUCCESS) {
-        port->cb((pjmedia_port*)port, port->cb_user_data, WS_SPEECH_EVENT_CONNECTED, "");
+        //suppress this as mostly we don't care about it
+        //port->cb((pjmedia_port*)port, port->cb_user_data, WS_SPEECH_EVENT_CONNECTED, "{\"evt\": \"connected\"}", 20);
     } else {
-        port->cb((pjmedia_port*)port, port->cb_user_data, WS_SPEECH_EVENT_CONNECTION_ERROR, "");
+        port->cb((pjmedia_port*)port, port->cb_user_data, WS_SPEECH_EVENT_CONNECTION_ERROR, "{\"evt\": \"connection_error\"}", 27);
     }
 
     if(port->ss_engine) {
@@ -170,7 +171,7 @@ static pj_bool_t on_rx_msg(pj_websock_t *c,
 {
     pj_websock_frame_hdr *hdr;
     char *data;
-    char buf[1000];
+    char buf[2048];
 
     struct ws_speech_t *port = (struct ws_speech_t*)pj_websock_get_userdata(c);
 
@@ -178,7 +179,7 @@ static pj_bool_t on_rx_msg(pj_websock_t *c,
         PJ_PERROR(2, (THIS_FILE, status, "#Disconnect with %s",
                       pj_websock_print(c, buf, sizeof(buf))));
 
-        port->cb((pjmedia_port*)port, port->cb_user_data, WS_SPEECH_EVENT_DISCONNECTED, "");
+        port->cb((pjmedia_port*)port, port->cb_user_data, WS_SPEECH_EVENT_DISCONNECTED, "{\"evt\": \"disconnected\"}", 23);
         return PJ_FALSE;
     }
 
@@ -193,8 +194,9 @@ static pj_bool_t on_rx_msg(pj_websock_t *c,
                    hdr->mask ? "(masked)" : "", hdr->len, msg->has_read,
                    msg->data_len, (int)msg->data_len, data);
 
-        /* echo response */
-        // pj_websock_send(c, hdr->opcode, PJ_TRUE, PJ_FALSE, data, hdr->len);
+        if(port->cb) {
+          port->cb((pjmedia_port*)port, port->cb_user_data, WS_SPEECH_EVENT_TEXT_MSG, data, msg->data_len);
+        }
     } else if (hdr->opcode == PJ_WEBSOCK_OP_BIN) {
         printf("PJ_WEBSOCK_OP_BIN. top=%i data_len=%i\n", port->buffer_top, msg->data_len);
         if(port->buffer_top + msg->data_len < SPEECH_BUFFER_SIZE) {
@@ -214,7 +216,7 @@ static pj_bool_t on_rx_msg(pj_websock_t *c,
         PJ_LOG(4, (THIS_FILE, "RX from %s CLOSE",
                    pj_websock_print(c, buf, sizeof(buf))));
         pj_websock_close(c, PJ_WEBSOCK_SC_GOING_AWAY, NULL);
-        port->cb((pjmedia_port*)port, port->cb_user_data, WS_SPEECH_EVENT_DISCONNECTED, "");
+        port->cb((pjmedia_port*)port, port->cb_user_data, WS_SPEECH_EVENT_DISCONNECTED, "{\"evt\": \"disconnected\"}", 23);
         return PJ_FALSE; /* Must return false to stop read any more */
     }
 
@@ -227,19 +229,6 @@ static void on_state_change(pj_websock_t *c, int state)
     printf("%s() %s %s", __FUNCTION__, pj_websock_print(c, buf, sizeof(buf)), pj_websock_state_str(state));
 }
 
-
-static pj_status_t speech_on_event(pjmedia_event *event,
-                                 void *user_data)
-{
-    struct ws_speech_t *port = (struct ws_speech_t*)user_data;
-
-    if (event->type == PJMEDIA_EVENT_CALLBACK) {
-        if (port->cb)
-            (*port->cb)(&port->base, port->cb_user_data, WS_SPEECH_EVENT_TRANSCRIPT, port->transcript);
-    }
-    
-    return PJ_SUCCESS;
-}
 
 PJ_DEF(pj_status_t) pjmedia_ws_speech_port_create(pj_pool_t *pool,
 				unsigned clock_rate,
@@ -255,7 +244,7 @@ PJ_DEF(pj_status_t) pjmedia_ws_speech_port_create(pj_pool_t *pool,
                 int ss_times,
                 const char *sr_engine,
                 const char *sr_language,
-                void (*cb)(pjmedia_port*, void *user_data, enum ws_speech_event, char *data),
+                void (*cb)(pjmedia_port*, void *user_data, enum ws_speech_event, char *data, int len),
                 void *cb_user_data,
 				pjmedia_port **p_port)
 {

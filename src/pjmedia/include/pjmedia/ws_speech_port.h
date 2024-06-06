@@ -8,11 +8,10 @@ PJ_BEGIN_DECL
 
 enum ws_speech_event
 {
-  WS_SPEECH_EVENT_EOF,
-  WS_SPEECH_EVENT_TRANSCRIPT,
   WS_SPEECH_EVENT_CONNECTED,
   WS_SPEECH_EVENT_CONNECTION_ERROR,
-  WS_SPEECH_EVENT_DISCONNECTED
+  WS_SPEECH_EVENT_DISCONNECTED,
+  WS_SPEECH_EVENT_TEXT_MSG
 };
 
 PJ_DEF(pj_status_t) pjmedia_ws_speech_port_create( pj_pool_t *pool,
@@ -29,7 +28,7 @@ PJ_DEF(pj_status_t) pjmedia_ws_speech_port_create( pj_pool_t *pool,
                 int ss_times,
                 const char *sr_engine,
                 const char *sr_language,
-                void (*cb)(pjmedia_port*, void *user_data, enum ws_speech_event, char *data),
+                void (*cb)(pjmedia_port*, void *user_data, enum ws_speech_event, char *data, int len),
                 void *cb_user_data,
 				pjmedia_port **p_port);
 

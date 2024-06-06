@@ -917,11 +917,13 @@ static void on_speech_transcript(pjmedia_port*, void *user_data, char* transcrip
   }
  
   char evt[1024];
-  make_evt_speech_transcript(evt, sizeof(evt), call_id, transcript);
+  make_evt_speech(evt, sizeof(evt), call_id, transcript);
   dispatch_event(evt);
 }
 
-static void on_ws_speech_event(pjmedia_port*, void *user_data, enum ws_speech_event e, char *data) {
+static void on_ws_speech_event(pjmedia_port*, void *user_data, enum ws_speech_event e, char *data, int len) {
+  char evt[2048];
+
   if (g_shutting_down)
     return;
 
@@ -933,9 +935,49 @@ static void on_ws_speech_event(pjmedia_port*, void *user_data, enum ws_speech_ev
     return;
   }
  
-  char evt[1024];
-  //make_evt_ws_speech_event(evt, sizeof(evt), call_id, data);
-  //dispatch_event(evt);
+  if(e == WS_SPEECH_EVENT_TEXT_MSG) {
+    rapidjson::Document document;
+
+    // Parse the JSON string from the buffer with specified length
+    if (document.Parse(data, len).HasParseError()) {
+        addon_log(
+            L_DBG,
+            "on_ws_speech_event: Failed to parse JSON string.\n");
+        return;
+    }
+    if (!document.HasMember("evt") || !document["evt"].IsString()) {
+      make_evt_ws_speech_event(evt, sizeof(evt), call_id, data, len);
+      dispatch_event(evt);
+      return;
+    }
+
+    if (strcmp(document["evt"].GetString(), "synth_complete") == 0) {
+      make_evt_speech_synth_complete(evt, sizeof(evt), call_id);
+      dispatch_event(evt);
+      return;
+    } else if (strcmp(document["evt"].GetString(), "speech") == 0) {
+      if (!document.HasMember("data") || !document["data"].IsObject()) {
+        make_evt_ws_speech_event(evt, sizeof(evt), call_id, data, len);
+        dispatch_event(evt);
+        return;
+      }
+
+      const rapidjson::Value& evt_data = document["data"];
+
+      if (!evt_data.HasMember("transcript") || !evt_data["transcript"].IsString()) {
+        make_evt_ws_speech_event(evt, sizeof(evt), call_id, data, len);
+        dispatch_event(evt);
+        return;
+      }
+
+      make_evt_speech(evt, sizeof(evt), call_id, (char*)evt_data["transcript"].GetString());
+      dispatch_event(evt);
+      return;
+    }
+  }
+
+  make_evt_ws_speech_event(evt, sizeof(evt), call_id, data, len);
+  dispatch_event(evt);
 }
 
 

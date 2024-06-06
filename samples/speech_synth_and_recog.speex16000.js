@@ -130,12 +130,12 @@ async function test() {
             call_id: oc.id,
         },
         {
-            event: 'speech_transcript',
+            event: 'speech',
             call_id: oc.id,
             transcript: 'how are you',
         },
         {
-            event: 'speech_transcript',
+            event: 'speech',
             call_id: ic.id,
             transcript: 'good morning',
         },
