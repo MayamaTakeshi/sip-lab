@@ -36,7 +36,7 @@ int make_evt_fax_result(char *dest, int size, long call_id, int result);
 
 int make_evt_end_of_file(char *dest, int size, long call_id);
 
-int make_evt_end_of_speech(char *dest, int size, long call_id);
+int make_evt_speech_synth_complete(char *dest, int size, long call_id);
 
 int make_evt_speech_transcript(char *dest, int size, long call_id, char* transcript);
 

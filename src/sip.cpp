@@ -888,19 +888,19 @@ static void on_end_of_file(pjmedia_port *port, void *user_data) {
   dispatch_event(evt);
 }
 
-static void on_end_of_speech(pjmedia_port *port, void *user_data) {
+static void on_end_of_speech_synth(pjmedia_port *port, void *user_data) {
   if (g_shutting_down)
     return;
 
   long call_id;
   if (!g_call_ids.get_id((long)user_data, call_id)) {
     printf(
-        "on_end_of_speech: Failed to get call_id. Event will not be notified.\n");
+        "on_end_of_speech_synth: Failed to get call_id. Event will not be notified.\n");
     return;
   }
 
   char evt[1024];
-  make_evt_end_of_speech(evt, sizeof(evt), call_id);
+  make_evt_speech_synth_complete(evt, sizeof(evt), call_id);
   dispatch_event(evt);
 }
 
@@ -7027,7 +7027,7 @@ bool prepare_speech_synth(Call *call, AudioEndpoint *ae, const char *server_url,
       return false;
     }
 
-    status = pjmedia_flite_port_set_eof_cb(fp->port, (void*)call, on_end_of_speech);
+    status = pjmedia_flite_port_set_eof_cb(fp->port, (void*)call, on_end_of_speech_synth);
     if (status != PJ_SUCCESS) {
       set_error("pjmedia_flite_port_set_eof_cb failed");
       return false;

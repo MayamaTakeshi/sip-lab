@@ -105,10 +105,10 @@ int make_evt_end_of_file(char *dest, int size, long call_id) {
       "{\"event\": \"end_of_file\", \"call_id\": %ld}", call_id);
 }
 
-int make_evt_end_of_speech(char *dest, int size, long call_id) {
+int make_evt_speech_synth_complete(char *dest, int size, long call_id) {
   return snprintf(
       dest, size,
-      "{\"event\": \"end_of_speech\", \"call_id\": %ld}", call_id);
+      "{\"event\": \"speech_synth_complete\", \"call_id\": %ld}", call_id);
 }
 
 int make_evt_speech_transcript(char *dest, int size, long call_id, char* transcript) {

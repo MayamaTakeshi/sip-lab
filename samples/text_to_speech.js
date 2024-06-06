@@ -135,11 +135,11 @@ async function test() {
 
     await z.wait([
         {
-            event: 'end_of_speech',
+            event: 'speech_synth_complete',
             call_id: ic.id,
         },
         {
-            event: 'end_of_speech',
+            event: 'speech_synth_complete',
             call_id: oc.id,
         },
     ], 3000)
