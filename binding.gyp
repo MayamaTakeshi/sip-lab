@@ -24,6 +24,7 @@
           ],
           'conditions': [
             [ 'OS!="win"', {
+              'cflags': ['-g'],
               'cflags_cc': [
                 '-g',
                 '-fexceptions',
