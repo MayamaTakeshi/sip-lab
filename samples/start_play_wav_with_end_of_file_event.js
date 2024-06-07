@@ -25,10 +25,6 @@ async function test() {
     oc = sip.call.create(t1.id, {
         from_uri: '"abc"<sip:alice@test.com>',
         to_uri: `sip:bob@${t2.address}:${t2.port}`,
-        headers: {
-            'X-MyHeader1': 'abc',
-            'X-MyHeader2': 'def',
-        },
     })
 
     await z.wait([
@@ -40,8 +36,6 @@ async function test() {
                 $fU: 'alice',
                 $fd: 'test.com',
                 $tU: 'bob',
-                '$hdr(X-MyHeader1)': 'abc',
-                'hdr_x_myheader2': 'def',
             }),
         },
         {
@@ -51,12 +45,7 @@ async function test() {
             msg: sip_msg({
                 $rs: '100',
                 $rr: 'Trying',
-                '$(hdrcnt(via))': 1,
                 'hdr_call_id': m.collect('sip_call_id'),
-                $fU: 'alice',
-                $fd: 'test.com',
-                $tU: 'bob',
-                '$hdr(l)': '0',
             }),
         },
     ], 1000)
@@ -69,10 +58,6 @@ async function test() {
     sip.call.respond(ic.id, {
         code: 200,
         reason:'OK',
-        headers: {
-            'X-MyHeader3': 'ghi',
-            'X-MyHeader4': 'jkl',
-        },
     })
 
     await z.wait([
@@ -93,14 +78,6 @@ async function test() {
             msg: sip_msg({
                 $rs: '200',
                 $rr: 'OK',
-                '$(hdrcnt(v))': 1,
-                $fU: 'alice',
-                $fd: 'test.com',
-                $tU: 'bob',
-                '$hdr(content-type)': 'application/sdp',
-                $rb: '!{_}a=sendrecv',
-                '$hdr(X-MyHeader3)': 'ghi',
-                '$hdr(X-MyHeader4)': 'jkl',
             }),
         },
     ], 1000)

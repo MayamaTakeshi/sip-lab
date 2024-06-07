@@ -67,12 +67,6 @@ async function test() {
             msg: sip_msg({
                 $rs: '200',
                 $rr: 'OK',
-                '$(hdrcnt(VIA))': 1,
-                $fU: 'alice',
-                $fd: 'test.com',
-                $tU: 'bob',
-                '$hdr(content-type)': 'application/sdp',
-                $rb: '!{_}a=sendrecv',
             }),
         },
         {

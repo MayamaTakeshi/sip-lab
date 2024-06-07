@@ -36,12 +36,7 @@ async function test() {
             msg: sip_msg({
                 $rs: '100',
                 $rr: 'Trying',
-                '$(hdrcnt(via))': 1,
                 '$hdr(call-id)': m.collect('sip_call_id'),
-                $fU: 'alice',
-                $fd: 'test.com',
-                $tU: 'bob',
-                '$hdr(l)': '0',
             }),
         },
     ], 1000)
@@ -71,12 +66,6 @@ async function test() {
             msg: sip_msg({
                 $rs: '200',
                 $rr: 'OK',
-                '$(hdrcnt(VIA))': 1,
-                $fU: 'alice',
-                $fd: 'test.com',
-                $tU: 'bob',
-                '$hdr(content-type)': 'application/sdp',
-                $rb: '!{_}a=sendrecv',
             }),
         },
     ], 1000)

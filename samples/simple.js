@@ -31,10 +31,17 @@ async function test() {
     console.log("t1", t1)
     console.log("t2", t2)
 
-    // make the call from t1 to t2
-    const oc = sip.call.create(t1.id, {from_uri: 'sip:alice@test.com', to_uri: `sip:bob@${t2.address}:${t2.port}`})
+    // make the call from t1 to t2 with some custom heaaders
+    const oc = sip.call.create(t1.id, {
+        from_uri: 'sip:alice@test.com',
+        to_uri: `sip:bob@${t2.address}:${t2.port}`,
+        headers: {
+            'X-MyHeader1': 'abc',
+            'X-MyHeader2': 'def',
+        },
+    })
 
-    // Here we will wait for the call to arrive at t2
+    // Here we will wait for the call to arrive at t2 with the custom headers
     // We will also get a '100 Trying' that is sent by sip-lab automatically
     // We will wait for at most 1000ms. If all events don't arrive within 1000ms, an exception will be thrown and the test will fail due to timeout.
     await z.wait([
@@ -42,6 +49,14 @@ async function test() {
             event: "incoming_call",
             call_id: m.collect("call_id"),
             transport_id: t2.id,
+            msg: sip_msg({
+                $rU: 'bob',
+                $fU: 'alice',
+                $tU: 'bob',
+                $fd: 'test.com',
+                '$hdr(X-MyHeader1)': 'abc',
+                hdr_x_myheader2: 'def',
+            })
         },
         {
             event: 'response',
@@ -64,7 +79,7 @@ async function test() {
     // What matters is that all events arrive within the specified timeout.
     // When specifying events, you can be as detailed or succinct as you need.
     // For example, the above event 'response' is waiting for a SIP '100 Trying' to arrive,
-    // but we are specifying things to match just to show that we can be very detailed when performing a match.
+    // but we are specifying several things to match just to show that we can be very detailed when performing a match.
     // But it could have been just like this:
     //
     //  {
@@ -75,7 +90,7 @@ async function test() {
     //          $rs: '100',
     //      }),
     //  }
-    // Regarding the function sip_msg() this is a special matching function provided by https://github.com/MayamaTakeshi/sip-matching that makes it 
+    // Regarding the function sip_msg(), this is a special matching function provided by https://github.com/MayamaTakeshi/sip-matching that makes it 
     // easy to match a SIP message using openser/kamailio/opensips pseudo-variables syntax.
  
 
@@ -86,10 +101,17 @@ async function test() {
         sip_call_id: z.store.sip_call_id,
     }
 
-    // Now we answer the call at t2 side
-    sip.call.respond(ic.id, {code: 200, reason: 'OK'})
+    // Now we answer the call at t2 side sending custom headers.
+    sip.call.respond(ic.id, {
+        code: 200,
+        reason: 'OK',
+        headers: {
+            'X-MyHeader3': 'ABC',
+            'X-MyHeader4': 'DEF',
+        },
+    })
 
-    // Then we wait for the '200 OK' at the t1 side
+    // Then we wait for the '200 OK' at the t1 side with the custom headers.
     // We will also get event 'media_update' for both sides indicating media streams (RTP) were set up successfully
     await z.wait([
         {
@@ -105,6 +127,8 @@ async function test() {
                 $tU: 'bob',
                 '$hdr(content-type)': 'application/sdp',
                 $rb: '!{_}a=sendrecv',
+                '$hdr(X-MyHeader3)': 'ABC',
+                hdr_x_myheader4: 'DEF',
             }),
         },
         {

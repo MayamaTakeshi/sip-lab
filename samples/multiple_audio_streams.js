@@ -54,34 +54,10 @@ async function test() {
             msg: sip_msg({
                 $rs: '100',
                 $rr: 'Trying',
-                '$(hdrcnt(via))': 1,
                 '$hdr(call-id)': m.collect('sip_call_id'),
-                $fU: 'alice',
-                $fd: 'test.com',
-                $tU: 'bob',
-                '$hdr(l)': '0',
             }),
         },
     ], 1000)
-    // Details about zeq wait(list_of_events_to_wait_for, timeout_in_ms):
-    // The order of events in the list is irrelevant.
-    // What matters is that all events arrive within the specified timeout.
-    // When specifying events, you can be as detailed or succinct as you need.
-    // For example, the above event 'response' is waiting for a SIP '100 Trying' to arrive,
-    // but we are specifying things to match just to show that we can be very detailed when performing a match.
-    // But it could have been just like this:
-    //
-    //  {
-    //      event: 'response',
-    //      call_id: oc.id,
-    //      method: 'INVITE',
-    //      msg: sip_msg({
-    //          $rs: '100',
-    //      }),
-    //  }
-    // Regarding the function sip_msg() this is a special matching function provided by https://github.com/MayamaTakeshi/sip-matching that makes it 
-    // easy to match a SIP message using openser/kamailio/opensips pseudo-variables syntax.
- 
 
     // Here we store data for the incoming call
     // just to organize our code (not really needed)
@@ -103,12 +79,6 @@ async function test() {
             msg: sip_msg({
                 $rs: '200',
                 $rr: 'OK',
-                '$(hdrcnt(VIA))': 1,
-                $fU: 'alice',
-                $fd: 'test.com',
-                $tU: 'bob',
-                '$hdr(content-type)': 'application/sdp',
-                $rb: '!{_}a=sendrecv',
             }),
         },
         {
