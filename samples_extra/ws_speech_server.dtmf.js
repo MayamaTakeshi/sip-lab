@@ -86,11 +86,11 @@ async function test() {
     sip.call.start_record_wav(oc.id, {file: './oc.wav'})
     sip.call.start_record_wav(ic.id, {file: './ic.wav'})
 
-    sip.call.start_speech_synth(oc.id, {server_url: 'ws://0.0.0.0:8080', engine: 'dtmf-gen', voice: 'dtmf', language: 'dtmf', text: 'abcd', times: 1})
-    sip.call.start_speech_synth(ic.id, {server_url: 'ws://0.0.0.0:8080', engine: 'dtmf-gen', voice: 'dtmf', language: 'dtmf', text: 'dcba', times: 1})
-
     sip.call.start_speech_recog(oc.id, {server_url: 'ws://0.0.0.0:8080', engine: 'dtmf-det', language: 'dtmf'})
     sip.call.start_speech_recog(ic.id, {server_url: 'ws://0.0.0.0:8080', engine: 'dtmf-det', language: 'dtmf'})
+
+    sip.call.start_speech_synth(oc.id, {server_url: 'ws://0.0.0.0:8080', engine: 'dtmf-gen', voice: 'dtmf', language: 'dtmf', text: 'abcd', times: 1})
+    sip.call.start_speech_synth(ic.id, {server_url: 'ws://0.0.0.0:8080', engine: 'dtmf-gen', voice: 'dtmf', language: 'dtmf', text: 'dcba', times: 1})
 
     await z.wait([
         {
