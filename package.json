@@ -1,6 +1,6 @@
 {
   "name": "sip-lab",
-  "version": "1.28.3",
+  "version": "1.28.4",
   "description": "",
   "main": "index.js",
   "engines": {
