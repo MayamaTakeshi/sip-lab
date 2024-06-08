@@ -2590,3 +2590,56 @@ So we will need to build pocketsphinx from source and link statically to it.
 Regarding the pocketsphinx model we will distribute the one that comes with it.
 We will store it within our module and index.js will set the path to it when start_speech_recog is specified without passing it.
 
+-------------------------
+2024/06/08 takeshi:
+
+Here is result of tests executed inside a docker container started by doing:
+  takeshi@takeshi-desktop:~$ docker run -it debian:bookworm-slim /bin/bash
+
+After installation of sip-lab I switched to node_modules/sip-lab and runtests resulted in:
+```
+
+Success. All tests passed
+
+Successful tests:
+  - samples/100_calls.js: duration=0.00 seconds
+  - samples/16_audio_streams.js: duration=0.00 seconds
+  - samples/183_session_progress.js: duration=0.00 seconds
+  - samples/delayed_media.js: duration=0.00 seconds
+  - samples/four_audio_streams_two_refused.js: duration=0.00 seconds
+  - samples/g729.js: duration=0.00 seconds
+  - samples/mrcp_and_audio.js: duration=0.00 seconds
+  - samples/mrcp_and_audio.simplified_media.js: duration=0.00 seconds
+  - samples/multiple_audio_streams.js: duration=0.00 seconds
+  - samples/options.js: duration=0.00 seconds
+  - samples/pcma.js: duration=0.00 seconds
+  - samples/play_wav_and_speech_recog.bad_transcript.pcmu8000.js: duration=0.00 seconds
+  - samples/refer.js: duration=0.00 seconds
+  - samples/refuse_telephone_event.js: duration=0.00 seconds
+  - samples/register_no_expires.js: duration=0.00 seconds
+  - samples/register_subscribe.js: duration=0.00 seconds
+  - samples/reinvite_and_dtmf.js: duration=0.00 seconds
+  - samples/reinvite_audio_audio.js: duration=0.00 seconds
+  - samples/reinvite_with_hold_unhold.js: duration=0.00 seconds
+  - samples/rtp_and_srtp.js: duration=0.00 seconds
+  - samples/rtp_and_srtp.rtp_refused.js: duration=0.00 seconds
+  - samples/send_and_receive_fax.js: duration=0.00 seconds
+  - samples/simple.js: duration=0.00 seconds
+  - samples/sip_cancel.js: duration=0.00 seconds
+  - samples/speech_synth_and_recog.speex16000.js: duration=0.00 seconds
+  - samples/srtp.js: duration=0.00 seconds
+  - samples/start_play_wav_with_end_of_file_event.js: duration=0.00 seconds
+  - samples/start_play_wav_with_no_loop.js: duration=0.00 seconds
+  - samples/tcp.js: duration=0.00 seconds
+  - samples/text_to_speech.js: duration=0.00 seconds
+  - samples/tls.js: duration=0.00 seconds
+  - samples/two_audio_streams.js: duration=0.00 seconds
+  - samples/two_audio_streams.port_zero.js: duration=0.00 seconds
+
+Everything OK
+
+root@636c5c5b0748:~/tmp/t2/node_modules/sip-lab# node -v
+v19.9.0
+```
+
+
