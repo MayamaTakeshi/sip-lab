@@ -98,7 +98,7 @@ then
 
     rm -fr ../../pocketsphinx
     mkdir -p ../../pocketsphinx
-    cp -r model/ ../../pocketsphinx/
+    cp -rf model/ ../../pocketsphinx/
 fi
 
 

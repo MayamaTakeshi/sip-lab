@@ -32,6 +32,8 @@ RUN cd /home/node/app && ./build_deps.sh
 
 RUN cd /home/node/app && rm ./build_deps.sh
 
+RUN rm -fr /home/node/app/pocketsphinx
+
 # Disable npm update check
 ENV NO_UPDATE_NOTIFIER true
 ENV npm_config_update_notifier false
