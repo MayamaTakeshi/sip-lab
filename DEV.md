@@ -76,12 +76,9 @@ If it fails due to proxy problems, check if you have proxy configured in ~/.dock
 After the message is built you can pass them to prebuildify-cross:
 ```
 nvm use v16.13.1
-npx prebuildify-cross -i mayamatakeshi/sip-lab-debian11:latest -t 19.0.0 -t 20.0.0 -t 21.0.0 --strip
+npx prebuildify-cross -i mayamatakeshi/sip-lab-debian11:latest -t 15.0.0 -t 16.0.0 -t 17.0.0 -t 18.0.0 -t 19.0.0 -t 20.0.0 -t 21.0.0 --strip
 ```
 Obs: however the above will fail if you are behind proxy (solution pending).
-
-Also, although we don't use '-t 15.0.0 -t 16.0.0 -t 17.0.0 -t 18.0.0' it will still work with them. 
-And actually, it seem if use the above, it will not work with them (see https://github.com/MayamaTakeshi/sip-lab/issues/68)
 
 #### Running tests
 ```
