@@ -80,6 +80,61 @@ npx prebuildify-cross -i mayamatakeshi/sip-lab-debian11:latest -t 15.0.0 -t 16.0
 ```
 Obs: however the above will fail if you are behind proxy (solution pending).
 
+#### Checking build using docker container
+
+A quick check of the build can be done this way:
+```
+docker run -it debian:bookworm-slim /bin/bash
+
+# then inside the container
+
+apt update
+apt install curl
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+. ~/.nvm/nvm.sh
+nvm i 19
+mkdir -p /root/tmp/t1
+cd /root/tmp/t1
+npm init -y
+apt install -y build-essential automake autoconf libtool libspeex-dev libopus-dev libsdl2-dev libavdevice-dev libswscale-dev libv4l-dev libopencore-amrnb-dev libopencore-amrwb-dev libvo-amrwbenc-dev libvo-amrwbenc-dev libboost-dev libtiff-dev libpcap-dev libssl-dev uuid-dev flite-dev cmake git wget
+npm i sip-lab
+```
+
+Sample build:
+```
+root@636c5c5b0748:~/tmp/t2# nvm use 19
+Now using node v19.9.0 (npm v9.6.3)
+
+root@636c5c5b0748:~/tmp/t2# time npm i sip-lab
+npm WARN deprecated inflight@1.0.6: This module is not supported, and leaks memory. Do not use it. Check out lru-cache if you want a good and tested way to coalesce async requests by a key value, which is much more comprehensive and powerful.
+npm WARN deprecated @npmcli/move-file@2.0.1: This functionality has been moved to @npmcli/fs
+npm WARN deprecated npmlog@6.0.2: This package is no longer supported.
+npm WARN deprecated rimraf@3.0.2: Rimraf versions prior to v4 are no longer supported
+npm WARN deprecated are-we-there-yet@3.0.1: This package is no longer supported.
+npm WARN deprecated glob@7.2.3: Glob versions prior to v9 are no longer supported
+npm WARN deprecated glob@8.1.0: Glob versions prior to v9 are no longer supported
+npm WARN deprecated gauge@4.0.4: This package is no longer supported.
+
+added 165 packages, and audited 166 packages in 6m
+
+11 packages are looking for funding
+  run `npm fund` for details
+
+4 moderate severity vulnerabilities
+
+To address all issues, run:
+  npm audit fix
+
+Run `npm audit` for details.
+
+real	5m54.904s
+user	4m32.643s
+sys	0m54.272s
+
+```
+
+So it is taking aboult 6 minutes to build the addon on a docker container.
+
 #### Running tests
 ```
 npm test

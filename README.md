@@ -25,8 +25,9 @@ TODO:
 
 ### Installation
 
-This is a node.js addon and it is known to work on Debian 11, Debian 10, Ubuntu 22.04 and Ubuntu 20.04.
-It is distributed with prebuild binaries for node.js 15.0.0 and above (but built for Debian 11. For other Debian versions or for Ubuntu a local build of the addon will be executed. Being the case, be patient as the build process will take several minutes to complete). 
+This is a node.js addon and it is known to work on Debian 11.
+
+It is distributed with prebuild binaries for node.js 15.0.0 and above (but built for Debian 11. For other Debian versions or for Ubuntu a local build of the addon will be executed. Being the case, be patient as the build process will take several minutes to complete (about 6 minutes on a docker container)). 
 
 To install it, first install build dependencies:
 ```
@@ -47,6 +48,11 @@ The above script has detailed comments.
 
 Please read it to undestand how to write your own test scripts.
 
+Notes:
+  - It will not work on Debian 10 as cmake version is older than required.
+  - It will work on Debian 12 but a build process will be required. But you need to build using node v19 or older. Building with node v20 or v21 will fail (https://github.com/MayamaTakeshi/sip-lab/issues/107). But once you have it built, you can switch to a newer version of node.
+
+So basically, if you stick with Debian 11 and any node version from 15 to 21, istallation should be smooth.
 
 ### Samples
 
