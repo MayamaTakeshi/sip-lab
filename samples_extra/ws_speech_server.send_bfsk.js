@@ -5,6 +5,12 @@ var m = require('data-matching')
 var sip_msg = require('sip-matching')
 var sdp = require('sdp-matching')
 
+function stringToBinary(str) {
+  return str.split('').map(char => {
+    return char.charCodeAt(0).toString(2).padStart(8, '0');
+  }).join('');
+}
+
 async function test() {
     //sip.set_log_level(6)
     sip.dtmf_aggregation_on(500)
@@ -89,29 +95,23 @@ async function test() {
     sip.call.start_speech_recog(oc.id, {server_url: 'ws://0.0.0.0:8080', engine: 'bfsk-sr', language: '500:2000'})
     sip.call.start_speech_recog(ic.id, {server_url: 'ws://0.0.0.0:8080', engine: 'bfsk-sr', language: '500:2000'})
 
-    sip.call.start_speech_synth(oc.id, {server_url: 'ws://0.0.0.0:8080', engine: 'bfsk-ss', voice: '5', language: '500:2000', text: 'abcdefgh', times: 1})
-    sip.call.start_speech_synth(ic.id, {server_url: 'ws://0.0.0.0:8080', engine: 'bfsk-ss', voice: '5', language: '500:2000', text: 'hgfedcba', times: 1})
+    await z.sleep(100)
+
+    sip.call.send_bfsk(oc.id, {bits: stringToBinary('abcd'), freq_zero: 500, freq_one: 2000})
+    sip.call.send_bfsk(ic.id, {bits: stringToBinary('dcba'), freq_zero: 500, freq_one: 2000})
 
     await z.wait([
         {
-            event: 'speech_synth_complete',
-            call_id: ic.id,
-        },
-        {
-            event: 'speech_synth_complete',
-            call_id: oc.id,
-        },
-        {
             event: 'speech',
             call_id: oc.id,
-            transcript: 'hgfedcba'
+            transcript: 'dcba'
         },
         {
             event: 'speech',
             call_id: ic.id,
-            transcript: 'abcdefgh'
-        }
-    ], 3000)
+            transcript: 'abcd'
+        },
+    ], 2000)
 
     await z.sleep(1000)
 
