@@ -25,8 +25,7 @@
 #include <pj/pool.h>
 #include <pj/string.h>
 
-#include <spandsp.h>
-#include <spandsp/expose.h>
+#include <math.h>
 
 #define SIGNATURE   PJMEDIA_SIGNATURE('b', 'f', 'd', 't')
 #define THIS_FILE   "bfsk_det.c"
@@ -37,6 +36,30 @@
 #   define TRACE_(expr)
 #endif
 
+#define EXTINCTION_THRESHOLD 0.001 
+
+
+// Goertzel algorithm implementation
+double goertzel(int16_t *samples, int num_samples, int target_freq, int sample_rate) {
+    double normalized_freq = (double)target_freq / sample_rate;
+    double omega = 2.0 * M_PI * normalized_freq;
+    double coeff = 2.0 * cos(omega);
+
+    double s_prev = 0.0;
+    double s_prev2 = 0.0;
+
+    for (int i = 0; i < num_samples; i++) {
+        double s = samples[i] + coeff * s_prev - s_prev2;
+        s_prev2 = s_prev;
+        s_prev = s;
+    }
+
+    double power = (s_prev2 * s_prev2 + s_prev * s_prev - coeff * s_prev * s_prev2) / num_samples;
+
+    return power;
+}
+
+
 static pj_status_t bfsk_det_put_frame(pjmedia_port *this_port, 
 				  pjmedia_frame *frame);
 static pj_status_t bfsk_det_on_destroy(pjmedia_port *this_port);
@@ -44,11 +67,17 @@ static pj_status_t bfsk_det_on_destroy(pjmedia_port *this_port);
 struct bfsk_det
 {
     struct pjmedia_port	base;
-    fsk_rx_state_t state;
+    int clock_rate;
+    int freq_zero;
+    int freq_one;
+
+    int current_bit;
+
     void (*bfsk_cb)(pjmedia_port*, void*, int);
     void *bfsk_cb_user_data;
 };
 
+/*
 static void bfsk_det_bit_callback(void *user_data, int bit)
 {
     printf("bfsk_det_bit_callback got bit=%i\n", bit);
@@ -64,6 +93,7 @@ static void bfsk_det_bit_callback(void *user_data, int bit)
         dport->bfsk_cb_user_data,
         bit);
 }
+*/
 	
 PJ_DEF(pj_status_t) pjmedia_bfsk_det_create( pj_pool_t *pool,
 				unsigned clock_rate,
@@ -76,13 +106,10 @@ PJ_DEF(pj_status_t) pjmedia_bfsk_det_create( pj_pool_t *pool,
 				void *user_data,
                 int freq_zero,
                 int freq_one,
-                int min_level,
-                int baud_rate,
 				pjmedia_port **p_port)
 {
     printf("pjmedia_bfsk_det_create\n");
     struct bfsk_det *det;
-    fsk_spec_t *fsk_spec;
 
     printf("p1\n");
     const pj_str_t name = pj_str("bfsk_det");
@@ -102,8 +129,6 @@ PJ_DEF(pj_status_t) pjmedia_bfsk_det_create( pj_pool_t *pool,
     pjmedia_port_info_init(&det->base.info, &name, SIGNATURE, clock_rate,
 			   channel_count, bits_per_sample, samples_per_frame);
 
-    printf("p4\n");
-
     det->base.put_frame = &bfsk_det_put_frame;
     det->base.on_destroy = &bfsk_det_on_destroy;
 
@@ -112,28 +137,16 @@ PJ_DEF(pj_status_t) pjmedia_bfsk_det_create( pj_pool_t *pool,
     det->bfsk_cb = cb;
     det->bfsk_cb_user_data = user_data;
 
-    fsk_spec = PJ_POOL_ZALLOC_T(pool, fsk_spec_t);
-    PJ_ASSERT_RETURN(pool != NULL, PJ_ENOMEM);
     printf("p6\n");
 
-    fsk_spec->name = "bfsk";
-    fsk_spec->freq_zero = freq_zero;
-    fsk_spec->freq_one = freq_one;
-    fsk_spec->min_level = min_level;
-    fsk_spec->baud_rate = baud_rate;
-
-    int sync_mode = 0;
+    det->clock_rate = clock_rate;
+    det->freq_zero = freq_zero;
+    det->freq_one = freq_one;
+    det->current_bit = -1;
 
     printf("p7\n");
-    fsk_rx_state_t *res = fsk_rx_init(&det->state, fsk_spec, sync_mode, &bfsk_det_bit_callback, (void*)det);
-    if(res != &det->state) {
-       printf("fsx_rx_init failed\n"); 
-    }
 
-    //fsk_rx_init(&(det->state), &preset_fsk_specs[FSK_V21CH2], FSK_FRAME_MODE_SYNC, &bfsk_det_bit_callback, (void*)det);
-
-    printf("p8\n");
-    TRACE_((THIS_FILE, "bfsk_det created: %u/%u/%u/%u", clock_rate, 
+    TRACE_((THIS_FILE, "bfsk_det created: clock_rate=%u channel_count=%u samples_per_frame=%u bits_per_frame=%u", clock_rate, 
 	    channel_count, samples_per_frame, bits_per_sample));
 
     printf("fsk_rx_init done\n");
@@ -150,9 +163,44 @@ static pj_status_t bfsk_det_put_frame(pjmedia_port *this_port,
 
     struct bfsk_det *dport = (struct bfsk_det*) this_port;
 
-    printf("p=%x, size=%i\n", frame->buf, PJMEDIA_PIA_SPF(&dport->base.info));
-    fsk_rx(&dport->state, (const pj_int16_t *)frame->buf,
-		PJMEDIA_PIA_SPF(&dport->base.info));
+    int size = PJMEDIA_PIA_SPF(&dport->base.info);
+    int bps = PJMEDIA_PIA_BITS(&dport->base.info);
+
+    printf("p=%x, size=%i clock_rate=%i bits_per_sample=%i\n", frame->buf, size, dport->clock_rate, bps);
+
+    int16_t * samples = (int16_t*)frame->buf;
+
+    printf("Buffer contents:\n");
+    for (int i = 0; i < size; i++) {
+        printf("%04x ", samples[i] & 0xFFFF);
+    }
+    printf("\n");
+
+    double zero_power = goertzel(frame->buf, size, dport->freq_zero, dport->clock_rate);
+    double one_power = goertzel(frame->buf, size, dport->freq_one, dport->clock_rate);
+
+    printf("zero_power=%f one_power=%f\n", zero_power, one_power);
+
+    // Calculate total signal power (sum of both detected frequencies)
+    double total_power = zero_power + one_power;
+
+    // Check for signal extinction
+    if (total_power < EXTINCTION_THRESHOLD) {
+        if(dport->current_bit != -1) {
+            dport->bfsk_cb((pjmedia_port*)dport, dport->bfsk_cb_user_data, dport->current_bit);
+            dport->current_bit = -1;
+        }
+    } else {
+        int dominant = zero_power > one_power ? 0 : 1;
+        if(dport->current_bit != -1) {
+            if(dominant != dport->current_bit) {
+                dport->bfsk_cb((pjmedia_port*)dport, dport->bfsk_cb_user_data, dport->current_bit);
+                dport->current_bit = dominant;
+            }
+        } else {
+            dport->current_bit = dominant;
+        }
+    }
 
     return PJ_SUCCESS;
 }

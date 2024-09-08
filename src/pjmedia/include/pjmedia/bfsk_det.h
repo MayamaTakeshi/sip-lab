@@ -16,8 +16,6 @@ PJ_DEF(pj_status_t) pjmedia_bfsk_det_create( pj_pool_t *pool,
                 void *user_data,
                 int freq_zero,
                 int freq_one,
-                int min_level,
-                int baud_rate,
 				pjmedia_port **p_port);
 
 PJ_END_DECL

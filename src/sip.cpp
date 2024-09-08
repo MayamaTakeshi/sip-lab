@@ -267,7 +267,7 @@ int ms_timestamp();
 bool g_shutting_down;
 
 int g_dtmf_inter_digit_timer = 0;
-int g_bfsk_inter_bit_timer = 0;
+int g_bfsk_inter_bit_timer = 50;
 
 pj_str_t g_sip_ipaddress;
 
@@ -641,7 +641,7 @@ static void build_stream_stat(ostringstream &oss, pjmedia_rtcp_stat *stat,
 
 bool prepare_tonegen(Call *call, AudioEndpoint *ae);
 bool prepare_dtmfdet(Call *call, AudioEndpoint *ae);
-bool prepare_bfsk_det(Call *call, AudioEndpoint *ae, const int freq_zero, const int freq_one, const int min_level, const int baud_rate);
+bool prepare_bfsk_det(Call *call, AudioEndpoint *ae, const int freq_zero, const int freq_one);
 bool prepare_wav_player(Call *call, AudioEndpoint *ae, const char *file, unsigned flags, bool end_of_file_event);
 bool prepare_wav_writer(Call *call, AudioEndpoint *ae, const char *file);
 bool prepare_fax(Call *call, AudioEndpoint *ae, bool is_sender, const char *file, unsigned flags);
@@ -897,7 +897,7 @@ static void on_bfsk_bit(pjmedia_port *port, void *user_data, int bit) {
       return;
     }
 
-    ae->BfskBuffer[len] = bit;
+    ae->BfskBuffer[len] = bit == 0 ? '0' : '1';
     ae->BfskBufferLength++;
 
     ae->last_bit_timestamp = ms_timestamp();
@@ -905,7 +905,7 @@ static void on_bfsk_bit(pjmedia_port *port, void *user_data, int bit) {
   } else {
     char evt[1024];
     char the_bit[1];
-    the_bit[0] = bit;
+    the_bit[0] = bit == 0 ? '0' : '1';
     make_evt_bfsk(evt, sizeof(evt), call_id, 1, the_bit, media_id);
     dispatch_event(evt);
   }
@@ -3470,7 +3470,7 @@ out:
 }
 
 pj_status_t audio_endpoint_send_bfsk(Call *call, AudioEndpoint *ae,
-                                     const char *bits, const int freq_zero, const int freq_one, const int level, const int baud_rate) {
+                                     const char *bits, const int freq_zero, const int freq_one, const int level, const int signal_duration) {
   pj_status_t status;
 
   if (!prepare_tonegen(call, ae)) {
@@ -3480,14 +3480,12 @@ pj_status_t audio_endpoint_send_bfsk(Call *call, AudioEndpoint *ae,
 
   int len = strlen(bits);
 
-  int duration = 1000 / baud_rate;  // Duration of each tone in milliseconds
-
   pjmedia_tone_desc *tones = (pjmedia_tone_desc*)pj_pool_zalloc(call->inv->pool, sizeof(pjmedia_tone_desc) * len);
 
   for (int i = 0; i < len; ++i) {
     tones[i].freq1 = bits[i] == '0' ? freq_zero : freq_one;
-    tones[i].on_msec = duration;
-    tones[i].off_msec = duration;
+    tones[i].on_msec = signal_duration;
+    tones[i].off_msec = signal_duration;
     tones[i].volume = level;
   } 
 
@@ -3500,7 +3498,7 @@ pj_status_t audio_endpoint_send_bfsk(Call *call, AudioEndpoint *ae,
   return PJ_SUCCESS;
 }
 
-pj_status_t send_bfsk(Call *call, const char *bits, const int freq_zero, const int freq_one, const int level, const int baud_rate) {
+pj_status_t send_bfsk(Call *call, const char *bits, const int freq_zero, const int freq_one, const int level, const int signal_duration) {
   for (int i = 0; i < call->media_count; i++) {
     MediaEndpoint *me = (MediaEndpoint *)call->media[i];
     if (me->type != ENDPOINT_TYPE_AUDIO)
@@ -3511,7 +3509,7 @@ pj_status_t send_bfsk(Call *call, const char *bits, const int freq_zero, const i
 
     AudioEndpoint *ae = (AudioEndpoint *)me->endpoint.audio;
 
-    pj_status_t status = audio_endpoint_send_bfsk(call, ae, bits, freq_zero, freq_one, level, baud_rate);
+    pj_status_t status = audio_endpoint_send_bfsk(call, ae, bits, freq_zero, freq_one, level, signal_duration);
     if (status != PJ_SUCCESS)
       return status;
   }
@@ -3536,8 +3534,8 @@ int pjw_call_send_bfsk(long call_id, const char *json) {
   char *bits;
   int freq_zero;
   int freq_one;
-  int level;
-  int baud_rate;
+  int level = 24000;
+  int signal_duration = 10;
 
   MediaEndpoint *me;
   AudioEndpoint *ae;
@@ -3549,7 +3547,7 @@ int pjw_call_send_bfsk(long call_id, const char *json) {
 
   Document document;
 
-  const char *valid_params[] = {"bits", "freq_zero", "freq_one", "level", "baud_rate", "media_id", ""};
+  const char *valid_params[] = {"bits", "freq_zero", "freq_one", "level", "signal_duration", "media_id", ""};
 
   if (!g_call_ids.get(call_id, val)) {
     set_error("Invalid call_id");
@@ -3577,11 +3575,11 @@ int pjw_call_send_bfsk(long call_id, const char *json) {
     goto out;
   }
 
-  if (json_get_int_param(document, "level", false, &level) <= 0) {
+  if (json_get_int_param(document, "level", true, &level) <= 0) {
     goto out;
   }
 
-  if (json_get_int_param(document, "baud_rate", false, &baud_rate) <= 0) {
+  if (json_get_int_param(document, "signal_duration", true, &signal_duration) <= 0) {
     goto out;
   }
 
@@ -3606,7 +3604,7 @@ int pjw_call_send_bfsk(long call_id, const char *json) {
 
   if (NOT_FOUND_OPTIONAL == res) {
     // send_bfsk_bits to all audio endpoints
-    status = send_bfsk(call, bits, freq_zero, freq_one, level, baud_rate);
+    status = send_bfsk(call, bits, freq_zero, freq_one, level, signal_duration);
     if (status != PJ_SUCCESS) {
       goto out;
     }
@@ -3626,7 +3624,7 @@ int pjw_call_send_bfsk(long call_id, const char *json) {
 
     ae = (AudioEndpoint *)me->endpoint.audio;
 
-    status = audio_endpoint_send_bfsk(call, ae, bits, freq_one, freq_zero, level, baud_rate);
+    status = audio_endpoint_send_bfsk(call, ae, bits, freq_one, freq_zero, level, signal_duration);
     if (status != PJ_SUCCESS) {
       goto out;
     }
@@ -4580,7 +4578,7 @@ out:
   return 0;
 }
 
-pj_status_t audio_endpoint_start_bfsk_detection(Call *call, AudioEndpoint *ae, const int freq_zero, const int freq_one, const int min_level, const int baud_rate) {
+pj_status_t audio_endpoint_start_bfsk_detection(Call *call, AudioEndpoint *ae, const int freq_zero, const int freq_one) {
   pj_status_t status;
 
   if(!ae->stream_cbp.port) {
@@ -4588,7 +4586,7 @@ pj_status_t audio_endpoint_start_bfsk_detection(Call *call, AudioEndpoint *ae, c
     return -1;
   }
 
-  if(!prepare_bfsk_det(call, ae, freq_zero, freq_one, min_level, baud_rate)) {
+  if(!prepare_bfsk_det(call, ae, freq_zero, freq_one)) {
     return -1;
   }
 
@@ -4614,14 +4612,12 @@ int pjw_call_start_bfsk_detection(long call_id, const char *json) {
 
   int freq_zero;
   int freq_one;
-  int min_level;
-  int baud_rate;
 
   char buffer[MAX_JSON_INPUT];
 
   Document document;
 
-  const char *valid_params[] = {"freq_zero", "freq_one", "min_level", "baud_rate", "media_id", ""};
+  const char *valid_params[] = {"freq_zero", "freq_one", "media_id", ""};
 
   if (!g_call_ids.get(call_id, val)) {
     set_error("Invalid call_id");
@@ -4654,16 +4650,6 @@ int pjw_call_start_bfsk_detection(long call_id, const char *json) {
     goto out;
   }
 
-  res = json_get_int_param(document, "min_level", false, &min_level);
-  if (res <= 0) {
-    goto out;
-  }
-
-  res = json_get_int_param(document, "baud_rate", false, &baud_rate);
-  if (res <= 0) {
-    goto out;
-  }
-
   res = json_get_int_param(document, "media_id", true, &media_id);
   if (res <= 0) {
     goto out;
@@ -4674,7 +4660,7 @@ int pjw_call_start_bfsk_detection(long call_id, const char *json) {
       MediaEndpoint *me = (MediaEndpoint *)call->media[i];
       if (me->type == ENDPOINT_TYPE_AUDIO) {
         AudioEndpoint *ae = (AudioEndpoint *)me->endpoint.audio;
-        status = audio_endpoint_start_bfsk_detection(call, ae, freq_zero, freq_one, min_level, baud_rate);
+        status = audio_endpoint_start_bfsk_detection(call, ae, freq_zero, freq_one);
         if (status != PJ_SUCCESS) goto out;
       }
     }
@@ -4692,7 +4678,7 @@ int pjw_call_start_bfsk_detection(long call_id, const char *json) {
 
     ae = (AudioEndpoint *)me->endpoint.audio;
 
-    audio_endpoint_start_bfsk_detection(call, ae, freq_zero, freq_one, min_level, baud_rate);
+    audio_endpoint_start_bfsk_detection(call, ae, freq_zero, freq_one);
   }
 
 out:
@@ -7488,7 +7474,7 @@ bool prepare_dtmfdet(Call *call, AudioEndpoint *ae) {
   return connect_feature_port_to_stream_port(call, ae, fp);
 }
 
-bool prepare_bfsk_det(Call *call, AudioEndpoint *ae, const int freq_zero, const int freq_one, const int min_level, const int baud_rate) {
+bool prepare_bfsk_det(Call *call, AudioEndpoint *ae, const int freq_zero, const int freq_one) {
   printf("DEBUG prepare_bfsk_det\n");
   pj_status_t status;
 
@@ -7505,7 +7491,7 @@ bool prepare_bfsk_det(Call *call, AudioEndpoint *ae, const int freq_zero, const 
       PJMEDIA_PIA_CCNT(&ae->stream_cbp.port->info),
       PJMEDIA_PIA_SPF(&ae->stream_cbp.port->info),
       PJMEDIA_PIA_BITS(&ae->stream_cbp.port->info), 
-      on_bfsk_bit, call, freq_zero, freq_one, min_level, baud_rate, &fp->port);
+      on_bfsk_bit, call, freq_zero, freq_one, &fp->port);
   if (status != PJ_SUCCESS) {
     set_error("pjmedia_bfsk_det_create failed");
       return false;
