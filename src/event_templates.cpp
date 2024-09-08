@@ -47,6 +47,14 @@ int make_evt_dtmf(char *dest, int size, long call_id, int digits_len,
                   call_id, digits_len, digits, mode, media_id);
 }
 
+int make_evt_bfsk(char *dest, int size, long call_id, int bits_len,
+                  const char *bits, int media_id) {
+  return snprintf(dest, size,
+                  "{\"event\": \"bfsk\", \"call_id\": %ld, \"bits\": "
+                  "\"%.*s\", \"media_id\": %i}",
+                  call_id, bits_len, bits, media_id);
+}
+
 int make_evt_call_ended(char *dest, int size, long call_id, int sip_msg_len,
                         const char *sip_msg) {
   printf("make_evt_call_ended sip_msg_len=%i sip_msg=%p\n", sip_msg_len,

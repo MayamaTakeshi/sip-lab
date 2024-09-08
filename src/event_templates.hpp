@@ -17,6 +17,9 @@ int make_evt_media_update(char *dest, int size, long call_id,
 int make_evt_dtmf(char *dest, int size, long call_id, int digits_len,
                   const char *digits, int mode, int media_id);
 
+int make_evt_bfsk(char *dest, int size, long call_id, int bits_len,
+                  const char *bits, int media_id);
+
 int make_evt_call_ended(char *dest, int size, long call_id, int sip_msg_len,
                         const char *sip_msg);
 

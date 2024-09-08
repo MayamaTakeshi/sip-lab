@@ -41,6 +41,8 @@ int pjw_call_terminate(long call_id, const char *json);
 
 int pjw_call_send_dtmf(long call_id, const char *json);
 
+int pjw_call_send_bfsk(long call_id, const char *json);
+
 int pjw_call_reinvite(long call_id, const char *json);
 
 int pjw_call_send_request(long call_id, const char *json);
@@ -64,6 +66,15 @@ int pjw_call_stop_speech_synth(long call_id, const char *json);
 int pjw_call_start_speech_recog(long call_id, const char *json);
 
 int pjw_call_stop_speech_recog(long call_id, const char *json);
+
+int pjw_call_start_inband_dtmf_detection(long call_id, const char *json);
+
+int pjw_call_stop_inband_dtmf_detection(long call_id, const char *json);
+
+int pjw_call_start_bfsk_detection(long call_id, const char *json);
+
+int pjw_call_stop_bfsk_detection(long call_id, const char *json);
+
 int pjw_call_get_stream_stat(long call_id, const char *json, char *out_stats);
 
 // int pjw_call_refer(long call_id, const char *json, long

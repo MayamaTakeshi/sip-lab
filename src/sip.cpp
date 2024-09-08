@@ -24,6 +24,7 @@
 #include "websock.h"
 
 #include "dtmfdet.h"
+#include "bfsk_det.h"
 #include "fax_port.h"
 #include "flite_port.h"
 #include "pocketsphinx_port.h"
@@ -266,6 +267,7 @@ int ms_timestamp();
 bool g_shutting_down;
 
 int g_dtmf_inter_digit_timer = 0;
+int g_bfsk_inter_bit_timer = 0;
 
 pj_str_t g_sip_ipaddress;
 
@@ -329,7 +331,8 @@ struct ConfBridgePort {
 #define FP_FAX          4
 #define FP_SPEECH_SYNTH 5
 #define FP_SPEECH_RECOG 6
-#define MAX_FP          7
+#define FP_BFSK_DET     7
+#define MAX_FP          8
 
 struct AudioEndpoint {
   pjmedia_transport *med_transport;
@@ -340,6 +343,10 @@ struct AudioEndpoint {
   int last_digit_timestamp[2];
 
   pj_str_t mode;
+
+  char BfskBuffer[MAXDIGITS + 1];
+  int BfskBufferLength;
+  int last_bit_timestamp;
 
   pjmedia_conf *conf;
   pjmedia_master_port *master_port;
@@ -634,6 +641,7 @@ static void build_stream_stat(ostringstream &oss, pjmedia_rtcp_stat *stat,
 
 bool prepare_tonegen(Call *call, AudioEndpoint *ae);
 bool prepare_dtmfdet(Call *call, AudioEndpoint *ae);
+bool prepare_bfsk_det(Call *call, AudioEndpoint *ae, const int freq_zero, const int freq_one, const int min_level, const int baud_rate);
 bool prepare_wav_player(Call *call, AudioEndpoint *ae, const char *file, unsigned flags, bool end_of_file_event);
 bool prepare_wav_writer(Call *call, AudioEndpoint *ae, const char *file);
 bool prepare_fax(Call *call, AudioEndpoint *ae, bool is_sender, const char *file, unsigned flags);
@@ -659,6 +667,7 @@ pj_status_t audio_endpoint_stop_record_wav(Call *call, AudioEndpoint *ae);
 pj_status_t audio_endpoint_stop_fax(Call *call, AudioEndpoint *ae);
 pj_status_t audio_endpoint_stop_speech_synth(Call *call, AudioEndpoint *ae);
 pj_status_t audio_endpoint_stop_speech_recog(Call *call, AudioEndpoint *ae);
+pj_status_t audio_endpoint_stop_inband_dtmf_detection(Call *call, AudioEndpoint *ae);
 
 static pjsip_module mod_tester = {
     NULL,
@@ -791,13 +800,13 @@ pj_status_t create_audio_endpoint_conf(Call *call, AudioEndpoint *ae, pjmedia_po
   return PJ_SUCCESS;
 }
 
-static int find_endpoint_by_inband_dtmf_media_port(Call *call,
-                                                   pjmedia_port *port) {
+static int find_endpoint_by_media_port(Call *call,
+                                                   pjmedia_port *port, int type) {
   for (int i = 0; i < call->media_count; i++) {
     MediaEndpoint *me = (MediaEndpoint *)call->media[i];
     if (ENDPOINT_TYPE_AUDIO == me->type) {
       AudioEndpoint *ae = (AudioEndpoint *)me->endpoint.audio;
-      if (ae->feature_cbps[FP_DTMFDET].port && (pjmedia_port *)ae->feature_cbps[FP_DTMFDET].port == port) {
+      if (ae->feature_cbps[type].port && (pjmedia_port *)ae->feature_cbps[type].port == port) {
         return i;
       }
     }
@@ -825,7 +834,7 @@ static void on_inband_dtmf(pjmedia_port *port, void *user_data, char digit) {
 
   Call *call = (Call *)user_data;
 
-  int media_id = find_endpoint_by_inband_dtmf_media_port(call, port);
+  int media_id = find_endpoint_by_media_port(call, port, FP_DTMFDET);
   assert(media_id >= 0);
 
   MediaEndpoint *me = (MediaEndpoint *)call->media[media_id];
@@ -851,6 +860,53 @@ static void on_inband_dtmf(pjmedia_port *port, void *user_data, char digit) {
   } else {
     char evt[1024];
     make_evt_dtmf(evt, sizeof(evt), call_id, 1, &d, mode, media_id);
+    dispatch_event(evt);
+  }
+}
+
+static void on_bfsk_bit(pjmedia_port *port, void *user_data, int bit) {
+  printf("on_bfsk_bit: %i\n", bit);
+
+  if (g_shutting_down)
+    return;
+
+  long call_id;
+  if (!g_call_ids.get_id((long)user_data, call_id)) {
+    addon_log(
+        L_DBG,
+        "on_bfsk_bit: Failed to get call_id. Event will not be notified.\n");
+    return;
+  }
+
+  Call *call = (Call *)user_data;
+
+  int media_id = find_endpoint_by_media_port(call, port, FP_BFSK_DET);
+  assert(media_id >= 0);
+
+  MediaEndpoint *me = (MediaEndpoint *)call->media[media_id];
+  AudioEndpoint *ae = (AudioEndpoint *)me->endpoint.audio;
+
+  if (g_bfsk_inter_bit_timer) {
+
+    PJW_LOCK();
+    int len = ae->BfskBufferLength;
+
+    if (len > MAXDIGITS) {
+      PJW_UNLOCK();
+      addon_log(L_DBG, "No more space for bits in bfsk buffer\n");
+      return;
+    }
+
+    ae->BfskBuffer[len] = bit;
+    ae->BfskBufferLength++;
+
+    ae->last_bit_timestamp = ms_timestamp();
+    PJW_UNLOCK();
+  } else {
+    char evt[1024];
+    char the_bit[1];
+    the_bit[0] = bit;
+    make_evt_bfsk(evt, sizeof(evt), call_id, 1, the_bit, media_id);
     dispatch_event(evt);
   }
 }
@@ -3413,6 +3469,178 @@ out:
   return 0;
 }
 
+pj_status_t audio_endpoint_send_bfsk(Call *call, AudioEndpoint *ae,
+                                     const char *bits, const int freq_zero, const int freq_one, const int level, const int baud_rate) {
+  pj_status_t status;
+
+  if (!prepare_tonegen(call, ae)) {
+    set_error("prepare_tonegen failed.");
+    return -1;
+  }
+
+  int len = strlen(bits);
+
+  int duration = 1000 / baud_rate;  // Duration of each tone in milliseconds
+
+  pjmedia_tone_desc *tones = (pjmedia_tone_desc*)pj_pool_zalloc(call->inv->pool, sizeof(pjmedia_tone_desc) * len);
+
+  for (int i = 0; i < len; ++i) {
+    tones[i].freq1 = bits[i] == '0' ? freq_zero : freq_one;
+    tones[i].on_msec = duration;
+    tones[i].off_msec = duration;
+    tones[i].volume = level;
+  } 
+
+  status = pjmedia_tonegen_play((pjmedia_port *)ae->feature_cbps[FP_TONEGEN].port, len, tones, 0);
+  if (status != PJ_SUCCESS) {
+    set_error("pjmedia_tonegen_plays failed.");
+    return status;
+  }
+
+  return PJ_SUCCESS;
+}
+
+pj_status_t send_bfsk(Call *call, const char *bits, const int freq_zero, const int freq_one, const int level, const int baud_rate) {
+  for (int i = 0; i < call->media_count; i++) {
+    MediaEndpoint *me = (MediaEndpoint *)call->media[i];
+    if (me->type != ENDPOINT_TYPE_AUDIO)
+      continue;
+
+    if(me->port == 0)
+      continue;
+
+    AudioEndpoint *ae = (AudioEndpoint *)me->endpoint.audio;
+
+    pj_status_t status = audio_endpoint_send_bfsk(call, ae, bits, freq_zero, freq_one, level, baud_rate);
+    if (status != PJ_SUCCESS)
+      return status;
+  }
+
+  return PJ_SUCCESS;
+}
+
+int pjw_call_send_bfsk(long call_id, const char *json) {
+#define BITS_MAX_LEN 32 // pjmedia_tonegen limit
+
+  PJW_LOCK();
+  clear_error();
+
+  Call *call;
+
+  pj_status_t status;
+
+  long val;
+
+  int len;
+
+  char *bits;
+  int freq_zero;
+  int freq_one;
+  int level;
+  int baud_rate;
+
+  MediaEndpoint *me;
+  AudioEndpoint *ae;
+  int res;
+
+  int media_id = -1;
+
+  char buffer[MAX_JSON_INPUT];
+
+  Document document;
+
+  const char *valid_params[] = {"bits", "freq_zero", "freq_one", "level", "baud_rate", "media_id", ""};
+
+  if (!g_call_ids.get(call_id, val)) {
+    set_error("Invalid call_id");
+    goto out;
+  }
+  call = (Call *)val;
+
+  if (!parse_json(document, json, buffer, MAX_JSON_INPUT)) {
+    goto out;
+  }
+
+  if (!validate_params(document, valid_params)) {
+    goto out;
+  }
+
+  if (json_get_string_param(document, "bits", false, &bits) <= 0) {
+    goto out;
+  }
+
+  if (json_get_int_param(document, "freq_zero", false, &freq_zero) <= 0) {
+    goto out;
+  }
+
+  if (json_get_int_param(document, "freq_one", false, &freq_one) <= 0) {
+    goto out;
+  }
+
+  if (json_get_int_param(document, "level", false, &level) <= 0) {
+    goto out;
+  }
+
+  if (json_get_int_param(document, "baud_rate", false, &baud_rate) <= 0) {
+    goto out;
+  }
+
+  len = strlen(bits);
+
+  if (len > BITS_MAX_LEN) {
+    set_error("bits too long");
+    goto out;
+  }
+
+  for (int i = 0; i < len; ++i) {
+    if (bits[i] != '0' && bits[i] != '1') {
+      set_error("Invalid character");
+      goto out;
+    }
+  }
+
+  res = json_get_int_param(document, "media_id", true, &media_id);
+  if (res <= 0) {
+    goto out;
+  }
+
+  if (NOT_FOUND_OPTIONAL == res) {
+    // send_bfsk_bits to all audio endpoints
+    status = send_bfsk(call, bits, freq_zero, freq_one, level, baud_rate);
+    if (status != PJ_SUCCESS) {
+      goto out;
+    }
+  } else {
+    // send_bfsk_bits to specified media_id
+
+    if (media_id >= call->media_count) {
+      set_error("invalid media_id");
+      goto out;
+    }
+
+    me = (MediaEndpoint *)call->media[media_id];
+    if (ENDPOINT_TYPE_AUDIO != me->type) {
+      set_error("invalid media_id non audio");
+      goto out;
+    }
+
+    ae = (AudioEndpoint *)me->endpoint.audio;
+
+    status = audio_endpoint_send_bfsk(call, ae, bits, freq_one, freq_zero, level, baud_rate);
+    if (status != PJ_SUCCESS) {
+      goto out;
+    }
+  }
+
+out:
+  PJW_UNLOCK();
+  if (pjw_errorstring[0]) {
+    return -1;
+  }
+
+  return 0;
+}
+
 pj_status_t audio_endpoint_remove_port(Call *call, AudioEndpoint *ae, ConfBridgePort *cbp) {
   printf("audio_endpoint_remove_port\n");
   pj_status_t status;
@@ -4253,6 +4481,229 @@ out:
   return 0;
 }
 
+pj_status_t audio_endpoint_start_inband_dtmf_detection(Call *call, AudioEndpoint *ae) {
+  pj_status_t status;
+
+  if(!ae->stream_cbp.port) {
+    set_error("stream port is not ready yet");
+    return -1;
+  }
+
+  if(!prepare_dtmfdet(call, ae)) {
+    return -1;
+  }
+
+  return PJ_SUCCESS;
+}
+
+int pjw_call_start_inband_dtmf_detection(long call_id, const char *json) {
+  printf("pjw_call_start_inband_dtmf_detection\n");
+  PJW_LOCK();
+  clear_error();
+
+  long val;
+  Call *call;
+
+  pj_status_t status;
+
+  MediaEndpoint *me;
+  AudioEndpoint *ae;
+  int ae_count;
+  int res;
+
+  int media_id = -1;
+
+  char buffer[MAX_JSON_INPUT];
+
+  Document document;
+
+  const char *valid_params[] = {"media_id", ""};
+
+  if (!g_call_ids.get(call_id, val)) {
+    set_error("Invalid call_id");
+    goto out;
+  }
+  call = (Call *)val;
+
+  ae_count = count_media_by_type(call, ENDPOINT_TYPE_AUDIO);
+
+  if (ae_count == 0) {
+    set_error("No audio endpoint");
+    goto out;
+  }
+
+  if (!parse_json(document, json, buffer, MAX_JSON_INPUT)) {
+    goto out;
+  }
+
+  if (!validate_params(document, valid_params)) {
+    goto out;
+  }
+
+  res = json_get_int_param(document, "media_id", true, &media_id);
+  if (res <= 0) {
+    goto out;
+  }
+
+  if (NOT_FOUND_OPTIONAL == res) {
+    for (int i = 0; i < call->media_count; i++) {
+      MediaEndpoint *me = (MediaEndpoint *)call->media[i];
+      if (me->type == ENDPOINT_TYPE_AUDIO) {
+        AudioEndpoint *ae = (AudioEndpoint *)me->endpoint.audio;
+        status = audio_endpoint_start_inband_dtmf_detection(call, ae);
+        if (status != PJ_SUCCESS) goto out;
+      }
+    }
+  } else {
+    if ((int)media_id >= call->media_count) {
+      set_error("invalid media_id");
+      goto out;
+    }
+
+    me = (MediaEndpoint *)call->media[media_id];
+    if (ENDPOINT_TYPE_AUDIO != me->type) {
+      set_error("media_endpoint is not audio endpoint");
+      goto out;
+    }
+
+    ae = (AudioEndpoint *)me->endpoint.audio;
+
+    audio_endpoint_start_inband_dtmf_detection(call, ae);
+  }
+
+out:
+  PJW_UNLOCK();
+  if (pjw_errorstring[0]) {
+    return -1;
+  }
+
+  return 0;
+}
+
+pj_status_t audio_endpoint_start_bfsk_detection(Call *call, AudioEndpoint *ae, const int freq_zero, const int freq_one, const int min_level, const int baud_rate) {
+  pj_status_t status;
+
+  if(!ae->stream_cbp.port) {
+    set_error("stream port is not ready yet");
+    return -1;
+  }
+
+  if(!prepare_bfsk_det(call, ae, freq_zero, freq_one, min_level, baud_rate)) {
+    return -1;
+  }
+
+  return PJ_SUCCESS;
+}
+
+int pjw_call_start_bfsk_detection(long call_id, const char *json) {
+  printf("pjw_call_start_bfsk_detection\n");
+  PJW_LOCK();
+  clear_error();
+
+  long val;
+  Call *call;
+
+  pj_status_t status;
+
+  MediaEndpoint *me;
+  AudioEndpoint *ae;
+  int ae_count;
+  int res;
+
+  int media_id = -1;
+
+  int freq_zero;
+  int freq_one;
+  int min_level;
+  int baud_rate;
+
+  char buffer[MAX_JSON_INPUT];
+
+  Document document;
+
+  const char *valid_params[] = {"freq_zero", "freq_one", "min_level", "baud_rate", "media_id", ""};
+
+  if (!g_call_ids.get(call_id, val)) {
+    set_error("Invalid call_id");
+    goto out;
+  }
+  call = (Call *)val;
+
+  ae_count = count_media_by_type(call, ENDPOINT_TYPE_AUDIO);
+
+  if (ae_count == 0) {
+    set_error("No audio endpoint");
+    goto out;
+  }
+
+  if (!parse_json(document, json, buffer, MAX_JSON_INPUT)) {
+    goto out;
+  }
+
+  if (!validate_params(document, valid_params)) {
+    goto out;
+  }
+
+  res = json_get_int_param(document, "freq_zero", false, &freq_zero);
+  if (res <= 0) {
+    goto out;
+  }
+
+  res = json_get_int_param(document, "freq_one", false, &freq_one);
+  if (res <= 0) {
+    goto out;
+  }
+
+  res = json_get_int_param(document, "min_level", false, &min_level);
+  if (res <= 0) {
+    goto out;
+  }
+
+  res = json_get_int_param(document, "baud_rate", false, &baud_rate);
+  if (res <= 0) {
+    goto out;
+  }
+
+  res = json_get_int_param(document, "media_id", true, &media_id);
+  if (res <= 0) {
+    goto out;
+  }
+
+  if (NOT_FOUND_OPTIONAL == res) {
+    for (int i = 0; i < call->media_count; i++) {
+      MediaEndpoint *me = (MediaEndpoint *)call->media[i];
+      if (me->type == ENDPOINT_TYPE_AUDIO) {
+        AudioEndpoint *ae = (AudioEndpoint *)me->endpoint.audio;
+        status = audio_endpoint_start_bfsk_detection(call, ae, freq_zero, freq_one, min_level, baud_rate);
+        if (status != PJ_SUCCESS) goto out;
+      }
+    }
+  } else {
+    if ((int)media_id >= call->media_count) {
+      set_error("invalid media_id");
+      goto out;
+    }
+
+    me = (MediaEndpoint *)call->media[media_id];
+    if (ENDPOINT_TYPE_AUDIO != me->type) {
+      set_error("media_endpoint is not audio endpoint");
+      goto out;
+    }
+
+    ae = (AudioEndpoint *)me->endpoint.audio;
+
+    audio_endpoint_start_bfsk_detection(call, ae, freq_zero, freq_one, min_level, baud_rate);
+  }
+
+out:
+  PJW_UNLOCK();
+  if (pjw_errorstring[0]) {
+    return -1;
+  }
+
+  return 0;
+}
+
 pj_status_t call_stop_op_on_all_audio_endpoints(Call *call,
                                          audio_endpoint_stop_op_t op) {
   addon_log(L_DBG, "call_stop_op_on_audio_endpoints media_count=%d\n",
@@ -4273,6 +4724,7 @@ pj_status_t call_stop_op_on_all_audio_endpoints(Call *call,
 
   return PJ_SUCCESS;
 }
+
 
 int audio_endpoint_stop_op(long call_id, const char *json, audio_endpoint_stop_op_t op) {
   PJW_LOCK();
@@ -4362,6 +4814,14 @@ pj_status_t audio_endpoint_stop_speech_recog(Call *call, AudioEndpoint *ae) {
   return audio_endpoint_remove_port(call, ae, &ae->feature_cbps[FP_SPEECH_RECOG]);
 }
 
+pj_status_t audio_endpoint_stop_inband_dtmf_detection(Call *call, AudioEndpoint *ae) {
+  return audio_endpoint_remove_port(call, ae, &ae->feature_cbps[FP_DTMFDET]);
+}
+
+pj_status_t audio_endpoint_stop_bfsk_detection(Call *call, AudioEndpoint *ae) {
+  return audio_endpoint_remove_port(call, ae, &ae->feature_cbps[FP_BFSK_DET]);
+}
+
 
 int pjw_call_stop_play_wav(long call_id, const char *json) {
   return audio_endpoint_stop_op(call_id, json, audio_endpoint_stop_play_wav);
@@ -4382,6 +4842,11 @@ int pjw_call_stop_speech_synth(long call_id, const char *json) {
 int pjw_call_stop_speech_recog(long call_id, const char *json) {
   return audio_endpoint_stop_op(call_id, json, audio_endpoint_stop_speech_recog);
 }
+
+int pjw_call_stop_inband_dtmf_detection(long call_id, const char *json) {
+  return audio_endpoint_stop_op(call_id, json, audio_endpoint_stop_inband_dtmf_detection);
+}
+
 
 
 int pjw_call_start_fax(long call_id, const char *json) {
@@ -5030,14 +5495,6 @@ bool restart_media_stream(Call *call, MediaEndpoint *me,
       dispatch_event(evt);
       return false;
     }
-
-    // we always add dtmfdet to audio endpoints
-    if(!prepare_dtmfdet(call, ae)) {
-      make_evt_media_update(evt, sizeof(evt), call->id,
-                        "setup_failed (prepare_dtmfdet failed)", "");
-      dispatch_event(evt);
-      return false;
-    }
   } else if(
         (PJMEDIA_PIA_SRATE(&old_port->info) != PJMEDIA_PIA_SRATE(&new_port->info)) ||
         (PJMEDIA_PIA_CCNT(&old_port->info) != PJMEDIA_PIA_CCNT(&new_port->info)) ||
@@ -5061,14 +5518,6 @@ bool restart_media_stream(Call *call, MediaEndpoint *me,
     if (status != PJ_SUCCESS) {
       make_evt_media_update(evt, sizeof(evt), call->id,
                           "setup_failed (pjmedia_conf_add_port failed)", "");
-      dispatch_event(evt);
-      return false;
-    }
-
-    // we always add dtmfdet to audio endpoints
-    if(!prepare_dtmfdet(call, ae)) {
-      make_evt_media_update(evt, sizeof(evt), call->id,
-                        "setup_failed (prepare_dtmfdet failed)", "");
       dispatch_event(evt);
       return false;
     }
@@ -7006,9 +7455,15 @@ bool prepare_wav_writer(Call *call, AudioEndpoint *ae, const char *file) {
 }
 
 bool prepare_dtmfdet(Call *call, AudioEndpoint *ae) {
+  printf("DEBUG prepare_dtmfdet\n");
   pj_status_t status;
 
   ConfBridgePort *fp = &ae->feature_cbps[FP_DTMFDET];
+
+  if(fp->port) {
+    printf("already prepared\n");
+    return true;
+  }
 
   status = pjmedia_dtmfdet_create(
       call->inv->pool, 
@@ -7032,6 +7487,41 @@ bool prepare_dtmfdet(Call *call, AudioEndpoint *ae) {
 
   return connect_feature_port_to_stream_port(call, ae, fp);
 }
+
+bool prepare_bfsk_det(Call *call, AudioEndpoint *ae, const int freq_zero, const int freq_one, const int min_level, const int baud_rate) {
+  printf("DEBUG prepare_bfsk_det\n");
+  pj_status_t status;
+
+  ConfBridgePort *fp = &ae->feature_cbps[FP_BFSK_DET];
+
+  if(fp->port) {
+    printf("already prepared\n");
+    return true;
+  }
+
+  status = pjmedia_bfsk_det_create(
+      call->inv->pool, 
+      PJMEDIA_PIA_SRATE(&ae->stream_cbp.port->info),
+      PJMEDIA_PIA_CCNT(&ae->stream_cbp.port->info),
+      PJMEDIA_PIA_SPF(&ae->stream_cbp.port->info),
+      PJMEDIA_PIA_BITS(&ae->stream_cbp.port->info), 
+      on_bfsk_bit, call, freq_zero, freq_one, min_level, baud_rate, &fp->port);
+  if (status != PJ_SUCCESS) {
+    set_error("pjmedia_bfsk_det_create failed");
+      return false;
+  }
+  
+  status = pjmedia_conf_add_port(ae->conf, call->inv->pool, fp->port, NULL, &fp->slot);
+  if (status != PJ_SUCCESS) {
+    set_error("pjmedia_conf_add_port failed");
+    return false;
+  }
+
+  fp->connection_mode = CONNECTION_MODE_SINK;
+
+  return connect_feature_port_to_stream_port(call, ae, fp);
+}
+
 
 bool prepare_fax(Call *call, AudioEndpoint *ae, bool is_sender, const char *file, unsigned flags) {
   pj_status_t status;
@@ -8615,6 +9105,15 @@ void check_digit_buffer(Call *call, int mode) {
       dispatch_event(evt);
       *pLen = 0;
       ae->last_digit_timestamp[mode] = 0;
+    }
+
+    if (ae->last_bit_timestamp > 0 &&
+        g_now - ae->last_bit_timestamp > g_bfsk_inter_bit_timer) {
+      int len = ae->BfskBufferLength;
+      ae->BfskBufferLength = 0;
+      make_evt_bfsk(evt, sizeof(evt), call->id, len, ae->BfskBuffer, i);
+      dispatch_event(evt);
+      ae->last_bit_timestamp = 0;
     }
   }
 }

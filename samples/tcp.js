@@ -85,6 +85,8 @@ async function test() {
     sip.call.start_record_wav(oc.id, {file: './oc.wav'})
     sip.call.start_record_wav(ic.id, {file: './ic.wav'})
 
+    sip.call.start_inband_dtmf_detection(oc.id)
+
     sip.call.send_dtmf(oc.id, {digits: '1234', mode: 0})
     sip.call.send_dtmf(ic.id, {digits: '4321', mode: 1})
 

@@ -92,6 +92,10 @@ async function test() {
         media_id: 0,
     })).value(), 50000)
 
+    ocs.forEach(oc => {
+        sip.call.start_inband_dtmf_detection(oc.id)
+    })
+
     z.store.ic_ids.forEach(ic_id => {
         sip.call.send_dtmf(ic_id, {digits: '4321', mode: 1})
     })

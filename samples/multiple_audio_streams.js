@@ -103,6 +103,8 @@ async function test() {
         media_id: n,
     })).value(), 3000)
 
+    sip.call.start_inband_dtmf_detection(oc.id)
+
     sip.call.send_dtmf(ic.id, {digits: '4321', mode: 1})
 
     await z.wait(_.chain(_.range(NUM_AUDIO_STREAMS)).map(n => ({

@@ -38,8 +38,8 @@ async function test() {
             type: "audio",
             port: 0, // it means not in use
         },
-	"audio",
-	{
+        "audio",
+        {
             type: "audio",
             port: 0, // it means not in use
         }
@@ -63,8 +63,8 @@ async function test() {
             type: "audio",
             port: 0, // it means not in use
         },
-	"audio",
-	{
+        "audio",
+        {
             type: "audio",
             port: 0, // it means not in use
         }
@@ -127,6 +127,9 @@ async function test() {
             ],
         },
     ], 1000)
+
+    sip.call.start_inband_dtmf_detection(oc.id, {media_id: 0})
+    sip.call.start_inband_dtmf_detection(oc.id, {media_id: 2})
 
     sip.call.send_dtmf(oc.id, {digits: '1234', mode: 0})
     sip.call.send_dtmf(ic.id, {digits: '4321', mode: 1})

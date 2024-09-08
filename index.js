@@ -58,6 +58,7 @@ addon.call = {
   respond: (c_id, params) => { return addon.call_respond(c_id, JSON.stringify(params)) },
   terminate: (c_id, params) => { return addon.call_terminate(c_id, JSON.stringify(params ? params : {})) },
   send_dtmf: (c_id, params) => { return addon.call_send_dtmf(c_id, JSON.stringify(params)) },
+  send_bfsk: (c_id, params) => { return addon.call_send_bfsk(c_id, JSON.stringify(params)) },
   reinvite: (c_id, params) => { return addon.call_reinvite(c_id, JSON.stringify(params ? params : {})) },
   send_request: (c_id, params) => { return addon.call_send_request(c_id, JSON.stringify(params)) },
   start_record_wav: (c_id, params) => { return addon.call_start_record_wav(c_id, JSON.stringify(params)) },
@@ -68,6 +69,12 @@ addon.call = {
   stop_fax: (c_id, params) => { return addon.call_stop_fax(c_id, JSON.stringify(params ? params : {})) },
   start_speech_synth: (c_id, params) => { return addon.call_start_speech_synth(c_id, JSON.stringify(params)) },
   stop_speech_synth: (c_id, params) => { return addon.call_stop_speech_synth(c_id, JSON.stringify(params ? params : {})) },
+
+  start_inband_dtmf_detection: (c_id, params) => { return addon.call_start_inband_dtmf_detection(c_id, JSON.stringify(params ? params : {})) },
+  stop_inband_dtmf_detection: (c_id, params) => { return addon.call_stop_inband_dtmf_detection(c_id, JSON.stringify(params ? params : {})) },
+
+  start_bfsk_detection: (c_id, params) => { return addon.call_start_bfsk_detection(c_id, JSON.stringify(params ? params : {})) },
+  stop_bfsk_dtmf_detection: (c_id, params) => { return addon.call_stop_bfsk_detection(c_id, JSON.stringify(params ? params : {})) },
 
   start_speech_recog: (c_id, params) => { 
     var ps = {}

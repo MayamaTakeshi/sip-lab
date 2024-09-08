@@ -131,6 +131,9 @@ async function test() {
         },
     ], 1000)
 
+    sip.call.start_inband_dtmf_detection(oc.id, {media_id: 1})
+    sip.call.start_inband_dtmf_detection(ic.id, {media_id: 1})
+
     sip.call.send_dtmf(oc.id, {digits: '1234', mode: 1})
     sip.call.send_dtmf(ic.id, {digits: '1234', mode: 1})
 
