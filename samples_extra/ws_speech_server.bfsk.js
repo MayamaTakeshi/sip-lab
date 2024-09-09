@@ -113,8 +113,6 @@ async function test() {
         }
     ], 3000)
 
-    await z.sleep(1000)
-
     sip.call.stop_record_wav(oc.id)
     sip.call.stop_record_wav(ic.id)
 
@@ -140,7 +138,7 @@ async function test() {
         },
     ], 1000)
 
-    await z.sleep(100)
+    await z.sleep(50)
 
     console.log("Success")
 

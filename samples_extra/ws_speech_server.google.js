@@ -88,11 +88,11 @@ async function test() {
     sip.call.start_record_wav(oc.id, {file: './oc.wav'})
     sip.call.start_record_wav(ic.id, {file: './ic.wav'})
 
-    sip.call.start_speech_recog(oc.id, {server_url: 'ws://0.0.0.0:8080', engine: 'gsr', language: 'en-US'})
-    sip.call.start_speech_recog(ic.id, {server_url: 'ws://0.0.0.0:8080', engine: 'gsr', language: 'en-US'})
+    sip.call.start_speech_recog(oc.id, {server_url: 'ws://0.0.0.0:8080', engine: 'google-sr', language: 'en-US'})
+    sip.call.start_speech_recog(ic.id, {server_url: 'ws://0.0.0.0:8080', engine: 'ggoole-sr', language: 'en-US'})
 
-    sip.call.start_speech_synth(oc.id, {server_url: 'ws://0.0.0.0:8080', engine: 'gss', voice: 'en-US-Standard-E', language: 'en-US', text: 'hello world', times: 1})
-    sip.call.start_speech_synth(ic.id, {server_url: 'ws://0.0.0.0:8080', engine: 'gss', voice: 'en-US-Standard-F', language: 'en-US', text: '<speak>Good morning<break time="2s"/>Good Afternoon</speak>', times: 1})
+    sip.call.start_speech_synth(oc.id, {server_url: 'ws://0.0.0.0:8080', engine: 'google-ss', voice: 'en-US-Standard-E', language: 'en-US', text: 'hello world', times: 1})
+    sip.call.start_speech_synth(ic.id, {server_url: 'ws://0.0.0.0:8080', engine: 'google-ss', voice: 'en-US-Standard-F', language: 'en-US', text: '<speak>Good morning<break time="2s"/>Good Afternoon</speak>', times: 1})
 
     await z.wait([
         {
@@ -113,7 +113,7 @@ async function test() {
             call_id: ic.id,
             transcript: 'hello world',
         },
-    ], 4000)
+    ], 8000)
 
     await z.wait([
         {

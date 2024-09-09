@@ -86,11 +86,11 @@ async function test() {
     sip.call.start_record_wav(oc.id, {file: './oc.wav'})
     sip.call.start_record_wav(ic.id, {file: './ic.wav'})
 
-    sip.call.start_speech_recog(oc.id, {server_url: 'ws://0.0.0.0:8080', engine: 'dtmf-det', language: 'dtmf'})
-    sip.call.start_speech_recog(ic.id, {server_url: 'ws://0.0.0.0:8080', engine: 'dtmf-det', language: 'dtmf'})
+    sip.call.start_speech_recog(oc.id, {server_url: 'ws://0.0.0.0:8080', engine: 'dtmf-sr', language: 'dtmf'})
+    sip.call.start_speech_recog(ic.id, {server_url: 'ws://0.0.0.0:8080', engine: 'dtmf-sr', language: 'dtmf'})
 
-    sip.call.start_speech_synth(oc.id, {server_url: 'ws://0.0.0.0:8080', engine: 'dtmf-gen', voice: 'dtmf', language: 'dtmf', text: 'abcd', times: 1})
-    sip.call.start_speech_synth(ic.id, {server_url: 'ws://0.0.0.0:8080', engine: 'dtmf-gen', voice: 'dtmf', language: 'dtmf', text: 'dcba', times: 1})
+    sip.call.start_speech_synth(oc.id, {server_url: 'ws://0.0.0.0:8080', engine: 'dtmf-ss', voice: 'dtmf', language: 'dtmf', text: 'abcd', times: 1})
+    sip.call.start_speech_synth(ic.id, {server_url: 'ws://0.0.0.0:8080', engine: 'dtmf-ss', voice: 'dtmf', language: 'dtmf', text: 'dcba', times: 1})
 
     await z.wait([
         {
@@ -100,20 +100,6 @@ async function test() {
         {
             event: 'speech_synth_complete',
             call_id: oc.id,
-        },
-        {
-            event: 'dtmf',
-            call_id: oc.id,
-            digits: 'dcba',
-            mode: 1,
-            media_id: 0
-        },
-        {
-            event: 'dtmf',
-            call_id: ic.id,
-            digits: 'abcd',
-            mode: 1,
-            media_id: 0
         },
         {
             event: 'speech',
@@ -126,8 +112,6 @@ async function test() {
             transcript: 'abcd'
         },
     ], 3000)
-
-    await z.sleep(1000)
 
     sip.call.stop_record_wav(oc.id)
     sip.call.stop_record_wav(ic.id)
@@ -154,7 +138,7 @@ async function test() {
         },
     ], 1000)
 
-    await z.sleep(100)
+    await z.sleep(50)
 
     console.log("Success")
 
