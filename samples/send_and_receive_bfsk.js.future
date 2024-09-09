@@ -106,14 +106,14 @@ async function test() {
 
     await z.sleep(100)
 
-    sip.call.start_bfsk_detection(oc.id, {freq_zero: 440, freq_one: 880})
-    //sip.call.start_bfsk_detection(ic.id, {freq_zero: 440, freq_one: 880})
+    sip.call.start_bfsk_detection(oc.id, {freq_zero: 880, freq_one: 1280})
+    //sip.call.start_bfsk_detection(ic.id, {freq_zero: 880, freq_one: 1280})
 
     oc_bits = '1010'
     ic_bits = '1100'
 
-    sip.call.send_bfsk(ic.id, {bits: ic_bits, freq_zero: 440, freq_one: 880})
-    //sip.call.send_bfsk(oc.id, {bits: oc_bits, freq_zero: 440, freq_one: 880})
+    sip.call.send_bfsk(ic.id, {bits: ic_bits, freq_zero: 880, freq_one: 1280})
+    //sip.call.send_bfsk(oc.id, {bits: oc_bits, freq_zero: 880, freq_one: 1280})
 
     await z.wait([
        {
@@ -128,7 +128,7 @@ async function test() {
             bits: ic_bits,
             media_id: 0
        },
-    ], 2000)
+    ], 10000)
 
     await z.sleep(1000)
 

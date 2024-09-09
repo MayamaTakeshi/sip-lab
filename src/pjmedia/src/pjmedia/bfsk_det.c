@@ -36,95 +36,88 @@
 #   define TRACE_(expr)
 #endif
 
-#define EXTINCTION_THRESHOLD 0.001 
+// Adapted https://github.com/ericksc/goertzel/blob/master/main.cpp
 
+#define PI 3.14159265358979
 
 typedef struct {
-    int sample_rate;
-    int samples_per_frame;
-    float target_frequency;
-    float threshold;
-    float target_magnitude;
-} goertzel_detector_t;
+	float coeff;
+	int fix_coeff;
+	int Q1;
+	int Q2;
+	double sine;
+	double cosine;
+} goertzel_t;
 
-// Function to pre-calculate the expected magnitude of the target frequency
-float precalc_magnitude(float freq, int num_samples, int rate) {
-    float t = 0;
-    float tstep = 1.0f / rate;
-    float samples[num_samples];
+//Para definir punto fijo de 32 bits.
+int FIXED_POINT_16 = 16;
+int ONE_16 = 1 << 16;
 
-    for (int i = 0; i < num_samples; i++) {
-        samples[i] = sinf(2 * M_PI * freq * t);
-        t += tstep;
-    }
+int FIXED_POINT_30 = 30;
+int ONE_30 = 1 << 30;
 
-    // Apply Goertzel on the generated sine samples
-    int k = (int)(0.5f + ((float)num_samples * freq) / rate);
-    float w = (2 * M_PI * k) / num_samples;
-    float c = cosf(w);
-    float s = sinf(w);
-    float coeff = 2.0f * c;
-
-    float q0 = 0.0f, q1 = 0.0f, q2 = 0.0f;
-
-    for (int i = 0; i < num_samples; i++) {
-        q0 = coeff * q1 - q2 + samples[i];
-        q2 = q1;
-        q1 = q0;
-    }
-
-    float real = q1 - q2 * c;
-    float imaginary = q2 * s;
-    float mag_squared = real * real + imaginary * imaginary;
-
-    return mag_squared;
+int toFix( float val, int ONE ) {
+    // Escalamiento
+    return (int) (val * ONE);
 }
 
-// Goertzel function to detect frequency in a buffer
-int goertzel_detect(goertzel_detector_t *detector, const int16_t *samples) {
-    int num_samples = detector->samples_per_frame;
-
-    // Normalize input samples to [-1, 1] range
-    float normalized_samples[num_samples];
-    for (int i = 0; i < num_samples; i++) {
-        normalized_samples[i] = samples[i] / 32768.0f;
-    }
-
-    // Goertzel algorithm for target frequency
-    int k = (int)(0.5f + ((float)num_samples * detector->target_frequency) / detector->sample_rate);
-    float w = (2 * M_PI * k) / num_samples;
-    float c = cosf(w);
-    float s = sinf(w);
-    float coeff = 2.0f * c;
-
-    float q0 = 0.0f, q1 = 0.0f, q2 = 0.0f;
-
-    for (int i = 0; i < num_samples; i++) {
-        q0 = coeff * q1 - q2 + normalized_samples[i];
-        q2 = q1;
-        q1 = q0;
-    }
-
-    float real = q1 - q2 * c;
-    float imaginary = q2 * s;
-    float mag_squared = real * real + imaginary * imaginary;
-
-    // Normalize the result based on the target magnitude
-    float power_ratio = mag_squared / detector->target_magnitude;
-
-    // Return if the power ratio exceeds the threshold
-    printf("%x power_ratio: %f\n", (void*)detector, power_ratio);
-    return power_ratio > detector->threshold;
+float floatVal( int fix, int ONE ) {
+    return ((float) fix) / ONE;
 }
 
-// Initialize the Goertzel detector
-void init_goertzel_detector(goertzel_detector_t *detector, float freq, int sample_rate, int samples_per_frame, float threshold) {
-    detector->target_frequency = freq;
-    detector->sample_rate = sample_rate;
-    detector->samples_per_frame = samples_per_frame;
-    detector->threshold = threshold;
-    detector->target_magnitude = precalc_magnitude(freq, samples_per_frame, sample_rate);
+int intVal( int fix, int FIXED_POINT ) {
+    return fix >> FIXED_POINT;
 }
+
+int mul(int fix_coeff, int Q1, int FIXED_POINT_mixed) {
+    // Manejo de 64 bit para el resultado inmedianto de la multiplicación
+    // Conversion a 32 bits para posterior uso
+    return (int)((long long int)fix_coeff * (long long int)Q1 >> FIXED_POINT_mixed);
+}
+
+/* Call this routine before every "block" (size=N) of samples. */
+void goertzel_det_reset(goertzel_t *g)
+{
+    g->Q2 = 0;
+    g->Q1 = 0;
+}
+/* Call this once, to precompute the constants. */
+void goertzel_det_init(goertzel_t *g, float frequency, float sampling_rate, int samples_per_frame)
+{
+    int k;
+    double floatN;
+    double omega;
+    floatN = (double)samples_per_frame;
+    k = (int)(0.5 + ((floatN * frequency) / sampling_rate));
+    omega = (2.0 * PI * k) / floatN;
+    g->sine = sin(omega);
+    g->cosine = cos(omega);
+    g->coeff = 2.0 * g->cosine;
+    g->fix_coeff = toFix(g->coeff, ONE_30);
+    printf("For sampling_rate = %f", sampling_rate);
+    printf("samples_per_frame = %d", samples_per_frame);
+    printf(" and frequency = %f,\n", frequency);
+    printf("k = %d and coeff = %f\n\n", k, g->coeff);
+    goertzel_det_reset(g);
+}
+
+float goertzel_mag(goertzel_t *g, int *buf, int size)
+{
+    for (int index = 0; index < size; index++)
+    {
+        // Punto fijo 32. INT
+        int Q0;
+        Q0 = mul(g->fix_coeff, g->Q1, 30) - g->Q2 + toFix(buf[index], ONE_16);
+        g->Q2 = g->Q1;
+        g->Q1 = Q0;
+    }
+
+    float result;
+    result = floatVal(g->Q1, ONE_16) * floatVal(g->Q1,ONE_16) + floatVal(g->Q2,ONE_16) * floatVal(g->Q2,ONE_16) - floatVal(g->Q1,ONE_16) * floatVal(g->Q2,ONE_16) * g->coeff;
+    goertzel_det_reset(g);
+    return result;
+}
+
 
 
 static pj_status_t bfsk_det_put_frame(pjmedia_port *this_port, 
@@ -141,8 +134,8 @@ struct bfsk_det
     int zero_in_progress;
     int one_in_progress;
 
-    goertzel_detector_t *goertzel_zero;
-    goertzel_detector_t *goertzel_one;
+    goertzel_t *goertzel_zero;
+    goertzel_t *goertzel_one;
 
     void (*bfsk_cb)(pjmedia_port*, void*, int);
     void *bfsk_cb_user_data;
@@ -216,16 +209,16 @@ PJ_DEF(pj_status_t) pjmedia_bfsk_det_create( pj_pool_t *pool,
 
     float threshold = 0.1;
 
-    det->goertzel_zero = PJ_POOL_ZALLOC_T(pool, goertzel_detector_t);
+    det->goertzel_zero = PJ_POOL_ZALLOC_T(pool, goertzel_t);
     PJ_ASSERT_RETURN(pool != NULL, PJ_ENOMEM);
 
-    det->goertzel_one = PJ_POOL_ZALLOC_T(pool, goertzel_detector_t);
+    det->goertzel_one = PJ_POOL_ZALLOC_T(pool, goertzel_t);
     PJ_ASSERT_RETURN(pool != NULL, PJ_ENOMEM);
 
     int sample_rate = clock_rate;
 
-    init_goertzel_detector(det->goertzel_zero, det->freq_zero, sample_rate, samples_per_frame, threshold);
-    init_goertzel_detector(det->goertzel_one, det->freq_one, sample_rate, samples_per_frame, threshold);
+    goertzel_det_init(det->goertzel_zero, det->freq_zero, sample_rate, samples_per_frame);
+    goertzel_det_init(det->goertzel_one, det->freq_one, sample_rate, samples_per_frame);
 
     printf("p7\n");
 
@@ -259,11 +252,15 @@ static pj_status_t bfsk_det_put_frame(pjmedia_port *this_port,
     }
     printf("\n");
 
-    int zero = goertzel_detect(dport->goertzel_zero, frame->buf);
-    int  one = goertzel_detect(dport->goertzel_one,  frame->buf);
+    float zero_power = goertzel_mag(dport->goertzel_zero, frame->buf, size);
+    float  one_power = goertzel_mag(dport->goertzel_one,  frame->buf, size);
 
-    printf("zero_in_progress=%i zero=%i\n", dport->zero_in_progress, zero);
-    printf(" one_in_progress=%i  one=%i\n", dport->one_in_progress, one);
+    int zero = zero_power > 1000000000.0;
+    int  one =  one_power > 1000000000.0;
+
+    printf("zero_power=%f zero_in_progress=%i zero=%i\n", zero_power, dport->zero_in_progress, zero);
+    printf("one_power=%f one_in_progress=%i  one=%i\n", one_power, dport->one_in_progress, one);
+
 
     // Check for zero signal extinction
     if(dport->zero_in_progress && zero == 0) {
