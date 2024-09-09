@@ -70,6 +70,8 @@ struct ws_speech_t
 
     int sample_rate;
 
+    char *uuid;
+
     char *ss_engine;
     char *ss_voice;
     char *ss_language;
@@ -112,6 +114,7 @@ static pj_bool_t on_connect_complete(pj_websock_t *c, pj_status_t status)
 
         // Add members to the "args" object
         args.AddMember("sampleRate", port->sample_rate, allocator);
+        args.AddMember("uuid", rapidjson::Value(port->uuid, allocator), allocator);
         args.AddMember("engine", rapidjson::Value(port->ss_engine, allocator), allocator);
         args.AddMember("voice", rapidjson::Value(port->ss_voice, allocator), allocator);
         args.AddMember("language", rapidjson::Value(port->ss_language, allocator), allocator);
@@ -145,6 +148,7 @@ static pj_bool_t on_connect_complete(pj_websock_t *c, pj_status_t status)
 
         // Add members to the "args" object
         args.AddMember("sampleRate", port->sample_rate, allocator);
+        args.AddMember("uuid", rapidjson::Value(port->uuid, allocator), allocator);
         args.AddMember("engine", rapidjson::Value(port->sr_engine, allocator), allocator);
         args.AddMember("language", rapidjson::Value(port->sr_language, allocator), allocator);
 
@@ -237,6 +241,7 @@ PJ_DEF(pj_status_t) pjmedia_ws_speech_port_create(pj_pool_t *pool,
 				unsigned bits_per_sample,
                 struct pj_websock_endpoint *ws_endpt,
                 const char *server_url,
+                const char *uuid,
                 const char *ss_engine,
                 const char *ss_voice,
                 const char *ss_language,
@@ -264,6 +269,9 @@ PJ_DEF(pj_status_t) pjmedia_ws_speech_port_create(pj_pool_t *pool,
     PJ_ASSERT_RETURN(pool != NULL, PJ_ENOMEM);
 
     port->sample_rate = clock_rate;
+
+    port->uuid = (char*)pj_pool_alloc(pool, strlen(uuid) + 1);
+    pj_ansi_strcpy(port->uuid, uuid);
 
     if(ss_engine) {
       port->ss_engine = (char*)pj_pool_alloc(pool, strlen(ss_engine) + 1);

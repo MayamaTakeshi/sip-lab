@@ -645,8 +645,8 @@ bool prepare_bfsk_det(Call *call, AudioEndpoint *ae, const int freq_zero, const 
 bool prepare_wav_player(Call *call, AudioEndpoint *ae, const char *file, unsigned flags, bool end_of_file_event);
 bool prepare_wav_writer(Call *call, AudioEndpoint *ae, const char *file);
 bool prepare_fax(Call *call, AudioEndpoint *ae, bool is_sender, const char *file, unsigned flags);
-bool prepare_speech_synth(Call *call, AudioEndpoint *ae, const char *server_url, const char *engine, const char *voice, const char *language, const char *text, int times);
-bool prepare_speech_recog(Call *call, AudioEndpoint *ae, const char *server_url, const char *engine, const char *language);
+bool prepare_speech_synth(Call *call, AudioEndpoint *ae, const char *server_url, const char *uuid, const char *engine, const char *voice, const char *language, const char *text, int times);
+bool prepare_speech_recog(Call *call, AudioEndpoint *ae, const char *server_url, const char *uuid, const char *engine, const char *language);
 
 void prepare_error_event(ostringstream *oss, char *scope, char *details);
 // void prepare_pjsipcall_error_event(ostringstream *oss, char *scope, char
@@ -4169,7 +4169,7 @@ out:
   return 0;
 }
 
-pj_status_t audio_endpoint_start_speech_synth(Call *call, AudioEndpoint *ae, const char *server_url, const char *engine, const char *voice, const char *language, const char *text, int times) {
+pj_status_t audio_endpoint_start_speech_synth(Call *call, AudioEndpoint *ae, const char *server_url, const char *uuid, const char *engine, const char *voice, const char *language, const char *text, int times) {
   pj_status_t status;
 
   if(!ae->stream_cbp.port) {
@@ -4183,7 +4183,7 @@ pj_status_t audio_endpoint_start_speech_synth(Call *call, AudioEndpoint *ae, con
     return -1;
   }
 
-  if (!prepare_speech_synth(call, ae, server_url, engine, voice, language, text, times)) {
+  if (!prepare_speech_synth(call, ae, server_url, uuid, engine, voice, language, text, times)) {
     return -1;
   }
 
@@ -4302,13 +4302,16 @@ int pjw_call_start_speech_synth(long call_id, const char *json) {
     }
   }
 
+  char uuid[1024];
+  sprintf(uuid, "%.*s", call->inv->dlg->call_id->id.slen, call->inv->dlg->call_id->id.ptr);
+
   if (NOT_FOUND_OPTIONAL == res) {
     // start on all audio media endpoints
     for (int i = 0; i < call->media_count; i++) {
       MediaEndpoint *me = (MediaEndpoint *)call->media[i];
       if (me->type == ENDPOINT_TYPE_AUDIO) {
         AudioEndpoint *ae = (AudioEndpoint *)me->endpoint.audio;
-        status = audio_endpoint_start_speech_synth(call, ae, server_url, engine, voice, language, text, times);
+        status = audio_endpoint_start_speech_synth(call, ae, server_url, uuid, engine, voice, language, text, times);
         if (status != PJ_SUCCESS) goto out;
       }
     }
@@ -4326,7 +4329,7 @@ int pjw_call_start_speech_synth(long call_id, const char *json) {
 
     ae = (AudioEndpoint *)me->endpoint.audio;
 
-    audio_endpoint_start_speech_synth(call, ae, server_url, engine, voice, language, text, times);
+    audio_endpoint_start_speech_synth(call, ae, server_url, uuid, engine, voice, language, text, times);
   }
 
 out:
@@ -4338,7 +4341,7 @@ out:
   return 0;
 }
 
-pj_status_t audio_endpoint_start_speech_recog(Call *call, AudioEndpoint *ae, const char *server_url, const char *engine, const char *language) {
+pj_status_t audio_endpoint_start_speech_recog(Call *call, AudioEndpoint *ae, const char *server_url, const char *uuid, const char *engine, const char *language) {
   pj_status_t status;
 
   if(!ae->stream_cbp.port) {
@@ -4352,7 +4355,7 @@ pj_status_t audio_endpoint_start_speech_recog(Call *call, AudioEndpoint *ae, con
     return -1;
   }
 
-  if (!prepare_speech_recog(call, ae, server_url, engine, language)) {
+  if (!prepare_speech_recog(call, ae, server_url, uuid, engine, language)) {
     return -1;
   }
 
@@ -4443,13 +4446,16 @@ int pjw_call_start_speech_recog(long call_id, const char *json) {
     }
   }
 
+  char uuid[1024];
+  sprintf(uuid, "%.*s", call->inv->dlg->call_id->id.slen, call->inv->dlg->call_id->id.ptr);
+
   if (NOT_FOUND_OPTIONAL == res) {
     // start on all audio media endpoints
     for (int i = 0; i < call->media_count; i++) {
       MediaEndpoint *me = (MediaEndpoint *)call->media[i];
       if (me->type == ENDPOINT_TYPE_AUDIO) {
         AudioEndpoint *ae = (AudioEndpoint *)me->endpoint.audio;
-        status = audio_endpoint_start_speech_recog(call, ae, server_url, engine, language);
+        status = audio_endpoint_start_speech_recog(call, ae, server_url, uuid, engine, language);
         if (status != PJ_SUCCESS) goto out;
       }
     }
@@ -4467,7 +4473,7 @@ int pjw_call_start_speech_recog(long call_id, const char *json) {
 
     ae = (AudioEndpoint *)me->endpoint.audio;
 
-    audio_endpoint_start_speech_recog(call, ae, server_url, engine, language);
+    audio_endpoint_start_speech_recog(call, ae, server_url, uuid, engine, language);
   }
 
 out:
@@ -7538,7 +7544,7 @@ bool prepare_fax(Call *call, AudioEndpoint *ae, bool is_sender, const char *file
   return connect_feature_port_to_stream_port(call, ae, fp);
 }
 
-bool prepare_speech_synth(Call *call, AudioEndpoint *ae, const char *server_url, const char *engine, const char *voice, const char *language, const char *text, int times) {
+bool prepare_speech_synth(Call *call, AudioEndpoint *ae, const char *server_url, const char *uuid, const char *engine, const char *voice, const char *language, const char *text, int times) {
   pj_status_t status;
 
   ConfBridgePort *fp = &ae->feature_cbps[FP_SPEECH_SYNTH];
@@ -7593,6 +7599,7 @@ bool prepare_speech_synth(Call *call, AudioEndpoint *ae, const char *server_url,
             PJMEDIA_PIA_BITS(&ae->stream_cbp.port->info),
             g_ws_endpt,
             server_url,
+            uuid,
             engine,
             voice,
             language,
@@ -7626,7 +7633,7 @@ bool prepare_speech_synth(Call *call, AudioEndpoint *ae, const char *server_url,
   return PJ_SUCCESS;
 }
 
-bool prepare_speech_recog(Call *call, AudioEndpoint *ae, const char *server_url, const char *engine, const char *language) {
+bool prepare_speech_recog(Call *call, AudioEndpoint *ae, const char *server_url, const char *uuid, const char *engine, const char *language) {
   pj_status_t status;
 
   ConfBridgePort *fp = &ae->feature_cbps[FP_SPEECH_RECOG];
@@ -7658,6 +7665,7 @@ bool prepare_speech_recog(Call *call, AudioEndpoint *ae, const char *server_url,
             PJMEDIA_PIA_BITS(&ae->stream_cbp.port->info),
             g_ws_endpt,
             server_url,
+            uuid,
             NULL,
             NULL,
             NULL,
