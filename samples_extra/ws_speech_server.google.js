@@ -83,13 +83,13 @@ async function test() {
         },
     ], 1000)
 
-    await z.sleep(200)
-
     sip.call.start_record_wav(oc.id, {file: './oc.wav'})
     sip.call.start_record_wav(ic.id, {file: './ic.wav'})
 
     sip.call.start_speech_recog(oc.id, {server_url: 'ws://0.0.0.0:8080', engine: 'google-sr', language: 'en-US'})
-    sip.call.start_speech_recog(ic.id, {server_url: 'ws://0.0.0.0:8080', engine: 'ggoole-sr', language: 'en-US'})
+    sip.call.start_speech_recog(ic.id, {server_url: 'ws://0.0.0.0:8080', engine: 'google-sr', language: 'en-US'})
+
+    await z.sleep(100)
 
     sip.call.start_speech_synth(oc.id, {server_url: 'ws://0.0.0.0:8080', engine: 'google-ss', voice: 'en-US-Standard-E', language: 'en-US', text: 'hello world', times: 1})
     sip.call.start_speech_synth(ic.id, {server_url: 'ws://0.0.0.0:8080', engine: 'google-ss', voice: 'en-US-Standard-F', language: 'en-US', text: '<speak>Good morning<break time="2s"/>Good Afternoon</speak>', times: 1})
@@ -123,8 +123,6 @@ async function test() {
         },
     ], 4000)
 
-    await z.sleep(1000)
-
     sip.call.stop_record_wav(oc.id)
     sip.call.stop_record_wav(ic.id)
 
@@ -150,7 +148,7 @@ async function test() {
         },
     ], 1000)
 
-    await z.sleep(100)
+    await z.sleep(50)
 
     console.log("Success")
 
