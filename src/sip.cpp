@@ -267,7 +267,7 @@ int ms_timestamp();
 bool g_shutting_down;
 
 int g_dtmf_inter_digit_timer = 0;
-int g_bfsk_inter_bit_timer = 50;
+int g_bfsk_inter_bit_timer = 200;
 
 pj_str_t g_sip_ipaddress;
 
@@ -9092,6 +9092,18 @@ void check_digit_buffer(Call *call, int mode) {
       *pLen = 0;
       ae->last_digit_timestamp[mode] = 0;
     }
+  }
+}
+
+void check_bit_buffer(Call *call) {
+  char evt[1024];
+
+  for (int i = 0; i < call->media_count; i++) {
+    MediaEndpoint *me = (MediaEndpoint *)call->media[i];
+    if (ENDPOINT_TYPE_AUDIO != me->type)
+      continue;
+
+    AudioEndpoint *ae = (AudioEndpoint *)me->endpoint.audio;
 
     if (ae->last_bit_timestamp > 0 &&
         g_now - ae->last_bit_timestamp > g_bfsk_inter_bit_timer) {
@@ -9104,11 +9116,12 @@ void check_digit_buffer(Call *call, int mode) {
   }
 }
 
-void check_digit_buffers(long id, long val) {
+void check_buffers(long id, long val) {
   Call *call = (Call *)val;
 
   check_digit_buffer(call, DTMF_MODE_RFC2833);
   check_digit_buffer(call, DTMF_MODE_INBAND);
+  check_bit_buffer(call);
 }
 
 static int digit_buffer_thread(void *arg) {
@@ -9123,7 +9136,7 @@ static int digit_buffer_thread(void *arg) {
     PJW_LOCK();
     if (g_dtmf_inter_digit_timer > 0) {
       g_now = ms_timestamp();
-      g_call_ids.iterate(check_digit_buffers);
+      g_call_ids.iterate(check_buffers);
     }
     PJW_UNLOCK();
 

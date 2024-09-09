@@ -16,7 +16,8 @@ async function test() {
         return e
     })
 
-    sip.set_codecs("pcmu/8000/1:128,pcma/8000/1:128,gsm/8000/1:128")
+    //sip.set_codecs("pcmu/8000/1:128,pcma/8000/1:128,gsm/8000/1:128")
+    sip.set_codecs("pcma/8000/1:128")
 
     console.log(sip.start((data) => { console.log(data)} ))
 
@@ -50,9 +51,6 @@ async function test() {
         sip_call_id: z.store.sip_call_id,
     }
 
-    // force answer with pcma
-    sip.set_codecs("pcma/8000/1:128")
-
     sip.call.respond(ic.id, {code: 200, reason: 'OK'})
 
     await z.wait([
@@ -80,10 +78,6 @@ async function test() {
                   port: 10002,
                   mode: 'sendrecv'
                 },
-                fmt: [                                                                             
-                  '8 PCMA/8000',                                                                   
-                  '120 telephone-event/8000',
-                ],
               },
             ],
         },
@@ -102,10 +96,6 @@ async function test() {
                   port: 10000,
                   mode: 'sendrecv'
                 },
-                fmt: [                                                                             
-                  '8 PCMA/8000',                                                                   
-                  '120 telephone-event/8000',
-                ],
               }
             ],
         },
@@ -119,12 +109,11 @@ async function test() {
     sip.call.start_bfsk_detection(oc.id, {freq_zero: 440, freq_one: 880})
     //sip.call.start_bfsk_detection(ic.id, {freq_zero: 440, freq_one: 880})
 
-    /*
-    oc_bits = '1010101010101010'
-    ic_bits = '1111000011110000'
+    oc_bits = '1010'
+    ic_bits = '1100'
 
     sip.call.send_bfsk(ic.id, {bits: ic_bits, freq_zero: 440, freq_one: 880})
-    sip.call.send_bfsk(oc.id, {bits: oc_bits, freq_zero: 440, freq_one: 880})
+    //sip.call.send_bfsk(oc.id, {bits: oc_bits, freq_zero: 440, freq_one: 880})
 
     await z.wait([
        {
@@ -133,8 +122,13 @@ async function test() {
             bits: oc_bits,
             media_id: 0
        },
+       {
+            event: 'bfsk',
+            call_id: oc.id,
+            bits: ic_bits,
+            media_id: 0
+       },
     ], 2000)
-    */
 
     await z.sleep(1000)
 
