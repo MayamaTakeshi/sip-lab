@@ -1457,11 +1457,13 @@ int __pjw_init() {
     return 1;
   }
 
+  /*
   status = pjsip_replaces_init_module(g_sip_endpt);
   if (status != PJ_SUCCESS) {
     addon_log(L_DBG, "pjsip_replaces_init_module failed\n");
     return 1;
   }
+  */
 
   pjsip_inv_callback inv_cb;
   pj_bzero(&inv_cb, sizeof(inv_cb));
@@ -2423,6 +2425,8 @@ int pjw_call_respond(long call_id, const char *json) {
 
       if (code >= 200 && code < 300) {
         call->pending_request = -1;
+
+        pjsip_msg_find_remove_hdr(tdata->msg, PJSIP_H_SUPPORTED, NULL);
       }
     }
   } else {
@@ -2446,6 +2450,9 @@ int pjw_call_respond(long call_id, const char *json) {
 
       if (code >= 200 && code < 300) {
         call->pending_request = -1;
+
+        pjsip_msg *msg = tdata->msg;
+        pjsip_msg_find_remove_hdr(msg, PJSIP_H_SUPPORTED, NULL);
       }
     }
 
@@ -3249,6 +3256,8 @@ int call_create(Transport *t, unsigned flags, pjsip_dialog *dlg,
   }
   addon_log(L_DBG, "inv=%p tdata=%p\n", (void*)inv, (void*)tdata);
 
+  pjsip_msg_find_remove_hdr(tdata->msg, PJSIP_H_SUPPORTED, NULL);
+
   status = pjsip_inv_send_msg(inv, tdata);
   addon_log(L_DBG, "status=%d\n", status);
   if (status != PJ_SUCCESS) {
@@ -3756,6 +3765,8 @@ int pjw_call_reinvite(long call_id, const char *json) {
     set_error("pjsip_inv_reinvite failed");
     goto out;
   }
+
+  pjsip_msg_find_remove_hdr(tdata->msg, PJSIP_H_SUPPORTED, NULL);
 
   status = pjsip_inv_send_msg(call->inv, tdata);
   if (status != PJ_SUCCESS) {
