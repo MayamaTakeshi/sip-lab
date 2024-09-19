@@ -2423,11 +2423,9 @@ int pjw_call_respond(long call_id, const char *json) {
       }
       call->pending_rdata = 0;
 
-      if (code >= 200 && code < 300) {
-        call->pending_request = -1;
+      call->pending_request = -1;
 
-        pjsip_msg_find_remove_hdr(tdata->msg, PJSIP_H_SUPPORTED, NULL);
-      }
+      pjsip_msg_find_remove_hdr(tdata->msg, PJSIP_H_SUPPORTED, NULL);
     }
   } else {
     status = pjsip_inv_answer(call->inv, code, &r,
@@ -2448,12 +2446,23 @@ int pjw_call_respond(long call_id, const char *json) {
         call->pending_rdata = 0;
       }
 
-      if (code >= 200 && code < 300) {
-        call->pending_request = -1;
+      call->pending_request = -1;
 
-        pjsip_msg *msg = tdata->msg;
-        pjsip_msg_find_remove_hdr(msg, PJSIP_H_SUPPORTED, NULL);
-      }
+      /*
+      int printed;
+      char buf[2048];
+      printed = pjsip_msg_print(tdata->msg, buf, sizeof(buf));
+      printf("tdata before len=%i :\n%s\n", printed, buf);
+      */
+
+      // the below works (header Supported is removed) 
+      // but something (the 100rel module) adds 'Supported: 100rel' later.
+      pjsip_msg_find_remove_hdr(tdata->msg, PJSIP_H_SUPPORTED, NULL);
+
+      /*
+      printed = pjsip_msg_print(tdata->msg, buf, sizeof(buf));
+      printf("tdata after len=%i :\n%s\n", printed, buf);
+      */
     }
 
     if (!add_headers(call->inv->dlg->pool, tdata, document)) {
