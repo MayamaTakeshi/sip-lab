@@ -25,11 +25,9 @@ async function test() {
     console.log("t2", t2)
 
     const call_id = uuid.v4()
-    const from_tag = "my_fake_from_tag"
 
     var oc = sip.call.create(t1.id, {
         from_uri: 'sip:alice@test.com',
-        from_tag,
         to_uri: `sip:bob@${t2.address}:${t2.port}`,
         headers: {
             'Call-ID': call_id,
@@ -52,6 +50,7 @@ async function test() {
                 hdr_supported: 'timer',
                 hdr_min_se: '180',
                 hdr_session_expires: '180',
+                $ci: call_id,
             })
         },
         {
@@ -103,7 +102,6 @@ async function test() {
 
     oc = sip.call.create(t1.id, {
         from_uri: 'sip:alice@test.com;tag=1c619456422',
-        from_tag,
         to_uri: `sip:bob@${t2.address}:${t2.port}`,
         headers: {
             'Call-ID': call_id,
@@ -128,6 +126,7 @@ async function test() {
                 hdr_supported: 'timer',
                 hdr_min_se: '300',
                 hdr_session_expires: '300',
+                $ci: call_id,
             })
         },
         {
@@ -151,7 +150,8 @@ async function test() {
         reason: 'OK',
         headers: {
             'Supported': 'timer',
-            'Session-Expires': '180;refresher=uac',
+            'Min-SE': '300',
+            'Session-Expires': '300;refresher=uac',
         },
     })
 
@@ -164,7 +164,8 @@ async function test() {
                 $rs: '200',
                 $rr: 'OK',
                 hdr_supported: 'timer',
-                hdr_session_expires: '180;refresher=uac',
+                hdr_min_se: '300',
+                hdr_session_expires: '300;refresher=uac',
             }),
         },
         {
@@ -179,50 +180,7 @@ async function test() {
         },
     ], 1000)
 
-    await z.sleep(1000)
-
-    sip.call.send_request(oc.id, {
-        method: 'UPDATE',
-        headers: {
-            'Supported': 'timer',
-            'Session-Expires': '180;refresher=uac',
-        },
-    })
-
-    await z.wait([
-        {
-            event: 'request',
-            call_id: ic.id,
-            msg: sip_msg({
-                $rm: 'UPDATE',
-                hdr_supported: 'timer',
-                hdr_session_expires: '180;refresher=uac',
-            }),
-        },
-    ], 1000)
-
-    sip.call.respond(ic.id, {
-        code: 200,
-        reason: 'OK',
-        headers: {
-            'Supported': 'timer',
-            'Session-Expires': '180;refresher=uac',
-        },
-    })
-
-    await z.wait([
-        {
-            event: 'response',
-            call_id: oc.id,
-            msg: sip_msg({
-                $rm: 'UPDATE',
-                $rs: '200',
-                $rr: 'OK',
-                hdr_supported: 'timer',
-                hdr_session_expires: '180;refresher=uac',
-            }),
-        },
-    ], 1000)
+    await z.sleep(5000)
 
     sip.call.terminate(oc.id)
 

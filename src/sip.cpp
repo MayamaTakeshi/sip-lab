@@ -614,7 +614,7 @@ void build_local_contact_from_tpfactory(char *dest, pjsip_tpfactory *tpfactory,
 // pj_bool_t add_additional_headers(pj_pool_t *pool, pjsip_tx_data *tdata, const
 // char *additional_headers);
 pj_bool_t add_headers(pj_pool_t *pool, pjsip_tx_data *tdata,
-                      Document &document);
+                      Document &document, pjsip_dialog *dlg);
 
 pj_bool_t add_headers_for_account(pjsip_regc *regc, Document &document);
 
@@ -2465,7 +2465,7 @@ int pjw_call_respond(long call_id, const char *json) {
       */
     }
 
-    if (!add_headers(call->inv->dlg->pool, tdata, document)) {
+    if (!add_headers(call->inv->dlg->pool, tdata, document, NULL)) {
       goto out;
     }
   }
@@ -2546,7 +2546,7 @@ int pjw_call_terminate(long call_id, const char *json) {
     goto out;
   }
 
-  if (!add_headers(call->inv->dlg->pool, tdata, document)) {
+  if (!add_headers(call->inv->dlg->pool, tdata, document, NULL)) {
     goto out;
   }
 
@@ -2683,7 +2683,7 @@ int pjw_request_create(long t_id, const char *json, long *out_request_id,
     goto out;
   }
 
-  if (!add_headers(tdata->pool, tdata, document)) {
+  if (!add_headers(tdata->pool, tdata, document, NULL)) {
     goto out;
   }
 
@@ -2783,7 +2783,7 @@ int pjw_request_respond(long request_id, const char *json) {
     goto out;
   }
 
-  if (!add_headers(tdata->pool, tdata, document)) {
+  if (!add_headers(tdata->pool, tdata, document, NULL)) {
     goto out;
   }
 
@@ -2852,7 +2852,7 @@ int pjw_call_create(long t_id, const char *json, long *out_call_id,
 
   const char *valid_params[] = {"from_uri",  "to_uri", "request_uri",
                                 "proxy_uri", "auth",   "delayed_media",
-                                "headers",   "media",  ""};
+                                "headers",   "media",  "from_tag", ""};
 
   if (!g_transport_ids.get(t_id, val)) {
     set_error("Invalid transport_id");
@@ -3253,7 +3253,25 @@ int call_create(Transport *t, unsigned flags, pjsip_dialog *dlg,
     return -1;
   }
 
-  if (!add_headers(dlg->pool, tdata, document)) {
+  if (document.HasMember("from_tag")) {
+    if (!document["from_tag"].IsString()) {
+      g_call_ids.remove(call_id, (long&)call);
+      close_media(call);
+      status = pjsip_dlg_terminate(dlg); // ToDo:
+      set_error("Parameter from_tag must be a string");
+      return -1;
+    }
+
+    char *from_tag = (char *)document["from_tag"].GetString();
+
+    pjsip_from_hdr *from_hdr = (pjsip_from_hdr*) pjsip_msg_find_hdr(tdata->msg, PJSIP_H_FROM, NULL);
+    pj_strdup2(tdata->pool, &from_hdr->tag, from_tag);
+
+    pjsip_from_hdr *local_from_hdr = (pjsip_from_hdr*) dlg->local.hdr;
+    pj_strdup2(dlg->pool, &local_from_hdr->tag, from_tag);
+  }
+
+  if (!add_headers(dlg->pool, tdata, document, dlg)) {
     g_call_ids.remove(call_id, (long&)call);
     close_media(call);                 // Todo:
     status = pjsip_dlg_terminate(dlg); // ToDo:
@@ -3878,7 +3896,7 @@ int pjw_call_send_request(long call_id, const char *json) {
     goto out;
   }
 
-  if (!add_headers(call->inv->dlg->pool, tdata, document)) {
+  if (!add_headers(call->inv->dlg->pool, tdata, document, NULL)) {
     goto out;
   }
 
@@ -8276,7 +8294,7 @@ bool notify(pjsip_evsub *evsub, const char *content_type, const char *body,
   }
   s_content_type_subtype = pj_str(tok);
 
-  if (!add_headers(tdata->pool, tdata, document)) {
+  if (!add_headers(tdata->pool, tdata, document, NULL)) {
     return false;
   }
 
@@ -8453,7 +8471,7 @@ out:
 }
 
 pj_bool_t add_headers(pj_pool_t *pool, pjsip_tx_data *tdata,
-                      Document &document) {
+                      Document &document, pjsip_dialog *dlg) {
   if (!document.HasMember("headers")) {
     return PJ_TRUE;
   }
@@ -8473,24 +8491,34 @@ pj_bool_t add_headers(pj_pool_t *pool, pjsip_tx_data *tdata,
     }
     printf("%s => '%s'\n", itr->name.GetString(), itr->value.GetString());
 
-    const char *name = itr->name.GetString();
-    if (!itr->value.IsString()) {
-      set_error("Parameter headers key '%s' found with non-string value", name);
-      return PJ_FALSE;
+    if(stricmp(itr->name.GetString(), "call-id") == 0) {
+      printf("Setting INVIITE call_id->id to %s\n", itr->value.GetString());
+      pjsip_cid_hdr *call_id_hdr = (pjsip_cid_hdr*) pjsip_msg_find_hdr(tdata->msg, PJSIP_H_CALL_ID, NULL);
+      pj_strdup2(tdata->pool, &call_id_hdr->id, itr->value.GetString());
+      if(dlg) {
+        printf("Setting DLG call_id->id to %s\n", itr->value.GetString());
+        pj_strdup2(dlg->pool, &dlg->call_id->id, itr->value.GetString());
+      }
+    } else {
+      const char *name = itr->name.GetString();
+      if (!itr->value.IsString()) {
+        set_error("Parameter headers key '%s' found with non-string value", name);
+        return PJ_FALSE;
+      }
+
+      const char *value = itr->value.GetString();
+
+      pj_str_t hname = pj_str((char *)name);
+      pjsip_hdr *hdr = (pjsip_hdr *)pjsip_parse_hdr(pool, &hname, (char *)value,
+                                                      strlen(value), NULL);
+
+      if (!hdr) {
+        set_error("Failed to parse header '%s' => '%s'", name, value);
+        return PJ_FALSE;
+      }
+      pjsip_hdr *clone_hdr = (pjsip_hdr *)pjsip_hdr_clone(pool, hdr);
+      pjsip_msg_add_hdr(tdata->msg, clone_hdr);
     }
-
-    const char *value = itr->value.GetString();
-
-    pj_str_t hname = pj_str((char *)name);
-    pjsip_hdr *hdr = (pjsip_hdr *)pjsip_parse_hdr(pool, &hname, (char *)value,
-                                                  strlen(value), NULL);
-
-    if (!hdr) {
-      set_error("Failed to parse header '%s' => '%s'", name, value);
-      return PJ_FALSE;
-    }
-    pjsip_hdr *clone_hdr = (pjsip_hdr *)pjsip_hdr_clone(pool, hdr);
-    pjsip_msg_add_hdr(tdata->msg, clone_hdr);
   }
   return PJ_TRUE;
 }
@@ -8837,7 +8865,7 @@ bool subscription_subscribe(Subscription *s, int expires, Document &document) {
     return false;
   }
 
-  if (!add_headers(s->dlg->pool, tdata, document)) {
+  if (!add_headers(s->dlg->pool, tdata, document, NULL)) {
     return false;
   }
 
