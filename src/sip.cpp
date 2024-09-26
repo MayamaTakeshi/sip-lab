@@ -3266,9 +3266,6 @@ int call_create(Transport *t, unsigned flags, pjsip_dialog *dlg,
 
     pjsip_from_hdr *from_hdr = (pjsip_from_hdr*) pjsip_msg_find_hdr(tdata->msg, PJSIP_H_FROM, NULL);
     pj_strdup2(tdata->pool, &from_hdr->tag, from_tag);
-
-    pjsip_from_hdr *local_from_hdr = (pjsip_from_hdr*) dlg->local.hdr;
-    pj_strdup2(dlg->pool, &local_from_hdr->tag, from_tag);
   }
 
   if (!add_headers(dlg->pool, tdata, document, dlg)) {
