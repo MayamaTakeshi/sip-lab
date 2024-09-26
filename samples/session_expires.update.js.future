@@ -2,6 +2,7 @@ const sip = require ('../index.js')
 const Zeq = require('@mayama/zeq')
 const m = require('data-matching')
 const sip_msg = require('sip-matching')
+const uuid = require('uuid')
 
 // here we create our Zeq instance
 var z = new Zeq()
@@ -24,9 +25,10 @@ async function test() {
     console.log("t2", t2)
 
     const oc = sip.call.create(t1.id, {
-        from_uri: 'sip:alice@test.com',
+        from_uri: 'sip:alice@test.com;tag=1c619456422',
         to_uri: `sip:bob@${t2.address}:${t2.port}`,
         headers: {
+            'Call-ID': 'MyFakeCallID',
             'Supported': 'timer',
             'Min-SE': '180',
             'Session-Expires': '180',
