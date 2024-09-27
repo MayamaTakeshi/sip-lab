@@ -49,7 +49,7 @@ async function test() {
             'Call-ID': sip_call_id,
             'Supported': 'timer',
             'Min-SE': '180',
-            'Session-Expires': '180',
+            'Session-Expires': '180;refresher=uac',
         },
     })
 
@@ -60,7 +60,7 @@ async function test() {
                 $rm: 'INVITE',
                 hdr_supported: 'timer',
                 hdr_min_se: '180',
-                hdr_session_expires: '180',
+                hdr_session_expires: '180;refresher=uac',
             })),
             event: 'dialog_offer',
             dialog_id: m.collect('dialog_id'),
@@ -110,7 +110,7 @@ async function test() {
             'Call-ID': sip_call_id,
             'Supported': 'timer',
             'Min-SE': '300',
-            'Session-Expires': '300',
+            'Session-Expires': '300;refresher=uac',
         },
     })
 
@@ -123,7 +123,7 @@ async function test() {
                 $rm: 'INVITE',
                 hdr_supported: 'timer',
                 hdr_min_se: '300',
-                hdr_session_expires: '300',
+                hdr_session_expires: '300;refresher=uac'
             })),
             event: 'dialog_offer',
             dialog_id: m.collect('dialog_id'),
@@ -141,6 +141,36 @@ a=rtpmap:0 PCMU/8000
 a=rtpmap:101 telephone-event/8000
 a=fmtp:101 0-15
 a=ptime:20`.replace(/\n/g, "\r\n")
+
+    dialog.send_reply(
+        z.store.dialog_id,
+        z.store.req,
+        {
+            status: 183,
+            reason: 'Session Progress',
+            headers: {
+                'content-type': 'application/sdp',
+            },
+            content: sdp_answer,
+        }
+    )
+
+    await z.wait([
+        {
+            event: 'response',
+            call_id: oc.id,
+            method: 'INVITE',
+            msg: sip_msg({
+                $rs: '183',
+                $rr: 'Session Progress',
+            }),
+        },
+        {
+            event: 'media_update',
+            call_id: oc.id,
+            status: 'ok',
+        },
+    ], 1000)
 
     dialog.send_reply(
         z.store.dialog_id,
@@ -194,7 +224,7 @@ a=ptime:20`.replace(/\n/g, "\r\n")
             headers: {
                 'Supported': 'timer',
                 'Min-SE': '300',
-                'Session-Expires': '300',
+                'Session-Expires': '300;refresher=uac',
             },
         })
 
@@ -207,7 +237,7 @@ a=ptime:20`.replace(/\n/g, "\r\n")
                     $rm: 'UPDATE',
                     hdr_supported: 'timer',
                     hdr_min_se: '300',
-                    hdr_session_expires: '300',
+                    hdr_session_expires: '300;refresher=uac'
                 })),
                 event: 'in_dialog_request',
                 dialog_id: z.store.dialog_id
