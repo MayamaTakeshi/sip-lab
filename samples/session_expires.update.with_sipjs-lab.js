@@ -101,8 +101,6 @@ async function test() {
 
     delete z.store.dialog_id
 
-    await z.sleep(1000)
-
     oc = sip.call.create(t1.id, {
         from_uri: 'sip:alice@test.com',
         to_uri: `sip:bob@${address}:${e1_port}`,
