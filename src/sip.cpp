@@ -2361,6 +2361,10 @@ int pjw_call_respond(long call_id, const char *json) {
 
     status = pjsip_dlg_send_response(call->inv->dlg, tsx, tdata);
 
+    if (status != PJ_SUCCESS) {
+       printf("Failed to send response, status=%d\n", status);
+    }
+
     assert(status == PJ_SUCCESS);
 
     if (code >= 200) {
@@ -3791,6 +3795,74 @@ int pjw_call_reinvite(long call_id, const char *json) {
   }
 
   pjsip_msg_find_remove_hdr(tdata->msg, PJSIP_H_SUPPORTED, NULL);
+
+  status = pjsip_inv_send_msg(call->inv, tdata);
+  if (status != PJ_SUCCESS) {
+    set_error("pjsip_inv_send_msg failed");
+    goto out;
+  }
+
+out:
+  PJW_UNLOCK();
+  if (pjw_errorstring[0]) {
+    return -1;
+  }
+
+  return 0;
+}
+
+
+int pjw_call_update(long call_id, const char *json) {
+  addon_log(L_DBG, "pjw_call_update call_id=%d\n", call_id);
+
+  PJW_LOCK();
+  clear_error();
+
+  unsigned flags = 0;
+
+  long val;
+  Call *call;
+  pjsip_inv_session *inv;
+
+  pj_status_t status;
+
+  pjsip_tx_data *tdata;
+  // pjmedia_sdp_session *sdp = 0;
+
+  char buffer[MAX_JSON_INPUT];
+
+  Document document;
+
+  const char *valid_params[] = {"headers", ""};
+
+  if (!g_call_ids.get(call_id, val)) {
+    set_error("Invalid call_id");
+    goto out;
+  }
+  call = (Call *)val;
+
+  inv = call->inv;
+
+  if (!parse_json(document, json, buffer, MAX_JSON_INPUT)) {
+    goto out;
+  }
+
+  if (!validate_params(document, valid_params)) {
+    goto out;
+  }
+
+  status = pjsip_inv_update(call->inv, NULL, NULL, &tdata);
+  printf("status=%d\n", status);
+  if (status != PJ_SUCCESS) {
+    set_error("pjsip_inv_update failed");
+    goto out;
+  }
+
+  pjsip_msg_find_remove_hdr(tdata->msg, PJSIP_H_SUPPORTED, NULL);
+
+  if (!add_headers(call->inv->dlg->pool, tdata, document, NULL)) {
+    goto out;
+  }
 
   status = pjsip_inv_send_msg(call->inv, tdata);
   if (status != PJ_SUCCESS) {

@@ -45,6 +45,8 @@ int pjw_call_send_bfsk(long call_id, const char *json);
 
 int pjw_call_reinvite(long call_id, const char *json);
 
+int pjw_call_update(long call_id, const char *json);
+
 int pjw_call_send_request(long call_id, const char *json);
 
 int pjw_call_start_record_wav(long call_id, const char *file);

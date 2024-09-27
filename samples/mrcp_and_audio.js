@@ -128,11 +128,9 @@ async function test() {
               {
                 type: 'audio',
                 local: {
-                  port: 10000,
                   mode: 'recvonly'
                 },
                 remote: {
-                  port: 10002,
                   mode: 'sendonly'
                 }
               }
@@ -155,11 +153,9 @@ async function test() {
               {
                 type: 'audio',
                 local: {
-                  port: 10002,
                   mode: 'sendonly'
                 },
                 remote: {
-                  port: 10000,
                   mode: 'recvonly'
                 }
               }
@@ -273,11 +269,9 @@ async function test() {
               {
                 type: 'audio',
                 local: {
-                  port: 10000,
                   mode: 'recvonly'
                 },
                 remote: {
-                  port: 10002,
                   mode: 'sendonly'
                 }
               }
@@ -300,11 +294,9 @@ async function test() {
               {
                 type: 'audio',
                 local: {
-                  port: 10002,
                   mode: 'sendonly'
                 },
                 remote: {
-                  port: 10000,
                   mode: 'recvonly'
                 }
               }
@@ -359,11 +351,9 @@ async function test() {
               {
                 type: 'audio',
                 local: {
-                  port: 10000,
                   mode: 'recvonly'
                 },
                 remote: {
-                  port: 10002,
                   mode: 'sendonly'
                 }
               }
@@ -386,11 +376,9 @@ async function test() {
               {
                 type: 'audio',
                 local: {
-                  port: 10002,
                   mode: 'sendonly'
                 },
                 remote: {
-                  port: 10000,
                   mode: 'recvonly'
                 }
               }

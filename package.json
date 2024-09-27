@@ -1,6 +1,6 @@
 {
   "name": "sip-lab",
-  "version": "1.30.0",
+  "version": "1.31.0",
   "description": "",
   "main": "index.js",
   "engines": {
@@ -29,7 +29,7 @@
     "node-gyp-build": "^4.5.0",
     "sdp-matching": "^1.3.2",
     "sip-matching": "^1.3.14",
-    "sipjs-lab": "^1.1.2"
+    "sipjs-lab": "^1.3.13"
   },
   "devDependencies": {
     "prebuildify": "^5.0.1",

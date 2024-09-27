@@ -60,6 +60,7 @@ addon.call = {
   send_dtmf: (c_id, params) => { return addon.call_send_dtmf(c_id, JSON.stringify(params)) },
   send_bfsk: (c_id, params) => { return addon.call_send_bfsk(c_id, JSON.stringify(params)) },
   reinvite: (c_id, params) => { return addon.call_reinvite(c_id, JSON.stringify(params ? params : {})) },
+  update: (c_id, params) => { return addon.call_update(c_id, JSON.stringify(params ? params : {})) },
   send_request: (c_id, params) => { return addon.call_send_request(c_id, JSON.stringify(params)) },
   start_record_wav: (c_id, params) => { return addon.call_start_record_wav(c_id, JSON.stringify(params)) },
   start_play_wav: (c_id, params) => { return addon.call_start_play_wav(c_id, JSON.stringify(params)) },
