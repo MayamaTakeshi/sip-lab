@@ -28,14 +28,17 @@ async function test() {
 
     const address = "127.0.0.1"
 
-    const t1 = sip.transport.create({address})
-
     const e1_port = 7070
     const e1 = endpoint.create({
         address,
         port: e1_port,
         publicAddress: address
     })
+
+    // hack to not lose first INVITE
+    await z.sleep(0)
+
+    const t1 = sip.transport.create({address})
 
     const sip_call_id = uuid.v4()
 
@@ -240,6 +243,8 @@ a=ptime:20`.replace(/\n/g, "\r\n")
             },
         ], 1000)
 
+        // sleep here as much as you like
+        await z.sleep(0)
     }
 
     sip.call.terminate(oc.id)
