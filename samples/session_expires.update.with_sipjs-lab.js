@@ -5,7 +5,7 @@ const sip_msg = require('sip-matching')
 const uuid = require('uuid')
 
 const sipjs = require('sipjs-lab')
-const {endpoint, dialog} = require('sipjs-lab')
+const {endpoint, dialog, sip_msg: sipjs_sip_msg} = require('sipjs-lab')
 
 // here we create our Zeq instance
 
@@ -53,21 +53,12 @@ async function test() {
     await z.wait([
         {
             source: 'sip_endpoint',
-            req: m.collect('req', {
-                method: 'INVITE',
-                uri: `sip:bob@${address}:${e1_port}`,
-                headers: {
-                    from: {
-                        uri: 'sip:alice@test.com',
-                    },
-                    to: {
-                        uri: `sip:bob@${address}`,
-                    },
-                    supported: 'timer',
-                    'min-se': '180',
-                    'session-expires': '180',
-                },
-            }),
+            req: m.collect('req', sipjs_sip_msg({
+                $rm: 'INVITE',
+                hdr_supported: 'timer',
+                hdr_min_se: '180',
+                hdr_session_expires: '180',
+            })),
             event: 'dialog_offer',
             dialog_id: m.collect('dialog_id'),
         },
@@ -125,18 +116,12 @@ async function test() {
     await z.wait([
         {
             source: 'sip_endpoint',
-            req: m.collect('req', {
-                method: 'INVITE',
-                uri: `sip:bob@${address}:${e1_port}`,
-                headers: {
-                    from: {
-                        uri: 'sip:alice@test.com',
-                    },
-                    to: {
-                        uri: `sip:bob@${address}`,
-                    },
-                },
-            }),
+            req: m.collect('req', sipjs_sip_msg({
+                $rm: 'INVITE',
+                hdr_supported: 'timer',
+                hdr_min_se: '300',
+                hdr_session_expires: '300',
+            })),
             event: 'dialog_offer',
             dialog_id: m.collect('dialog_id'),
         },
@@ -215,14 +200,12 @@ a=ptime:20`.replace(/\n/g, "\r\n")
         await z.wait([
             {
                 source: 'sip_endpoint',
-                req: m.collect('req', {
-                    method: 'UPDATE',
-                    headers: {
-                        'supported': 'timer',
-                        'min-se': '300',
-                        'session-expires': '300',
-                    },
-                }),
+                req: m.collect('req', sipjs_sip_msg({
+                    $rm: 'UPDATE',
+                    hdr_supported: 'timer',
+                    hdr_min_se: '300',
+                    hdr_session_expires: '300',
+                })),
                 event: 'in_dialog_request',
                 dialog_id: z.store.dialog_id
             },
@@ -266,9 +249,9 @@ a=ptime:20`.replace(/\n/g, "\r\n")
     await z.wait([
         {                                                                                                 
             source: 'sip_endpoint',
-            req: m.collect('req', { 
-              method: 'BYE',
-            }),
+            req: m.collect('req', sipjs_sip_msg({ 
+              $rm: 'BYE',
+            })),
         },
     ], 1000)
 
