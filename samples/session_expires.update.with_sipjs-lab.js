@@ -215,8 +215,10 @@ a=ptime:20`.replace(/\n/g, "\r\n")
         },
     ], 1000)
 
-
     for(var i=0 ; i<5 ; i++) {
+
+        // sleep here as much as you like
+        await z.sleep(0)
 
         sip.call.update(oc.id, {
             headers: {
@@ -271,8 +273,6 @@ a=ptime:20`.replace(/\n/g, "\r\n")
             },
         ], 1000)
 
-        // sleep here as much as you like
-        await z.sleep(0)
     }
 
     sip.call.terminate(oc.id)
