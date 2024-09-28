@@ -87,4 +87,8 @@ Although the code in written in *.cpp/*.hpp named files, this is not actually a 
 
 It is mostly written in C using some C++ facilities.
 
+### Release Notes
+
+[ReleaseNotes](https://github.com/MayamaTakeshi/sip-lab/blob/master/RELEASE_NOTES.md)
+
 
