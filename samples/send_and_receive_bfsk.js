@@ -113,23 +113,25 @@ async function test() {
     // wait a little for voice path to open
     await z.sleep(50)
 
-    sip.call.send_bfsk(ic.id, {bits: ic_bits, freq_zero: 500, freq_one: 2000})
-    sip.call.send_bfsk(oc.id, {bits: oc_bits, freq_zero: 500, freq_one: 2000})
+    for(var i=0 ; i<5 ; i++) {
+        sip.call.send_bfsk(ic.id, {bits: ic_bits, freq_zero: 500, freq_one: 2000})
+        sip.call.send_bfsk(oc.id, {bits: oc_bits, freq_zero: 500, freq_one: 2000})
 
-    await z.wait([
-       {
-            event: 'bfsk',
-            call_id: ic.id,
-            bits: oc_bits,
-            media_id: 0
-       },
-       {
-            event: 'bfsk',
-            call_id: oc.id,
-            bits: ic_bits,
-            media_id: 0
-       },
-    ], 10000)
+        await z.wait([
+           {
+                event: 'bfsk',
+                call_id: ic.id,
+                bits: oc_bits,
+                media_id: 0
+           },
+           {
+                event: 'bfsk',
+                call_id: oc.id,
+                bits: ic_bits,
+                media_id: 0
+           },
+        ], 10000)
+    }
 
     sip.call.stop_record_wav(oc.id)
     sip.call.stop_record_wav(ic.id)
