@@ -8,6 +8,7 @@ It uses pjproject for SIP and media processing.
 It permits to:
   - make audio calls using UDP, TCP and TLS transports
   - send/receive DTMF inband/RFC2833/INFO.
+  - send/receive [BFSK](https://en.wikipedia.org/wiki/Frequency-shift_keying) bits.
   - play/record audio on a call from/to a wav file
   - send/receive fax (T.30 only)
   - send/receive MRCPv2 messages (TCP only, no TLS)

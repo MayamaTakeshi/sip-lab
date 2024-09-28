@@ -104,13 +104,14 @@ async function test() {
     sip.call.start_record_wav(oc.id, {file: 'oc.wav'})
     sip.call.start_record_wav(ic.id, {file: 'ic.wav'})
 
-    await z.sleep(100)
-
     sip.call.start_bfsk_detection(oc.id, {freq_zero: 500, freq_one: 2000})
     sip.call.start_bfsk_detection(ic.id, {freq_zero: 500, freq_one: 2000})
 
     oc_bits = '1010'
     ic_bits = '1100'
+
+    // wait a little for voice path to open
+    await z.sleep(50)
 
     sip.call.send_bfsk(ic.id, {bits: ic_bits, freq_zero: 500, freq_one: 2000})
     sip.call.send_bfsk(oc.id, {bits: oc_bits, freq_zero: 500, freq_one: 2000})
@@ -129,8 +130,6 @@ async function test() {
             media_id: 0
        },
     ], 10000)
-
-    await z.sleep(1000)
 
     sip.call.stop_record_wav(oc.id)
     sip.call.stop_record_wav(ic.id)
