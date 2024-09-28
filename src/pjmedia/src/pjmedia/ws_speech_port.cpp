@@ -338,9 +338,24 @@ PJ_DEF(pj_status_t) pjmedia_ws_speech_port_create(pj_pool_t *pool,
 }
 
 static pj_status_t put_frame(pjmedia_port *this_port, pjmedia_frame *frame) {
+    printf("ws_speech_port put_frame\n");
     if(frame->type != PJMEDIA_FRAME_TYPE_AUDIO) return PJ_SUCCESS;
 
     struct ws_speech_t *port = (struct ws_speech_t*) this_port;
+
+    int size = PJMEDIA_PIA_SPF(&port->base.info);
+    int bps = PJMEDIA_PIA_BITS(&port->base.info);
+
+    printf("p=%x, size=%i bits_per_sample=%i\n", frame->buf, size, bps);
+
+    int16_t * samples = (int16_t*)frame->buf;
+
+    printf("Buffer contents:\n");
+    for (int i = 0; i < size; i++) {
+        printf("%02x", samples[i] & 0xFF);
+        printf("%02x", samples[i] >> 8 & 0xFF);
+    }
+    printf("\n");
 
     if(port->wc && port->connected) {
         pj_websock_send(port->wc, PJ_WEBSOCK_OP_BIN, PJ_TRUE, PJ_TRUE, frame->buf, frame->size); 
@@ -364,7 +379,7 @@ static pj_status_t get_frame(pjmedia_port *this_port, pjmedia_frame *frame) {
     int len = PJMEDIA_PIA_SPF(&this_port->info)*2;
 
     if(port->buffering_count >= MINIMAl_BUFFERING && port->buffer_top > 0 && port->buffer_top >= len) {
-        printf("get_frame top=%i\n", port->buffer_top);
+        //printf("get_frame top=%i\n", port->buffer_top);
         memcpy(frame->buf, port->buffer, len);
         port->buffer_top -= len;
         memcpy(port->buffer, port->buffer + len, port->buffer_top);

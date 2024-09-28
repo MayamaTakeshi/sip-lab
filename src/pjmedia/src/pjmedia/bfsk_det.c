@@ -36,88 +36,92 @@
 #   define TRACE_(expr)
 #endif
 
-// Adapted https://github.com/ericksc/goertzel/blob/master/main.cpp
+#include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdbool.h>
 
-#define PI 3.14159265358979
+// Converted by ChatGPT from https://github.com/hackergrrl/goertzel/blob/master/index.js
 
 typedef struct {
-	float coeff;
-	int fix_coeff;
-	int Q1;
-	int Q2;
-	double sine;
-	double cosine;
+    double freq;
+    double sampleRate;
+    int samplesPerFrame;
+    double targetMagnitude;  // Store the precomputed magnitude
 } goertzel_t;
 
-//Para definir punto fijo de 32 bits.
-int FIXED_POINT_16 = 16;
-int ONE_16 = 1 << 16;
-
-int FIXED_POINT_30 = 30;
-int ONE_30 = 1 << 30;
-
-int toFix( float val, int ONE ) {
-    // Escalamiento
-    return (int) (val * ONE);
-}
-
-float floatVal( int fix, int ONE ) {
-    return ((float) fix) / ONE;
-}
-
-int intVal( int fix, int FIXED_POINT ) {
-    return fix >> FIXED_POINT;
-}
-
-int mul(int fix_coeff, int Q1, int FIXED_POINT_mixed) {
-    // Manejo de 64 bit para el resultado inmedianto de la multiplicación
-    // Conversion a 32 bits para posterior uso
-    return (int)((long long int)fix_coeff * (long long int)Q1 >> FIXED_POINT_mixed);
-}
-
-/* Call this routine before every "block" (size=N) of samples. */
-void goertzel_det_reset(goertzel_t *g)
-{
-    g->Q2 = 0;
-    g->Q1 = 0;
-}
-/* Call this once, to precompute the constants. */
-void goertzel_det_init(goertzel_t *g, float frequency, float sampling_rate, int samples_per_frame)
-{
-    int k;
-    double floatN;
-    double omega;
-    floatN = (double)samples_per_frame;
-    k = (int)(0.5 + ((floatN * frequency) / sampling_rate));
-    omega = (2.0 * PI * k) / floatN;
-    g->sine = sin(omega);
-    g->cosine = cos(omega);
-    g->coeff = 2.0 * g->cosine;
-    g->fix_coeff = toFix(g->coeff, ONE_30);
-    printf("For sampling_rate = %f", sampling_rate);
-    printf("samples_per_frame = %d", samples_per_frame);
-    printf(" and frequency = %f,\n", frequency);
-    printf("k = %d and coeff = %f\n\n", k, g->coeff);
-    goertzel_det_reset(g);
-}
-
-float goertzel_mag(goertzel_t *g, int *buf, int size)
-{
-    for (int index = 0; index < size; index++)
-    {
-        // Punto fijo 32. INT
-        int Q0;
-        Q0 = mul(g->fix_coeff, g->Q1, 30) - g->Q2 + toFix(buf[index], ONE_16);
-        g->Q2 = g->Q1;
-        g->Q1 = Q0;
+double precalcMagnitude(double freq, int numSamples, double rate) {
+    double t = 0.0;
+    double tstep = 1.0 / rate;
+    double *samples = (double *)malloc(numSamples * sizeof(double));
+    for (int i = 0; i < numSamples; i++) {
+        samples[i] = sin(2 * M_PI * freq * t);
+        t += tstep;
     }
 
-    float result;
-    result = floatVal(g->Q1, ONE_16) * floatVal(g->Q1,ONE_16) + floatVal(g->Q2,ONE_16) * floatVal(g->Q2,ONE_16) - floatVal(g->Q1,ONE_16) * floatVal(g->Q2,ONE_16) * g->coeff;
-    goertzel_det_reset(g);
-    return result;
+    int k = (int)(0.5 + (numSamples * freq) / rate);
+    double w = (2 * M_PI / numSamples) * k;
+    double c = cos(w);
+    double s = sin(w);
+    double coeff = 2.0 * c;
+
+    double q0 = 0.0, q1 = 0.0, q2 = 0.0;
+    for (int i = 0; i < numSamples; i++) {
+        q0 = coeff * q1 - q2 + samples[i];
+        q2 = q1;
+        q1 = q0;
+    }
+
+    double real = q1 - q2 * c;
+    double imaginary = q2 * s;
+    double magSquared = real * real + imaginary * imaginary;
+
+    free(samples);
+    return magSquared;
 }
 
+#define THRESHOLD 0.9
+
+void goertzel_det_init(goertzel_t *g, int freq, int sample_rate, int samples_per_frame) {
+    g->freq = freq;
+    g->sampleRate = sample_rate;
+    g->samplesPerFrame = samples_per_frame;
+
+    assert(g->sampleRate >= g->freq * 2);
+
+    g->samplesPerFrame = (int)floor(g->samplesPerFrame);
+
+    // Precompute the target magnitude and store it in the struct
+    g->targetMagnitude = precalcMagnitude(g->freq, g->samplesPerFrame, g->sampleRate);
+    printf("Target Magnitude: %f\n", g->targetMagnitude);
+}
+
+double goertzel_mag(goertzel_t *g, double *samples, int length) {
+    printf("goertzel_mag\m");
+    int k = (int)(0.5 + (length * g->freq) / g->sampleRate);
+    double w = (2 * M_PI / length) * k;
+    double c = cos(w);
+    double s = sin(w);
+    double coeff = 2.0 * c;
+
+    printf("k = %d, w = %f, coeff = %f\n", k, w, coeff);
+
+    double q0 = 0.0, q1 = 0.0, q2 = 0.0;
+
+    for (int i = 0; i < length; i++) {
+        q0 = coeff * q1 - q2 + samples[i];
+        q2 = q1;
+        q1 = q0;
+    }
+
+    printf("coeff = %f, q0 = %f, q1 = %f, q2 = %f\n", coeff, q0, q1, q2);
+
+    double real = q1 - q2 * c;
+    double imaginary = q2 * s;
+    double magSquared = real * real + imaginary * imaginary;
+
+    return magSquared / g->targetMagnitude;
+}
 
 
 static pj_status_t bfsk_det_put_frame(pjmedia_port *this_port, 
@@ -234,7 +238,7 @@ PJ_DEF(pj_status_t) pjmedia_bfsk_det_create( pj_pool_t *pool,
 static pj_status_t bfsk_det_put_frame(pjmedia_port *this_port, 
 				  pjmedia_frame *frame)
 {
-    printf("bfsk_det_put_frame\n");
+    printf("bfsk_det put_frame\n");
     if(frame->type != PJMEDIA_FRAME_TYPE_AUDIO) return PJ_SUCCESS;
 
     struct bfsk_det *dport = (struct bfsk_det*) this_port;
@@ -248,18 +252,19 @@ static pj_status_t bfsk_det_put_frame(pjmedia_port *this_port,
 
     printf("Buffer contents:\n");
     for (int i = 0; i < size; i++) {
-        printf("%04x ", samples[i] & 0xFFFF);
+        printf("%02x", samples[i] & 0xFF);
+        printf("%02x", samples[i] >> 8 & 0xFF);
     }
     printf("\n");
 
-    float zero_power = goertzel_mag(dport->goertzel_zero, frame->buf, size);
-    float  one_power = goertzel_mag(dport->goertzel_one,  frame->buf, size);
+    double zero_power = goertzel_mag(dport->goertzel_zero, frame->buf, size);
+    double  one_power = goertzel_mag(dport->goertzel_one,  frame->buf, size);
 
-    int zero = zero_power > 1000000000.0;
-    int  one =  one_power > 1000000000.0;
+    int zero = zero_power > THRESHOLD;
+    int  one =  one_power > THRESHOLD;
 
     printf("zero_power=%f zero_in_progress=%i zero=%i\n", zero_power, dport->zero_in_progress, zero);
-    printf("one_power=%f one_in_progress=%i  one=%i\n", one_power, dport->one_in_progress, one);
+    printf(" one_power=%f  one_in_progress=%i  one=%i\n", one_power, dport->one_in_progress, one);
 
 
     // Check for zero signal extinction
