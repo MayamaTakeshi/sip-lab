@@ -6642,7 +6642,7 @@ int pjw_enable_telephone_event() {
 }
 
 int __pjw_shutdown(int clean_up) {
-	addon_log(L_DBG, "pjw_shutdown thread_id=%i\n", syscall(SYS_gettid));
+	//addon_log(L_DBG, "pjw_shutdown thread_id=%i\n", syscall(SYS_gettid));
 
 	g_shutting_down = true;
 
