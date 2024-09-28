@@ -50,23 +50,26 @@ typedef struct {
     double targetMagnitude;  // Store the precomputed magnitude
 } goertzel_t;
 
-double precalcMagnitude(int freq, int numSamples, double rate) {
+#define CHUNK_SIZE 16
+#define THRESHOLD 0.9
+
+double precalcMagnitude(int freq, double rate) {
     double t = 0.0;
     double tstep = 1.0 / rate;
-    double *samples = (double *)malloc(numSamples * sizeof(double));
-    for (int i = 0; i < numSamples; i++) {
+    double samples[CHUNK_SIZE];
+    for (int i = 0; i < CHUNK_SIZE; i++) {
         samples[i] = sin(2 * M_PI * freq * t);
         t += tstep;
     }
 
-    int k = (int)(0.5 + (numSamples * freq) / rate);
-    double w = (2 * M_PI / numSamples) * k;
+    int k = (int)(0.5 + (CHUNK_SIZE * freq) / rate);
+    double w = (2 * M_PI / CHUNK_SIZE) * k;
     double c = cos(w);
     double s = sin(w);
     double coeff = 2.0 * c;
 
     double q0 = 0.0, q1 = 0.0, q2 = 0.0;
-    for (int i = 0; i < numSamples; i++) {
+    for (int i = 0; i < CHUNK_SIZE; i++) {
         q0 = coeff * q1 - q2 + samples[i];
         q2 = q1;
         q1 = q0;
@@ -76,52 +79,48 @@ double precalcMagnitude(int freq, int numSamples, double rate) {
     double imaginary = q2 * s;
     double magSquared = real * real + imaginary * imaginary;
 
-    free(samples);
     return magSquared;
 }
 
-#define THRESHOLD 0.9
-
-void goertzel_det_init(goertzel_t *g, int freq, int sample_rate, int samples_per_frame) {
+void goertzel_det_init(goertzel_t *g, int freq, int sample_rate) {
     g->freq = freq;
     g->sampleRate = sample_rate;
-    g->samplesPerFrame = samples_per_frame;
+    g->samplesPerFrame = CHUNK_SIZE;
 
     assert(g->sampleRate >= g->freq * 2);
 
     g->samplesPerFrame = (int)floor(g->samplesPerFrame);
 
     // Precompute the target magnitude and store it in the struct
-    g->targetMagnitude = precalcMagnitude(g->freq, g->samplesPerFrame, g->sampleRate);
+    g->targetMagnitude = precalcMagnitude(g->freq, g->sampleRate);
     printf("Target Magnitude: %f\n", g->targetMagnitude);
 }
 
-float goertzel_mag(goertzel_t *g, void *samples, int length) {
-    printf("goertzel_mag length=%i\n", length);
+float goertzel_mag(goertzel_t *g, void *samples) {
     // Allocate an array of floats to hold normalized samples
-    float *float_samples = (float *)malloc(length * sizeof(float));
+    float float_samples[CHUNK_SIZE];
     uint8_t *byteBuffer = (uint8_t *)samples;  // Cast the void* to a byte array (uint8_t *)
-    for (int i = 0; i < length / 2; i++) {
+    for (int i = 0; i < CHUNK_SIZE ; i++) {
         // Combine two consecutive bytes into a 16-bit signed integer (little-endian)
         int16_t sample = byteBuffer[i * 2] | (byteBuffer[i * 2 + 1] << 8);
         float_samples[i] = sample * 2.0f / 0x7FFF;
     }
 
-    for (int i = 0; i < length; i++) {
+    for (int i = 0; i < CHUNK_SIZE; i++) {
         printf("%f,", float_samples[i]);
     }
     printf("\n");
 
 
-    int k = (int)(0.5f + (length * g->freq) / g->sampleRate);
-    float w = (2.0f * M_PI / length) * k;
+    int k = (int)(0.5f + (CHUNK_SIZE * g->freq) / g->sampleRate);
+    float w = (2.0f * M_PI / CHUNK_SIZE) * k;
     float c = cosf(w);
     float s = sinf(w);
     float coeff = 2.0f * c;
 
     float q0 = 0.0f, q1 = 0.0f, q2 = 0.0f;
 
-    for (int i = 0; i < length; i++) {
+    for (int i = 0; i < CHUNK_SIZE; i++) {
         q0 = coeff * q1 - q2 + float_samples[i];
         q2 = q1;
         q1 = q0;
@@ -131,7 +130,6 @@ float goertzel_mag(goertzel_t *g, void *samples, int length) {
     float imaginary = q2 * s;
     float magSquared = real * real + imaginary * imaginary;
 
-    free(float_samples);
     float per = magSquared / g->targetMagnitude;
     printf("(freq=%i) MagSquared=%f targetMagnitude=%f per=%f\n", g->freq, magSquared, g->targetMagnitude, per);
     return per;
@@ -237,10 +235,8 @@ PJ_DEF(pj_status_t) pjmedia_bfsk_det_create( pj_pool_t *pool,
 
     printf("bfsk_det: clock_rate=%u channel_count=%u samples_per_frame=%u bits_per_frame=%u", clock_rate, channel_count, samples_per_frame, bits_per_sample);
 
-    int chunk_size = 16;
-
-    goertzel_det_init(det->goertzel_zero, det->freq_zero, sample_rate, chunk_size);
-    goertzel_det_init(det->goertzel_one, det->freq_one, sample_rate, chunk_size);
+    goertzel_det_init(det->goertzel_zero, det->freq_zero, sample_rate);
+    goertzel_det_init(det->goertzel_one, det->freq_one, sample_rate);
 
     printf("p7\n");
 
@@ -272,9 +268,9 @@ static pj_status_t bfsk_det_put_frame(pjmedia_port *this_port,
     }
     printf("\n");
 
-    for(int i=0 ; i<size/2/16; i++) {
-        double zero_power = goertzel_mag(dport->goertzel_zero, &frame->buf[i*2*16], 16*2);
-        double  one_power = goertzel_mag(dport->goertzel_one,  &frame->buf[i*2*16], 16*2);
+    for(int i=0 ; i<size/2/CHUNK_SIZE; i++) {
+        double zero_power = goertzel_mag(dport->goertzel_zero, &frame->buf[i*2*CHUNK_SIZE]);
+        double  one_power = goertzel_mag(dport->goertzel_one,  &frame->buf[i*2*CHUNK_SIZE]);
 
         int zero = zero_power > THRESHOLD;
         int  one =  one_power > THRESHOLD;
