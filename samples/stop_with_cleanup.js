@@ -121,11 +121,13 @@ async function test() {
 test()
 .catch(e => {
     console.error(e)
+    sip.stop(true)
+
     if(e == "SOME ERROR") {
         console.log("Expected error catched")
-        sip.stop(true)
         process.exit(0)
     } else {
+        console.log("Unexpected error catched")
         process.exit(1)
     }
 })
