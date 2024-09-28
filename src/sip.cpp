@@ -6644,35 +6644,15 @@ int pjw_enable_telephone_event() {
 int __pjw_shutdown(int clean_up) {
 	addon_log(L_DBG, "pjw_shutdown thread_id=%i\n", syscall(SYS_gettid));
 
-	PJW_LOCK();
-
 	g_shutting_down = true;
 
     if(!clean_up) {
-      printf("pjsip_endpt_destroy\n");
-      pjsip_endpt_destroy(g_sip_endpt);
-
-      //if (!pj_thread_is_registered()) {
-        pj_status_t status;
-
-        pj_thread_desc thread_descriptor;
-        pj_thread_t *thread = NULL;
-
-        status = pj_thread_register("shutdown_thread", thread_descriptor,
-                                    &thread);
-        if (status != PJ_SUCCESS) {
-          addon_log(L_DBG, "pj_thread_register(poll_thread) failed\n");
-          exit(1);
-        }
-      //}
-      //printf("pj_shutdown\n");
-      //pj_shutdown();
-	  PJW_UNLOCK();
       return 0;
     }
 
 	addon_log(L_DBG, "INITIATING CLEANUP\n");
 
+	PJW_LOCK();
 
 	map<long, long>::iterator iter;
 	iter = g_call_ids.id_map.begin();
@@ -6768,7 +6748,7 @@ int __pjw_shutdown(int clean_up) {
 	unsigned int start = tv_start.tv_sec * 1000 + (tv_start.tv_usec / 1000);
 	unsigned int end = tv_end.tv_sec * 1000 + (tv_end.tv_usec / 1000);
 
-	int DELAY = 2000; // 1000 ms delay
+	int DELAY = 1000; // 1000 ms delay
 	while(end - start < DELAY) {
 		pj_time_val tv = {0, 500}; 
 		pj_status_t status;

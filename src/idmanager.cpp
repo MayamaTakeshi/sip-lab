@@ -75,3 +75,7 @@ void IdManager::iterate(void (*f)(long id, long val)) {
     ++pos;
   }
 }
+
+int IdManager::size() {
+    return ids.size();
+}

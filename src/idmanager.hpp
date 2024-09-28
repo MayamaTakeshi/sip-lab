@@ -17,6 +17,7 @@ public:
   bool get(long id, long &val);
   bool get_id(long val, long &id);
   void iterate(void (*f)(long id, long val));
+  int size();
 
   map<long, long> id_map; // hack to test tcpdumper
 private:
