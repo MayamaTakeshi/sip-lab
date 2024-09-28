@@ -44,13 +44,13 @@
 // Converted by ChatGPT from https://github.com/hackergrrl/goertzel/blob/master/index.js
 
 typedef struct {
-    double freq;
-    double sampleRate;
+    int freq;
+    int sampleRate;
     int samplesPerFrame;
     double targetMagnitude;  // Store the precomputed magnitude
 } goertzel_t;
 
-double precalcMagnitude(double freq, int numSamples, double rate) {
+double precalcMagnitude(int freq, int numSamples, double rate) {
     double t = 0.0;
     double tstep = 1.0 / rate;
     double *samples = (double *)malloc(numSamples * sizeof(double));
@@ -96,31 +96,45 @@ void goertzel_det_init(goertzel_t *g, int freq, int sample_rate, int samples_per
     printf("Target Magnitude: %f\n", g->targetMagnitude);
 }
 
-double goertzel_mag(goertzel_t *g, double *samples, int length) {
-    printf("goertzel_mag\m");
-    int k = (int)(0.5 + (length * g->freq) / g->sampleRate);
-    double w = (2 * M_PI / length) * k;
-    double c = cos(w);
-    double s = sin(w);
-    double coeff = 2.0 * c;
-
-    printf("k = %d, w = %f, coeff = %f\n", k, w, coeff);
-
-    double q0 = 0.0, q1 = 0.0, q2 = 0.0;
+float goertzel_mag(goertzel_t *g, void *samples, int length) {
+    printf("goertzel_mag length=%i\n", length);
+    // Allocate an array of floats to hold normalized samples
+    float *float_samples = (float *)malloc(length * sizeof(float));
+    uint8_t *byteBuffer = (uint8_t *)samples;  // Cast the void* to a byte array (uint8_t *)
+    for (int i = 0; i < length / 2; i++) {
+        // Combine two consecutive bytes into a 16-bit signed integer (little-endian)
+        int16_t sample = byteBuffer[i * 2] | (byteBuffer[i * 2 + 1] << 8);
+        float_samples[i] = sample * 2.0f / 0x7FFF;
+    }
 
     for (int i = 0; i < length; i++) {
-        q0 = coeff * q1 - q2 + samples[i];
+        printf("%f,", float_samples[i]);
+    }
+    printf("\n");
+
+
+    int k = (int)(0.5f + (length * g->freq) / g->sampleRate);
+    float w = (2.0f * M_PI / length) * k;
+    float c = cosf(w);
+    float s = sinf(w);
+    float coeff = 2.0f * c;
+
+    float q0 = 0.0f, q1 = 0.0f, q2 = 0.0f;
+
+    for (int i = 0; i < length; i++) {
+        q0 = coeff * q1 - q2 + float_samples[i];
         q2 = q1;
         q1 = q0;
     }
 
-    printf("coeff = %f, q0 = %f, q1 = %f, q2 = %f\n", coeff, q0, q1, q2);
+    float real = q1 - q2 * c;
+    float imaginary = q2 * s;
+    float magSquared = real * real + imaginary * imaginary;
 
-    double real = q1 - q2 * c;
-    double imaginary = q2 * s;
-    double magSquared = real * real + imaginary * imaginary;
-
-    return magSquared / g->targetMagnitude;
+    free(float_samples);
+    float per = magSquared / g->targetMagnitude;
+    printf("(freq=%i) MagSquared=%f targetMagnitude=%f per=%f\n", g->freq, magSquared, g->targetMagnitude, per);
+    return per;
 }
 
 
@@ -221,13 +235,14 @@ PJ_DEF(pj_status_t) pjmedia_bfsk_det_create( pj_pool_t *pool,
 
     int sample_rate = clock_rate;
 
-    goertzel_det_init(det->goertzel_zero, det->freq_zero, sample_rate, samples_per_frame);
-    goertzel_det_init(det->goertzel_one, det->freq_one, sample_rate, samples_per_frame);
+    printf("bfsk_det: clock_rate=%u channel_count=%u samples_per_frame=%u bits_per_frame=%u", clock_rate, channel_count, samples_per_frame, bits_per_sample);
+
+    int chunk_size = 16;
+
+    goertzel_det_init(det->goertzel_zero, det->freq_zero, sample_rate, chunk_size);
+    goertzel_det_init(det->goertzel_one, det->freq_one, sample_rate, chunk_size);
 
     printf("p7\n");
-
-    TRACE_((THIS_FILE, "bfsk_det created: clock_rate=%u channel_count=%u samples_per_frame=%u bits_per_frame=%u", clock_rate, 
-	    channel_count, samples_per_frame, bits_per_sample));
 
     printf("fsk_rx_init done\n");
 
@@ -243,7 +258,7 @@ static pj_status_t bfsk_det_put_frame(pjmedia_port *this_port,
 
     struct bfsk_det *dport = (struct bfsk_det*) this_port;
 
-    int size = PJMEDIA_PIA_SPF(&dport->base.info);
+    int size = frame->size;
     int bps = PJMEDIA_PIA_BITS(&dport->base.info);
 
     printf("p=%x, size=%i clock_rate=%i bits_per_sample=%i\n", frame->buf, size, dport->clock_rate, bps);
@@ -257,32 +272,34 @@ static pj_status_t bfsk_det_put_frame(pjmedia_port *this_port,
     }
     printf("\n");
 
-    double zero_power = goertzel_mag(dport->goertzel_zero, frame->buf, size);
-    double  one_power = goertzel_mag(dport->goertzel_one,  frame->buf, size);
+    for(int i=0 ; i<size/2/16; i++) {
+        double zero_power = goertzel_mag(dport->goertzel_zero, &frame->buf[i*2*16], 16*2);
+        double  one_power = goertzel_mag(dport->goertzel_one,  &frame->buf[i*2*16], 16*2);
 
-    int zero = zero_power > THRESHOLD;
-    int  one =  one_power > THRESHOLD;
+        int zero = zero_power > THRESHOLD;
+        int  one =  one_power > THRESHOLD;
 
-    printf("zero_power=%f zero_in_progress=%i zero=%i\n", zero_power, dport->zero_in_progress, zero);
-    printf(" one_power=%f  one_in_progress=%i  one=%i\n", one_power, dport->one_in_progress, one);
+        printf("zero_power=%f zero_in_progress=%i zero=%i threshold=%f\n", zero_power, dport->zero_in_progress, zero, THRESHOLD);
+        printf(" one_power=%f  one_in_progress=%i  one=%i threshold=%f\n", one_power, dport->one_in_progress, one, THRESHOLD);
 
 
-    // Check for zero signal extinction
-    if(dport->zero_in_progress && zero == 0) {
-        printf("notifying bit=0\n");
-        dport->bfsk_cb((pjmedia_port*)dport, dport->bfsk_cb_user_data, 0);
-        dport->zero_in_progress = 0;
-    } else {
-        dport->zero_in_progress = zero;
-    }
+        // Check for zero signal extinction
+        if(dport->zero_in_progress && zero == 0) {
+            printf("notifying bit=0\n");
+            dport->bfsk_cb((pjmedia_port*)dport, dport->bfsk_cb_user_data, 0);
+            dport->zero_in_progress = 0;
+        } else {
+            dport->zero_in_progress = zero;
+        }
 
-    // Check for one signal extinction
-    if(dport->one_in_progress && one == 0) {
-        printf("notifying bit=1\n");
-        dport->bfsk_cb((pjmedia_port*)dport, dport->bfsk_cb_user_data, 1);
-        dport->one_in_progress = 0;
-    } else {
-        dport->one_in_progress = one;
+        // Check for one signal extinction
+        if(dport->one_in_progress && one == 0) {
+            printf("notifying bit=1\n");
+            dport->bfsk_cb((pjmedia_port*)dport, dport->bfsk_cb_user_data, 1);
+            dport->one_in_progress = 0;
+        } else {
+            dport->one_in_progress = one;
+        }
     }
 
     return PJ_SUCCESS;
