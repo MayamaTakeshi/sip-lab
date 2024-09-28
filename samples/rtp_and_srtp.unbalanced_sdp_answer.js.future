@@ -178,6 +178,7 @@ a=crypto:1 AES_256_CM_HMAC_SHA1_80 inline:s6nwVuVNxwupG0Cls+/4X4L46Mx/fqoEMolllU
     console.log("Success")
 
     sip.stop()
+    process.exit(0)
 }
 
 

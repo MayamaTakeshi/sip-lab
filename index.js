@@ -6,8 +6,8 @@ var eventEmitter = new events.EventEmitter();
 
 process.on('SIGINT', function() {
 	console.log("SIGINT");
-	var res = addon.shutdown()
-	process.exit(0)
+	var res = addon.shutdown(1)
+	process.exit(1)
 });
 
 addon.event_source = eventEmitter
@@ -32,10 +32,9 @@ var timerId = setInterval(() => {
 	}
 }, 50)
 
-addon.stop = () => {
+addon.stop = (clean_up = false) => {
 	clearInterval(timerId)
-	var res = addon.shutdown()
-	process.exit(0)
+	var res = addon.shutdown(clean_up ? 1 : 0)
 }
 
 addon.transport = {

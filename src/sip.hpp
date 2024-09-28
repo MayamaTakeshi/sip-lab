@@ -92,7 +92,7 @@ int pjw_get_codecs(char *out_codecs);
 
 int pjw_set_codecs(const char *in_codec_info);
 
-int __pjw_shutdown();
+int __pjw_shutdown(int clean_up);
 
 int pjw_notify(long subscriber_id, const char *json);
 

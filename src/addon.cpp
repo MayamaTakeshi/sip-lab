@@ -1568,7 +1568,15 @@ Napi::Value do_poll(const Napi::CallbackInfo &info) {
 Napi::Value shutdown_(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
 
-  int res = __pjw_shutdown();
+  if (info.Length() != 1) {
+    Napi::Error::New(
+        env, "Wrong number of arguments. Expected: clean_up")
+        .ThrowAsJavaScriptException();
+    return env.Null();
+  }
+  int clean_up = info[0].As<Napi::Number>().Int32Value();
+
+  int res = __pjw_shutdown(clean_up);
 
   if (res != 0) {
     Napi::Error::New(env, pjw_get_error()).ThrowAsJavaScriptException();

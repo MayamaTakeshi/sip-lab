@@ -318,6 +318,7 @@ a=ptime:20`.replace(/\n/g, "\r\n")
     console.log("Success")
 
     sip.stop()
+    process.exit(0)
 }
 
 test()

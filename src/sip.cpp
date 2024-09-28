@@ -6641,120 +6641,146 @@ int pjw_enable_telephone_event() {
 	return 0;
 }
 
-int __pjw_shutdown() {
-  // addon_log(L_DBG, "pjw_shutdown thread_id=%i\n", syscall(SYS_gettid));
-  PJW_LOCK();
+int __pjw_shutdown(int clean_up) {
+	addon_log(L_DBG, "pjw_shutdown thread_id=%i\n", syscall(SYS_gettid));
 
-  g_shutting_down = true;
+	PJW_LOCK();
 
-  // disable auto cleanup
+	g_shutting_down = true;
 
-  /*
-      map<long, long>::iterator iter;
-      iter = g_call_ids.id_map.begin();
-      while(iter != g_call_ids.id_map.end()){
-              Call *call = (Call*)iter->second;
+    if(!clean_up) {
+      printf("pjsip_endpt_destroy\n");
+      pjsip_endpt_destroy(g_sip_endpt);
 
-              addon_log(L_DBG, "Terminating call %d\n", iter->first);
+      //if (!pj_thread_is_registered()) {
+        pj_status_t status;
 
-              pjsip_tx_data *tdata;
-              pj_status_t status;
-              status = pjsip_inv_end_session(call->inv,
-                                                603,
-                                                NULL,
-                                                &tdata); //Copied from pjsua
-              if(status != PJ_SUCCESS){
-                      //ignore
-                      char err[256];
-                      pj_strerror(status, err, sizeof(err));
-                      addon_log(L_DBG, "pjsip_inv_end_session failed statut=%i
-     (%s)\n", status, err);
-                      ++iter;
-                      continue;
-              }
+        pj_thread_desc thread_descriptor;
+        pj_thread_t *thread = NULL;
 
-              if(!tdata)
-              {
-                      //if tdata was not set by pjsip_inv_end_session, it means
-     we didn't receive any response yet (100 Trying) and we cannot send CANCEL
-     in this situation. So we just can return here without calling
-     pjsip_inv_send_msg.
-                      ++iter;
-                      addon_log(L_DBG, "no tdata\n");
-                      continue;
-              }
+        status = pj_thread_register("shutdown_thread", thread_descriptor,
+                                    &thread);
+        if (status != PJ_SUCCESS) {
+          addon_log(L_DBG, "pj_thread_register(poll_thread) failed\n");
+          exit(1);
+        }
+      //}
+      //printf("pj_shutdown\n");
+      //pj_shutdown();
+	  PJW_UNLOCK();
+      return 0;
+    }
 
-              status = pjsip_inv_send_msg(call->inv, tdata);
-              if(status != PJ_SUCCESS){
-                      addon_log(L_DBG, "pjsip_inv_send_msg failed\n");
-              }
-              ++iter;
-      }
+	addon_log(L_DBG, "INITIATING CLEANUP\n");
 
-      iter = g_account_ids.id_map.begin();
-      while(iter != g_account_ids.id_map.end()){
-              pjsip_regc *regc = (pjsip_regc*)iter->second;
 
-              addon_log(L_DBG, "Unregistering account %d\n", iter->first);
+	map<long, long>::iterator iter;
+	iter = g_call_ids.id_map.begin();
+	while(iter != g_call_ids.id_map.end()){
+		Call *call = (Call*)iter->second;
 
-              pjsip_tx_data *tdata;
-              pj_status_t status;
+		addon_log(L_DBG, "Terminating call %d\n", iter->first);
 
-              status = pjsip_regc_unregister(regc, &tdata);
-              if(status != PJ_SUCCESS)
-              {
-                      addon_log(L_DBG, "pjsip_regc_unregister failed\n");
-              }
+		pjsip_tx_data *tdata;
+		pj_status_t status;
+		status = pjsip_inv_end_session(call->inv,
+						  603,
+						  NULL, 
+						  &tdata); //Copied from pjsua
+		if(status != PJ_SUCCESS){
+			//ignore 
+			char err[256];
+			pj_strerror(status, err, sizeof(err));
+			addon_log(L_DBG, "pjsip_inv_end_session failed statut=%i (%s)\n", status, err);
+			++iter;
+			continue;
+		}
 
-              status = pjsip_regc_send(regc, tdata);
-              if(status != PJ_SUCCESS)
-              {
-                      addon_log(L_DBG, "pjsip_regc_send failed\n");
-              }
-              ++iter;
-      }
+		if(!tdata)
+		{
+			//if tdata was not set by pjsip_inv_end_session, it means we didn't receive any response yet (100 Trying) and we cannot send CANCEL in this situation. So we just can return here without calling pjsip_inv_send_msg.
+			++iter;
+			addon_log(L_DBG, "no tdata\n");
+			continue;
+		}
 
-      Subscription *subscription;
-      iter = g_subscription_ids.id_map.begin();
-      while(iter != g_subscription_ids.id_map.end()){
-              addon_log(L_DBG, "Unsubscribing subscription %d\n", iter->first);
+		status = pjsip_inv_send_msg(call->inv, tdata);
+		if(status != PJ_SUCCESS){
+			addon_log(L_DBG, "pjsip_inv_send_msg failed\n");
+		}
+		++iter;
+	}
 
-              subscription = (Subscription*)iter->second;
-              if(!subscription_subscribe(subscription, 0, NULL)) {
-                      addon_log(L_DBG, "Unsubscription failed failed\n");
-              }
-              ++iter;
-      }
+	iter = g_account_ids.id_map.begin();
+	while(iter != g_account_ids.id_map.end()){
+		pjsip_regc *regc = (pjsip_regc*)iter->second;
 
-      PJW_UNLOCK();
+		addon_log(L_DBG, "Unregistering account %d\n", iter->first);
 
-      //uint32_t wait = 100000 * (g_call_ids.id_map.size() +
-     g_account_ids.id_map.size()));
-      //wait += 1000000; //Wait one whole second to permit packet capture to get
-     any final packets
+		pjsip_tx_data *tdata;
+		pj_status_t status;
 
-      timeval tv_start;
-      timeval tv_end;
-      gettimeofday(&tv_start, NULL);
-      gettimeofday(&tv_end, NULL);
+		status = pjsip_regc_unregister(regc, &tdata);
+		if(status != PJ_SUCCESS)
+		{
+			addon_log(L_DBG, "pjsip_regc_unregister failed\n");
+		}
 
-      unsigned int start = tv_start.tv_sec * 1000 + (tv_start.tv_usec / 1000);
-      unsigned int end = tv_end.tv_sec * 1000 + (tv_end.tv_usec / 1000);
+		status = pjsip_regc_send(regc, tdata);
+		if(status != PJ_SUCCESS)
+		{
+			addon_log(L_DBG, "pjsip_regc_send failed\n");
+		}
+		++iter;
+	}
 
-      int DELAY = 2000; // 1000 ms delay
-      while(end - start < DELAY) {
-              pj_time_val tv = {0, 500};
-              pj_status_t status;
-              status = pjsip_endpt_handle_events(g_sip_endpt, &tv);
+	Subscription *subscription;
+	iter = g_subscription_ids.id_map.begin();
 
-              gettimeofday(&tv_end, NULL);
-              end = tv_end.tv_sec * 1000 + (tv_end.tv_usec / 1000);
-              //time(&end);
-      }
+    rapidjson::Document doc;
+    doc.Parse("{\"expires\": 0}");
 
-  */
+	while(iter != g_subscription_ids.id_map.end()){
+		addon_log(L_DBG, "Unsubscribing subscription %d\n", iter->first);
 
-  return 0;
+		subscription = (Subscription*)iter->second;	
+		if(!subscription_subscribe(subscription, 0, doc)) {
+			addon_log(L_DBG, "Unsubscription failed failed\n");
+		}
+		++iter;
+	}
+
+	PJW_UNLOCK();
+
+	//uint32_t wait = 100000 * (g_call_ids.id_map.size() + g_account_ids.id_map.size()));
+	//wait += 1000000; //Wait one whole second to permit packet capture to get any final packets
+
+	/*
+	time_t end,start;
+	time(&start);
+	end = start;
+	*/
+	timeval tv_start;
+	timeval tv_end;
+	gettimeofday(&tv_start, NULL);
+	gettimeofday(&tv_end, NULL);
+
+	unsigned int start = tv_start.tv_sec * 1000 + (tv_start.tv_usec / 1000);
+	unsigned int end = tv_end.tv_sec * 1000 + (tv_end.tv_usec / 1000);
+
+	int DELAY = 2000; // 1000 ms delay
+	while(end - start < DELAY) {
+		pj_time_val tv = {0, 500}; 
+		pj_status_t status;
+		status = pjsip_endpt_handle_events(g_sip_endpt, &tv);
+
+		gettimeofday(&tv_end, NULL);
+		end = tv_end.tv_sec * 1000 + (tv_end.tv_usec / 1000);
+		//time(&end);
+	}
+
+    addon_log(L_DBG, "CLEANUP DONE\n");
+	return 0;
 }
 
 // Copied from streamutil.c (pjsip sample)

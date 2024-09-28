@@ -223,6 +223,7 @@ async function test() {
     console.log("Success")
 
     sip.stop()
+    process.exit(0)
 }
 
 

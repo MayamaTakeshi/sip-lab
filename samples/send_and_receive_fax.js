@@ -117,6 +117,7 @@ async function test() {
     console.log(`Success. Fax file ${in_file} was transmitted and received as ${out_file}`)
 
     sip.stop()
+    process.exit(0)
 }
 
 
