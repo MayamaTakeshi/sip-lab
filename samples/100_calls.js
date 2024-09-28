@@ -81,6 +81,11 @@ async function test() {
     await z.wait(events, 50000)
 
     ocs.forEach(oc => {
+        sip.call.start_inband_dtmf_detection(oc.id)
+    })
+
+    // first send RFC2833 DTMF digits
+    ocs.forEach(oc => {
         sip.call.send_dtmf(oc.id, {digits: '1234', mode: 0})
     })
 
@@ -92,10 +97,7 @@ async function test() {
         media_id: 0,
     })).value(), 50000)
 
-    ocs.forEach(oc => {
-        sip.call.start_inband_dtmf_detection(oc.id)
-    })
-
+    // now send inband DTMF digits
     z.store.ic_ids.forEach(ic_id => {
         sip.call.send_dtmf(ic_id, {digits: '4321', mode: 1})
     })
