@@ -120,6 +120,7 @@
         'src/addon.cpp',
         'src/pjmedia/src/pjmedia/dtmfdet.c',
         'src/pjmedia/src/pjmedia/bfsk_det.c',
+        'src/pjmedia/src/pjmedia/bfsk_det2.c',
         'src/pjmedia/src/pjmedia/fax_port.c',
         'src/pjmedia/src/pjmedia/flite_port.c',
         'src/pjmedia/src/pjmedia/pocketsphinx_port.c',

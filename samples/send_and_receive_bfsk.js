@@ -71,11 +71,9 @@ async function test() {
               {
                 type: 'audio',
                 local: {
-                  port: 10000,
                   mode: 'sendrecv'
                 },
                 remote: {
-                  port: 10002,
                   mode: 'sendrecv'
                 },
               },
@@ -89,11 +87,9 @@ async function test() {
               {
                 type: 'audio',
                 local: {
-                  port: 10002,
                   mode: 'sendrecv'
                 },
                 remote: {
-                  port: 10000,
                   mode: 'sendrecv'
                 },
               }
