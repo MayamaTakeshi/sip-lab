@@ -77,6 +77,23 @@ async function test() {
         },
     ], 1000)
 
+    sip.call.start_record_wav(oc.id, {file: './oc.wav'})
+    sip.call.start_record_wav(ic.id, {file: './ic.wav'})
+
+    sip.call.start_play_wav(oc.id, {file: 'samples/artifacts/yosemitesam.wav', end_of_file_event: true, no_loop: true})
+    sip.call.start_play_wav(ic.id, {file: 'samples/artifacts/yosemitesam.wav', end_of_file_event: true, no_loop: true})
+
+    await z.wait([
+        {
+            event: 'end_of_file',
+            call_id: oc.id,
+        },
+        {
+            event: 'end_of_file',
+            call_id: ic.id,
+        },
+    ], 3000)
+
     sip.call.reinvite(oc.id)
 
     await z.wait([
@@ -172,6 +189,9 @@ async function test() {
 
     assert(oc_stat.CodecInfo == 'G729/8000/1')
     assert(ic_stat.CodecInfo == 'G729/8000/1')
+
+    sip.call.stop_record_wav(oc.id)
+    sip.call.stop_record_wav(ic.id)
 
     sip.call.terminate(oc.id)
 
