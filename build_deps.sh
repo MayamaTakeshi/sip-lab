@@ -39,7 +39,7 @@ then
     git clone https://github.com/MayamaTakeshi/bcg729
     cd bcg729
     git checkout faaa895862165acde6df8add722ba4f85a25007d
-    cmake . 
+    cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo .
     make
     mkdir -p lib
     cp -f src/libbcg729.a lib
