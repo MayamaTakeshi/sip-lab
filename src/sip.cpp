@@ -1558,6 +1558,29 @@ int __pjw_init() {
     addon_log(L_DBG, "pjmedia_codec_opus_init failed\n");
     return 1;
   }
+  pjmedia_codec_param param;
+  pjmedia_codec_opus_config opus_cfg;
+
+  pjmedia_codec_mgr *codec_mgr;
+  codec_mgr = pjmedia_endpt_get_codec_mgr(g_med_endpt);
+
+  unsigned cnt = 1;
+  const pjmedia_codec_info *pci;
+
+  pj_str_t codec_id = pj_str((char*)"opus/48000/2");
+  pjmedia_codec_mgr_find_codecs_by_id(codec_mgr, &codec_id, &cnt, &pci, NULL);
+  pjmedia_codec_mgr_get_default_param(codec_mgr, pci, &param);
+  pjmedia_codec_opus_get_config(&opus_cfg);
+
+  opus_cfg.sample_rate = 8000;
+  opus_cfg.channel_cnt = 1;
+  opus_cfg.bit_rate = 8000;
+  status = pjmedia_codec_opus_set_default_param(&opus_cfg, &param);
+  if(status != PJ_SUCCESS)
+  {
+      addon_log(L_DBG, "pjmedia_codec_opus_set_default_param failed\n");
+      return 1;
+  }
 #endif
 
 #if defined(PJMEDIA_HAS_SRTP) && (PJMEDIA_HAS_SRTP != 0)

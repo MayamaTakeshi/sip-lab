@@ -1,5 +1,8 @@
 ### Release Notes
 
+## NextRelease
+  - [Enable codec opus](https://github.com/MayamaTakeshi/sip-lab/issues/121)
+
 ## 1.33.0
   - [Add support for BFSK generation/detection](https://github.com/MayamaTakeshi/sip-lab/issues/108)
 

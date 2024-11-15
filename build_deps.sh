@@ -70,6 +70,8 @@ EOF
 #define PJSUA_MAX_ACC (20000)
 #define PJ_IOQUEUE_MAX_HANDLES (1024)
 #define PJSUA_MAX_CALLS (20000)
+
+#define PJMEDIA_HAS_OPUS_CODEC 1
 EOF
     make dep && make clean && make
 fi
