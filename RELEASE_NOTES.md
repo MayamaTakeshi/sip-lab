@@ -1,6 +1,6 @@
 ### Release Notes
 
-## NextRelease
+## 1.34.0
   - [Enable codec opus](https://github.com/MayamaTakeshi/sip-lab/issues/121)
 
 ## 1.33.0
