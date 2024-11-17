@@ -1,5 +1,8 @@
 ### Release Notes
 
+## 1.34.1
+  - Reiussued after docker image rebuid (pjsip recompiled with opus support)
+
 ## 1.34.0
   - [Enable codec opus](https://github.com/MayamaTakeshi/sip-lab/issues/121)
 

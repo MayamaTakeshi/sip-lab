@@ -54,7 +54,7 @@ However the above will build the addon to run on the current OS.
 
 Instead we will force the build on debian11 (using docker) using prebuildify-cross. So do this instead:
 
-Make sure you have the docker image built.
+Make sure you have the docker image built (the image must be rebuilt whenever we update build_deps.sh)
 
 cd docker-images/debian11/
 ./build_image.sh
