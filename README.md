@@ -26,19 +26,27 @@ TODO:
 
 ### Installation
 
-This is a node.js addon and it is known to work on Debian 11.
+The npm package is built for Debian 11 and this is the recommended distro.
 
-It is distributed with prebuild binaries for node.js 15.0.0 and above (but built for Debian 11. For other Debian versions or for Ubuntu a local build of the addon will be executed. Being the case, be patient as the build process will take several minutes to complete (about 6 minutes on a docker container)). 
+You can use other debian/ubuntu version but they will require a build of dependencies that will take time (something like 7 minutes but this was measured on my slow PC).
 
-To install it, first install build dependencies:
+First install apt packages:
+
 ```
 apt install build-essential automake autoconf libtool libspeex-dev libopus-dev libsdl2-dev libavdevice-dev libswscale-dev libv4l-dev libopencore-amrnb-dev libopencore-amrwb-dev libvo-amrwbenc-dev libvo-amrwbenc-dev libboost-dev libtiff-dev libpcap-dev libssl-dev uuid-dev flite-dev cmake git wget
+
 ```
 
-Then install sip-lab (local build of the addon might be triggered here if this is not Debian 11):
+Then switch to node v19, switch to your node project folder and install sip-lab:
+
 ```
-npm install sip-lab
+nvm install 19
+nvm use 19
+cd YOUR_NODE_PROJECT_FOLDER
+npm i sip-lab
 ```
+Obs: once you install sip-lab, you can switch to other node versions like v20, v21.
+
 
 Then run some sample script from subfolder samples:
 ```
