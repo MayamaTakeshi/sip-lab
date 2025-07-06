@@ -25,25 +25,28 @@
 
 ## Installation
 
-To use `sip-lab`, you need to have Node.js and several system dependencies installed.
+The npm package is built for Debian 11 and this is the recommented distro.
 
-### Prerequisites
+You can use other debian/ubuntu version but they will require a build of dependencies that will take time (something like 5 to 7 minutes).
 
-- Node.js (version 15.0.0 or higher)
-- Build essentials and various development libraries.
-- Preferably use Debian 11 as other distros will require building dependencies from source and it will take a lot of time.
+First install apt packages:
 
-### Installation Steps
+```
+apt install build-essential automake autoconf libtool libspeex-dev libopus-dev libsdl2-dev libavdevice-dev libswscale-dev libv4l-dev libopencore-amrnb-dev libopencore-amrwb-dev libvo-amrwbenc-dev libvo-amrwbenc-dev libboost-dev libtiff-dev libpcap-dev libssl-dev uuid-dev flite-dev cmake git wget
 
-1. **Install Dependencies:**
-   ```bash
-   apt install build-essential automake autoconf libtool libspeex-dev libopus-dev libsdl2-dev libavdevice-dev libswscale-dev libv4l-dev libopencore-amrnb-dev libopencore-amrwb-dev libvo-amrwbenc-dev libboost-dev libtiff-dev libpcap-dev libssl-dev uuid-dev flite-dev cmake git wget
-   ```
+```
 
-2. **Install `sip-lab`:**
-   ```bash
-   npm install sip-lab
-   ```
+Then switch to node v19, switch to your node project folder and install sip-lab:
+
+```
+nvm install 19
+nvm use 19
+cd YOUR_NODE_PROJECT_FOLDER
+npm i sip-lab
+```
+Obs: once you install sip-lab, you can switch to other node versions like v20, v21.
+
+
 
 ## Basic Usage
 
