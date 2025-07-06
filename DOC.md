@@ -245,6 +245,8 @@ test()
 
 ```
 
+Notice that you can specify SIP headers and other elements using by opensips/kamailio/openser pseudo-variables syntax (courtesy of [sip-matching](https://github.com/MayamaTakeshi/sip-matching) )
+
 For more examples look into folder samples.
 
 ## API Reference
