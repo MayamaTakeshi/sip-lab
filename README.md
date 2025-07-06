@@ -55,6 +55,10 @@ Notes:
 
 So basically, if you stick with Debian 11 and any node version from 15 to 21, istallation should be smooth.
 
+### Documetation
+
+See [Documentation](https://github.com/MayamaTakeshi/sip-lab/blob/master/DOC.md)
+
 ### Samples
 
 See general sample scripts in folder samples.
