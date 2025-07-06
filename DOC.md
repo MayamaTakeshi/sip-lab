@@ -25,9 +25,10 @@
 
 ## Installation
 
-The npm package is built for Debian 11 and this is the recommented distro.
+The npm package is built for Debian 11 and this is the recommended distro.
 
-You can use other debian/ubuntu version but they will require a build of dependencies that will take time (something like 5 to 7 minutes).
+You can use other debian/ubuntu version but they will require a build of dependencies that will take time (something like 7 minutes but this was measured on my slow PC).
+
 
 First install apt packages:
 
