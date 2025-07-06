@@ -1,28 +1,6 @@
 
 # sip-lab Documentation
 
-## Overview
-
-`sip-lab` is a Node.js module for creating and managing SIP (Session Initiation Protocol) functional tests. It provides a comprehensive set of tools for handling various aspects of SIP, including call control, media operations, and interaction with different media types.
-
-## Features
-
-- **SIP Call Control:**
-  - Create and manage SIP calls using UDP, TCP, and TLS transports.
-  - Send and receive various SIP requests and responses.
-  - Handle call events such as incoming calls, call termination, and session progress.
-- **Media Operations:**
-  - Send and receive DTMF tones (in-band, RFC2833, INFO).
-  - Send and receive BFSK (Binary Frequency-Shift Keying) bits.
-  - Play and record audio from/to WAV files.
-  - Send and receive faxes (T.30).
-  - Send and receive MRCPv2 messages (TCP only).
-  - Use SRTP for secure audio communication.
-- **Speech Processing:**
-  - Perform speech synthesis using Flite.
-  - Perform speech recognition using PocketSphinx.
-  - Integrate with external speech services like Google, Amazon, and Azure through `ws_speech_server`.
-
 ## Installation
 
 The npm package is built for Debian 11 and this is the recommended distro.
@@ -270,7 +248,7 @@ Sets the enabled codecs for media streams.
 
 #### `dtmf_aggregation_on(timeout)`
 
-Enables DTMF aggregation with a specified timeout.
+Enables DTMF aggregation with a specified timeout. This means instead of firing a 'digits' event every time they are received, we will aggregated them and fire a single event upon timeout.
 
 - `timeout`: The timeout in milliseconds.
 
