@@ -5,24 +5,9 @@
 A nodejs module that helps to write functional tests for SIP systems (including media operations).
 It uses pjproject for SIP and media processing.
 
-It permits to:
-  - make audio calls using UDP, TCP and TLS transports
-  - send/receive DTMF inband/RFC2833/INFO.
-  - send/receive [BFSK](https://en.wikipedia.org/wiki/Frequency-shift_keying) bits.
-  - play/record audio on a call from/to a wav file
-  - send/receive fax (T.30 only)
-  - send/receive MRCPv2 messages (TCP only, no TLS)
-  - send/receive audio using SRTP
-  - do speech synth using flite
-  - do speech recog using pocketsphinx (but only works well with sampling rate of 16000)
-  - do speech synth/recog using [ws_speech_server](https://github.com/MayamaTakeshi/ws_speech_server) (this permits to use google/amazon/azure/etc speech services)
+### Documentation
 
-TODO:
-  - add support for video playing/recording from/to file
-  - add support for T.38 fax
-  - add support for SIP over WebSocket
-  - add support for WebRTC
-  - add support for MSRP
+See [Documentation](https://github.com/MayamaTakeshi/sip-lab/blob/master/DOC.md)
 
 ### Installation
 
@@ -63,9 +48,6 @@ Notes:
 
 So basically, if you stick with Debian 11 and any node version from 15 to 21, istallation should be smooth.
 
-### Documentation
-
-See [Documentation](https://github.com/MayamaTakeshi/sip-lab/blob/master/DOC.md)
 
 ### Samples
 
