@@ -31,6 +31,7 @@ To use `sip-lab`, you need to have Node.js and several system dependencies insta
 
 - Node.js (version 15.0.0 or higher)
 - Build essentials and various development libraries.
+- Preferably use Debian 11 as other distros will require building dependencies from source at it will take a lot of time.
 
 ### Installation Steps
 
