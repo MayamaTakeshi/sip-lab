@@ -54,7 +54,7 @@ Notes:
   - Build will not work on Debian 10 as cmake version is older than required.
   - It will work on Debian 12 but a build process will be required. But you need to build using node v19 or older. But building with node v20 or v21 will fail (https://github.com/MayamaTakeshi/sip-lab/issues/107). But once you have it built, you can switch to a newer version of node.
 
-So basically, if you stick with Debian 11 and any node version from 15 to 21, istallation should be smooth.
+So basically, if you stick with Debian 11 and uses node v19, istallation should be smooth.
 
 ## Basic Usage
 
