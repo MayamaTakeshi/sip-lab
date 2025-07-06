@@ -2,7 +2,7 @@
 # sip-lab Documentation
 
 Overview
-A nodejs module that helps to write functional tests for SIP systems (including media operations). It uses pjproject for SIP and media processing.
+A nodejs module that helps to write functional/integration tests for SIP systems (including media operations). It uses pjproject for SIP and media processing.
 
 It permits to:
 
