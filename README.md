@@ -1,15 +1,15 @@
-## sip-lab
+# sip-lab
 
-### Overview
+## Overview
 
 A nodejs module that helps to write functional/integration tests for SIP systems (including media operations).
 It uses pjproject for SIP and media processing.
 
-### Documentation
+## Documentation
 
 See [Documentation](https://github.com/MayamaTakeshi/sip-lab/blob/master/DOC.md)
 
-### Installation
+## Installation
 
 The npm package is built for Debian 11 and this is the recommended distro.
 
@@ -42,7 +42,7 @@ The above script has detailed comments.
 
 Please read it to undestand how to write your own test scripts.
 
-### Samples
+## Samples
 
 See general sample scripts in folder samples.
 
@@ -69,13 +69,13 @@ node node_modules/sip-lab/samples_extra/ws_speech_server.google.js
 ```
 
 
-### About the code
+## About the code
 
 Although the code in written in *.cpp/*.hpp named files, this is not actually a C++ project.
 
 It is mostly written in C using some C++ facilities.
 
-### Release Notes
+## Release Notes
 
 [ReleaseNotes](https://github.com/MayamaTakeshi/sip-lab/blob/master/RELEASE_NOTES.md)
 
