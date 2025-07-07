@@ -312,8 +312,8 @@ async function test() {
         },
     ], 2000)
 
-    sip.call.start_play_wav(oc.id, {file: 'samples/artifacts/yosemitesam.wav'})
-    sip.call.start_play_wav(ic.id, {file: 'samples/artifacts/yosemitesam.wav'})
+    sip.call.start_play_wav(oc.id, {file: 'samples/artifacts/hello_good_morning.wav'})
+    sip.call.start_play_wav(ic.id, {file: 'samples/artifacts/hello_good_morning.wav'})
 
     await z.sleep(2000)
 

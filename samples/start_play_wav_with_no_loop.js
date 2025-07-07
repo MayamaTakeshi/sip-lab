@@ -87,8 +87,8 @@ async function test() {
 
     await z.sleep(100)
 
-    sip.call.start_play_wav(oc.id, {file: 'samples/artifacts/yosemitesam.wav', end_of_file_event: true, no_loop: true})
-    sip.call.start_play_wav(ic.id, {file: 'samples/artifacts/yosemitesam.wav', end_of_file_event: true, no_loop: true})
+    sip.call.start_play_wav(oc.id, {file: 'samples/artifacts/hello_good_morning.wav', end_of_file_event: true, no_loop: true})
+    sip.call.start_play_wav(ic.id, {file: 'samples/artifacts/hello_good_morning.wav', end_of_file_event: true, no_loop: true})
 
     sip.call.reinvite(oc.id)
 
@@ -183,7 +183,7 @@ async function test() {
             event: 'end_of_file',
             call_id: oc.id,
         },
-    ], 3000)
+    ], 5000)
 
     await z.sleep(3000) // we should not receive end_of_file events again
 

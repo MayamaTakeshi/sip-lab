@@ -81,8 +81,8 @@ async function test() {
     sip.call.start_record_wav(oc.id, {file: './oc.wav'})
     sip.call.start_record_wav(ic.id, {file: './ic.wav'})
 
-    sip.call.start_play_wav(oc.id, {file: 'samples/artifacts/yosemitesam.wav', end_of_file_event: true, no_loop: true})
-    sip.call.start_play_wav(ic.id, {file: 'samples/artifacts/yosemitesam.wav', end_of_file_event: true, no_loop: true})
+    sip.call.start_play_wav(oc.id, {file: 'samples/artifacts/hello_good_morning.wav', end_of_file_event: true, no_loop: true})
+    sip.call.start_play_wav(ic.id, {file: 'samples/artifacts/hello_good_morning.wav', end_of_file_event: true, no_loop: true})
 
     await z.wait([
         {
@@ -93,7 +93,7 @@ async function test() {
             event: 'end_of_file',
             call_id: ic.id,
         },
-    ], 3000)
+    ], 5000)
 
     sip.call.reinvite(oc.id)
 

@@ -87,8 +87,8 @@ async function test() {
 
     await z.sleep(100)
 
-    sip.call.start_play_wav(oc.id, {file: 'samples/artifacts/yosemitesam.wav', end_of_file_event: true})
-    sip.call.start_play_wav(ic.id, {file: 'samples/artifacts/yosemitesam.wav', end_of_file_event: true})
+    sip.call.start_play_wav(oc.id, {file: 'samples/artifacts/hello_good_morning.wav', end_of_file_event: true})
+    sip.call.start_play_wav(ic.id, {file: 'samples/artifacts/hello_good_morning.wav', end_of_file_event: true})
 
     await z.sleep(500)
 
@@ -143,7 +143,7 @@ async function test() {
             event: 'end_of_file',
             call_id: oc.id,
         },
-    ], 2000)
+    ], 5000)
 
 
     sip.call.reinvite(ic.id)
