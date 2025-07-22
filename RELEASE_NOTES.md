@@ -1,5 +1,8 @@
 ### Release Notes
 
+## 1.34.4
+  - [Issue when trying to send header Max-Forwards](https://github.com/MayamaTakeshi/sip-lab/issues/122)
+
 ## 1.34.1
   - Reiussued after docker image rebuid (pjsip recompiled with opus support)
 
