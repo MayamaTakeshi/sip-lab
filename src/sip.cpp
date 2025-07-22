@@ -8607,6 +8607,15 @@ pj_bool_t add_headers(pj_pool_t *pool, pjsip_tx_data *tdata,
       const char *value = itr->value.GetString();
 
       pj_str_t hname = pj_str((char *)name);
+
+      if (pj_stricmp2(&hname, "Max-Forwards") == 0) {
+          pjsip_max_fwd_hdr* max_fwd = (pjsip_max_fwd_hdr*)pjsip_msg_find_hdr(tdata->msg, PJSIP_H_MAX_FORWARDS, NULL);
+          if (max_fwd) {
+              max_fwd->ivalue = atoi(value);
+              continue;
+          }
+      }
+
       pjsip_hdr *hdr = (pjsip_hdr *)pjsip_parse_hdr(pool, &hname, (char *)value,
                                                       strlen(value), NULL);
 

@@ -31,6 +31,8 @@ async function test() {
     console.log("t1", t1)
     console.log("t2", t2)
 
+    max_forwards = '18'
+
     // make the call from t1 to t2 with some custom heaaders
     const oc = sip.call.create(t1.id, {
         from_uri: 'sip:alice@test.com',
@@ -38,6 +40,7 @@ async function test() {
         headers: {
             'X-MyHeader1': 'abc',
             'X-MyHeader2': 'def',
+            'Max-Forwards': max_forwards,
         },
     })
 
@@ -56,6 +59,7 @@ async function test() {
                 $fd: 'test.com',
                 '$hdr(X-MyHeader1)': 'abc',
                 hdr_x_myheader2: 'def',
+                hdr_max_forwards: max_forwards,
             })
         },
         {
