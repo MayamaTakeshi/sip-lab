@@ -132,7 +132,7 @@ async function test() {
             msg: sip_msg({
                 $rs: '200',
                 $rr: 'OK',
-                $rb: '!{_}a=sendrecv',
+                $rb: '!{_}a=sendrecv!{_}',
             }),
         },
         {
@@ -193,7 +193,7 @@ async function test() {
             msg: sip_msg({
                 $rs: '200',
                 $rr: 'OK',
-                $rb: '!{_}a=sendrecv',
+                $rb: '!{_}a=sendrecv!{_}',
             }),
         },
         {
@@ -279,7 +279,7 @@ async function test() {
             msg: sip_msg({
                 $rs: '200',
                 $rr: 'OK',
-                $rb: '!{_}a=sendrecv',
+                $rb: '!{_}a=sendrecv!{_}',
             }),
         },
         {
@@ -344,7 +344,7 @@ async function test() {
             msg: sip_msg({
                 $rs: '200',
                 $rr: 'OK',
-                $rb: '!{_}a=sendrecv',
+                $rb: '!{_}a=sendrecv!{_}',
             }),
         },
         {

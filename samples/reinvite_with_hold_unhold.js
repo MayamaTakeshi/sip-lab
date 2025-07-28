@@ -127,9 +127,9 @@ async function test() {
             event: 'reinvite',
             call_id: ic.id,
             msg: sip_msg({
-                $rb: '!{_}a=sendonly',
-                $rb: '!{_}a=fakeattr1:1234',
-                $rb: '!{_}a=fakeattr2: a b c',
+                $rb: '!{_}a=sendonly!{_}',
+                $rb: '!{_}a=fakeattr1:1234!{_}',
+                $rb: '!{_}a=fakeattr2: a b c!{_}',
             }),
         },
     ], 500)
@@ -152,7 +152,7 @@ async function test() {
             msg: sip_msg({
                 $rs: '200',
                 $rr: 'OK',
-                $rb: '!{_}a=recvonly',
+                $rb: '!{_}a=recvonly!{_}',
             }),
         },
         {
@@ -187,7 +187,7 @@ async function test() {
             event: 'reinvite',
             call_id: ic.id,
             msg: sip_msg({
-                $rb: '!{_}a=sendrecv',
+                $rb: '!{_}a=sendrecv!{_}',
             }),
         },
     ], 500)
@@ -210,7 +210,7 @@ async function test() {
             msg: sip_msg({
                 $rs: '200',
                 $rr: 'OK',
-                $rb: '!{_}a=sendrecv',
+                $rb: '!{_}a=sendrecv!{_}',
             }),
         },
         {
@@ -253,7 +253,7 @@ async function test() {
             event: 'reinvite',
             call_id: oc.id,
             msg: sip_msg({
-                $rb: '!{_}a=sendonly',
+                $rb: '!{_}a=sendonly!{_}',
             }),
         },
     ], 500)
@@ -310,7 +310,7 @@ async function test() {
             event: 'reinvite',
             call_id: oc.id,
             msg: sip_msg({
-                $rb: '!{_}a=sendrecv',
+                $rb: '!{_}a=sendrecv!{_}',
             }),
         },
     ], 500)
@@ -333,7 +333,7 @@ async function test() {
             msg: sip_msg({
                 $rs: '200',
                 $rr: 'OK',
-                $rb: '!{_}a=sendrecv',
+                $rb: '!{_}a=sendrecv!{_}',
             }),
         },
         {

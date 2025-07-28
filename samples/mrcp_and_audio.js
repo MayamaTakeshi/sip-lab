@@ -249,7 +249,7 @@ async function test() {
             msg: sip_msg({
                 $rs: '200',
                 $rr: 'OK',
-                $rb: '!{_}a=sendonly',
+                $rb: '!{_}a=sendonly!{_}',
             }),
         },
         {
@@ -331,7 +331,7 @@ async function test() {
             msg: sip_msg({
                 $rs: '200',
                 $rr: 'OK',
-                $rb: '!{_}a=recvonly',
+                $rb: '!{_}a=recvonly!{_}',
             }),
         },
         {

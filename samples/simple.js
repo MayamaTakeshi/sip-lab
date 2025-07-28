@@ -130,7 +130,7 @@ async function test() {
                 $fd: 'test.com',
                 $tU: 'bob',
                 '$hdr(content-type)': 'application/sdp',
-                $rb: '!{_}a=sendrecv',
+                $rb: '!{_}a=sendrecv!{_}',
                 '$hdr(X-MyHeader3)': 'ABC',
                 hdr_x_myheader4: 'DEF',
             }),
