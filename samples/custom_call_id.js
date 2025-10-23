@@ -66,8 +66,8 @@ async function test() {
  
 
     var ic = {
-        id: z.store.call_id,
-        sip_call_id: z.store.sip_call_id,
+        id: z.$call_id,
+        sip_call_id: z.$sip_call_id,
     }
 
     sip.call.respond(ic.id, {
@@ -111,7 +111,7 @@ async function test() {
         },
     })
 
-    delete z.store.call_id
+    delete z.$call_id
 
     await z.wait([
         {
@@ -141,8 +141,8 @@ async function test() {
     ], 1000)
  
     ic = {
-        id: z.store.call_id,
-        sip_call_id: z.store.sip_call_id,
+        id: z.$call_id,
+        sip_call_id: z.$sip_call_id,
     }
 
     sip.call.respond(ic.id, {

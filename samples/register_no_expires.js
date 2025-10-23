@@ -57,7 +57,7 @@ async function test() {
         },
     ], 1000)
 
-    sip.request.respond(z.store.req_id, {code: 200, reason: 'OK', headers: {Expires: '120'}})
+    sip.request.respond(z.$req_id, {code: 200, reason: 'OK', headers: {Expires: '120'}})
 
     await z.wait([
         {

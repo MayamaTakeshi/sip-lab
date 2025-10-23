@@ -62,8 +62,8 @@ async function test() {
     // Here we store data for the incoming call
     // just to organize our code (not really needed)
     const ic = {
-        id: z.store.call_id,
-        sip_call_id: z.store.sip_call_id,
+        id: z.$call_id,
+        sip_call_id: z.$sip_call_id,
     }
 
     // Now we answer the call at t2 side and accept all 2 streams

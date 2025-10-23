@@ -51,7 +51,7 @@ async function test() {
     })).value(), 50000)
 
     // Now we answer the calls
-    z.store.ic_ids.forEach(ic_id => { 
+    z.$ic_ids.forEach(ic_id => { 
         sip.call.respond(ic_id, {code: 200, reason: 'OK'})
     })
 
@@ -72,7 +72,7 @@ async function test() {
         status: 'ok',
     })).value())
     
-    events = events.concat(_.chain(z.store.ic_ids).map(ic_id => ({
+    events = events.concat(_.chain(z.$ic_ids).map(ic_id => ({
         event: 'media_update',
         call_id: ic_id,
         status: 'ok',
@@ -89,7 +89,7 @@ async function test() {
         sip.call.send_dtmf(oc.id, {digits: '1234', mode: 0})
     })
 
-    await z.wait(_.chain(z.store.ic_ids).map(ic_id => ({
+    await z.wait(_.chain(z.$ic_ids).map(ic_id => ({
         event: 'dtmf',
         call_id: ic_id,
         digits: '1234',
@@ -98,7 +98,7 @@ async function test() {
     })).value(), 50000)
 
     // now send inband DTMF digits
-    z.store.ic_ids.forEach(ic_id => {
+    z.$ic_ids.forEach(ic_id => {
         sip.call.send_dtmf(ic_id, {digits: '4321', mode: 1})
     })
 
@@ -131,7 +131,7 @@ async function test() {
         call_id: oc.id,
     })).value())
 
-    events = events.concat(_.chain(z.store.ic_ids).map(ic_id => ({
+    events = events.concat(_.chain(z.$ic_ids).map(ic_id => ({
         event: 'call_ended',
         call_id: ic_id,
     })).value())

@@ -68,8 +68,8 @@ async function test() {
     ], 1000)
 
     dialog.send_reply(
-        z.store.dialog_id,
-        z.store.req,
+        z.$dialog_id,
+        z.$req,
         {
             status: 422,
             reason: 'Session Timer Too Small',
@@ -97,9 +97,9 @@ async function test() {
         }
     ], 1000)
 
-    dialog.destroy(z.store.dialog_id)
+    dialog.destroy(z.$dialog_id)
 
-    delete z.store.dialog_id
+    delete z.$dialog_id
 
     oc = sip.call.create(t1.id, {
         from_uri: 'sip:alice@test.com',
@@ -112,7 +112,7 @@ async function test() {
         },
     })
 
-    delete z.store.req
+    delete z.$req
 
     await z.wait([
         {
@@ -141,8 +141,8 @@ a=fmtp:101 0-15
 a=ptime:20`.replace(/\n/g, "\r\n")
 
     dialog.send_reply(
-        z.store.dialog_id,
-        z.store.req,
+        z.$dialog_id,
+        z.$req,
         {
             status: 183,
             reason: 'Session Progress',
@@ -171,8 +171,8 @@ a=ptime:20`.replace(/\n/g, "\r\n")
     ], 1000)
 
     dialog.send_reply(
-        z.store.dialog_id,
-        z.store.req,
+        z.$dialog_id,
+        z.$req,
         {
             status: 200,
             reason: 'OK',
@@ -206,12 +206,12 @@ a=ptime:20`.replace(/\n/g, "\r\n")
         },
         {
             source: 'sip_endpoint',
-            endpoint_id: z.store.endpoint_id,
+            endpoint_id: z.$endpoint_id,
             req: {
               method: 'ACK',
             },
             event: 'in_dialog_request',
-            dialog_id: z.store.dialog_id
+            dialog_id: z.$dialog_id
         },
     ], 1000)
 
@@ -228,7 +228,7 @@ a=ptime:20`.replace(/\n/g, "\r\n")
             },
         })
 
-        delete z.store.req
+        delete z.$req
 
         await z.wait([
             {
@@ -240,13 +240,13 @@ a=ptime:20`.replace(/\n/g, "\r\n")
                     hdr_session_expires: '300;refresher=uac'
                 })),
                 event: 'in_dialog_request',
-                dialog_id: z.store.dialog_id
+                dialog_id: z.$dialog_id
             },
         ], 1000)
 
         dialog.send_reply(
-            z.store.dialog_id,
-            z.store.req,
+            z.$dialog_id,
+            z.$req,
             {
                 status: 200,
                 reason: 'OK',
@@ -277,7 +277,7 @@ a=ptime:20`.replace(/\n/g, "\r\n")
 
     sip.call.terminate(oc.id)
 
-    delete z.store.req
+    delete z.$req
 
     await z.wait([
         {                                                                                                 
@@ -289,8 +289,8 @@ a=ptime:20`.replace(/\n/g, "\r\n")
     ], 1000)
 
     dialog.send_reply(
-        z.store.dialog_id,
-        z.store.req,
+        z.$dialog_id,
+        z.$req,
         {
             status: 200,
             reason: 'OK',

@@ -1,5 +1,8 @@
 ### Release Notes
 
+## 1.38.0
+  - Updated @mayama/zeq to v 4.23.0
+
 ## 1.34.4
   - [Issue when trying to send header Max-Forwards](https://github.com/MayamaTakeshi/sip-lab/issues/122)
 

@@ -57,7 +57,7 @@ async function test() {
         },
     ], 1000)
 
-    sip.request.respond(z.store.req_id, {code: 200, reason: 'OK', headers: {Expires: '60'}})
+    sip.request.respond(z.$req_id, {code: 200, reason: 'OK', headers: {Expires: '60'}})
 
     await z.wait([
         {
@@ -103,7 +103,7 @@ async function test() {
         },
     ], 1000)
 
-    var subscriber_id = z.store.subscriber_id
+    var subscriber_id = z.$subscriber_id
 
     await z.wait([
         {
@@ -130,7 +130,7 @@ async function test() {
     ], 1000)
 
     // Subscription-State expires will be computed by pjsip. It might not be the exact value of sub_expires due to latency so we give 2 seconds of tolerance
-    assert(z.store.sub_expires > (sub_expires - 2))
+    assert(z.$sub_expires > (sub_expires - 2))
 
     sip.subscriber.notify(subscriber_id, {
         content_type: 'application/dialog-info+xml',
@@ -155,7 +155,7 @@ async function test() {
     
     await z.sleep(100)
 
-    z.store.req_id = null
+    z.$req_id = null
 
     sip.account.unregister(a1)
 
@@ -174,7 +174,7 @@ async function test() {
         },
     ], 1000)
 
-    sip.request.respond(z.store.req_id, {code: 200, reason: 'OK', headers: {Expires: '0'}})
+    sip.request.respond(z.$req_id, {code: 200, reason: 'OK', headers: {Expires: '0'}})
 
     await z.wait([
         {

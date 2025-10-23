@@ -87,8 +87,8 @@ async function test() {
     ], 1000)
 
     ic = {
-        id: z.store.call_id,
-        sip_call_id: z.store.sip_call_id,
+        id: z.$call_id,
+        sip_call_id: z.$sip_call_id,
     }
 
     sip.call.respond(ic.id, {
@@ -163,7 +163,7 @@ async function test() {
         },
     ], 1000)
 
-    var mrcp_channel = z.store.mrcp_channel
+    var mrcp_channel = z.$mrcp_channel
     var request_id = 1;
     var msg = mrcp.builder.build_request('SPEAK', request_id, {'channel-identifier': mrcp_channel, 'content-type': 'application/xml'}, "<root>test</root>")
 

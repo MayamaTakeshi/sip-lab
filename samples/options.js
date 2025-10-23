@@ -53,7 +53,7 @@ async function test() {
         },
     ], 1000)
 
-    sip.request.respond(z.store.uas_req_id, {code: 200, reason: 'OK', headers: {'X-SomeHeader1': 'ccc', 'X-SomeHeader2': 'ddd'}})
+    sip.request.respond(z.$uas_req_id, {code: 200, reason: 'OK', headers: {'X-SomeHeader1': 'ccc', 'X-SomeHeader2': 'ddd'}})
 
     await z.wait([
         {

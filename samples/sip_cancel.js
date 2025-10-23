@@ -42,8 +42,8 @@ async function test() {
     ], 1000)
 
     ic = {
-        id: z.store.call_id,
-        sip_call_id: z.store.sip_call_id,
+        id: z.$call_id,
+        sip_call_id: z.$sip_call_id,
     }
 
     sip.call.respond(ic.id, {code: 180, reason: 'Ringing'})
