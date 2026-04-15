@@ -2642,4 +2642,12 @@ root@636c5c5b0748:~/tmp/t2/node_modules/sip-lab# node -v
 v19.9.0
 ```
 
+-------------------------
+2026/04/16 takeshi:
+
+Last OS used (OK):
+
+takeshi@takeshi-DELTA-H61347:~/src/git/MayamaTakeshi/sip-lab$ cat /etc/issue
+Ubuntu 24.04.4 LTS \n \l
+
 
