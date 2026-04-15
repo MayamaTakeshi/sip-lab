@@ -1,5 +1,9 @@
 ### Release Notes
 
+## 1.39.0
+  - [failure to report mrcp message in case it is sent without delay from the previous one](https://github.com/MayamaTakeshi/sip-lab/issues/125)
+
+#
 ## 1.38.0
   - Updated @mayama/zeq to v 4.23.0
 
