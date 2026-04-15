@@ -1089,73 +1089,82 @@ static pj_activesock_cb activesock_cb = {&on_data_read, NULL,
 static pj_bool_t on_data_read(pj_activesock_t *asock, void *data,
                               pj_size_t size, pj_status_t status,
                               pj_size_t *remainder) {
-  printf("on_data_read\n");
-  if(status != PJ_SUCCESS) {
-    printf("on_data_read failed\n");
+  if (status != PJ_SUCCESS) {
     return PJ_FALSE;
   }
- 
-  AsockUserData *ud = (AsockUserData*)pj_activesock_get_user_data(asock);
-  if(!ud) return PJ_FALSE;
+
+  AsockUserData *ud = (AsockUserData *)pj_activesock_get_user_data(asock);
+  if (!ud)
+    return PJ_FALSE;
 
   if (size == 0) {
     // TODO: destroy the activesock.
     return PJ_FALSE;
   }
 
-  assert(size + ud->len + 1 < MAX_TCP_DATA);
+  if (size + ud->len + 1 >= MAX_TCP_DATA) {
+    addon_log(L_DBG, "tcp data: buffer overflow");
+    return PJ_FALSE;
+  }
 
   memcpy(&ud->buf[ud->len], data, size);
   ud->len = ud->len + size;
   ud->buf[ud->len] = '\0';
 
-  char *sep = strstr(ud->buf, "\r\n\r\n");
-  if(!sep) {
-    // msg incomplete
-    *remainder = 0;
-    return PJ_TRUE;
-  }
-
-  int msg_size;
-
-  char *hdr_cl = strcasestr(ud->buf, "content-length:");
-  if(!hdr_cl) {
-    // no body, only headers
-    msg_size = sep + 4 - ud->buf;
-  } else {
-    assert(hdr_cl < sep);
-    char *end_of_line = strstr(hdr_cl, "\r\n");
-
-    char num_str[8];
-    char *start = hdr_cl+16;
-    int len = end_of_line - start;
-    strncpy(num_str, start, len);
-    num_str[len] = '\0';
-    int body_len = atoi(num_str);
-
-    assert(body_len > 0 && body_len < 4096);
-
-    if(ud->buf+ud->len < sep+4+body_len) {
-      //printf("tcp data: msg incomplete %i %i\n", ud->buf+ud->len, sep+4+body_len);
-      *remainder = 0;
-      return PJ_TRUE;
+  while (true) {
+    char *sep = strstr(ud->buf, "\r\n\r\n");
+    if (!sep) {
+      break;
     }
 
-    msg_size = sep+4+body_len - ud->buf;
+    int msg_size;
+
+    // Search Content-Length only in headers
+    *sep = '\0';
+    char *hdr_cl = strcasestr(ud->buf, "content-length:");
+    *sep = '\r';
+
+    if (!hdr_cl) {
+      // no body, only headers
+      msg_size = sep + 4 - ud->buf;
+    } else {
+      char *end_of_line = strstr(hdr_cl, "\r\n");
+      if (!end_of_line || end_of_line > sep) {
+        msg_size = sep + 4 - ud->buf;
+      } else {
+        char *start = strchr(hdr_cl, ':');
+        if (start) {
+          start++;
+          while (*start == ' ')
+            start++;
+          int body_len = atoi(start);
+
+          if (ud->len < (pj_size_t)(sep + 4 + body_len - ud->buf)) {
+            // msg incomplete
+            goto done;
+          }
+          msg_size = sep + 4 + body_len - ud->buf;
+        } else {
+          msg_size = sep + 4 - ud->buf;
+        }
+      }
+    }
+
+    char evt[MAX_TCP_DATA + 512];
+    make_evt_tcp_msg(evt, sizeof(evt), ud->call->id,
+                     media_type_id_to_media_type_name(ud->media_endpt->type),
+                     (char *)ud->buf, msg_size);
+    dispatch_event(evt);
+
+    int remain_len = ud->len - msg_size;
+    if (remain_len > 0) {
+      memmove(ud->buf, &ud->buf[msg_size], remain_len);
+    }
+    ud->len = remain_len;
+    ud->buf[ud->len] = '\0';
   }
 
-  printf("on_data_read msg_size=%d\n", msg_size);
-
-  char evt[4096];
-  make_evt_tcp_msg(evt, sizeof(evt), ud->call->id, media_type_id_to_media_type_name(ud->media_endpt->type), (char*)ud->buf, msg_size);
-  printf("on_data_read msg=%s\n", evt);
-  dispatch_event(evt);
-
-  int remain_len = ud->len - msg_size;
-  memcpy(ud->buf, &ud->buf[msg_size], remain_len);
-  ud->len = remain_len;
-  ud->buf[ud->len] = '\0';
-  
+done:
   *remainder = 0;
   return PJ_TRUE;
 }
