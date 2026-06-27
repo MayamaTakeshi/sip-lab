@@ -24,6 +24,8 @@
 #include "websock.h"
 #include "http.h"
 #include <pjsip/sip_transport_ws.h>
+#include <pjmedia/transport_ice.h>
+#include <pjnath/ice_strans.h>
 
 #include "dtmfdet.h"
 #include "bfsk_det.h"
@@ -342,6 +344,8 @@ struct AudioEndpoint {
   pjmedia_transport *med_transport;
   pjmedia_stream *med_stream;
 
+  void *ice_user_data;
+
   char DigitBuffers[2][MAXDIGITS + 1];
   int DigitBufferLength[2];
   int last_digit_timestamp[2];
@@ -419,6 +423,7 @@ struct MediaEndpoint {
   int port;
   int field_count;
   bool secure;
+  pj_bool_t use_ice;
   char *field[MAX_ATTRS];
 
   union {
@@ -729,6 +734,137 @@ static pj_bool_t create_transport_srtp(pjmedia_transport *med_transport, pjmedia
 	pjmedia_srtp_setting_default(&opt);
 	printf("calling pjmedia_transport_srtp_create\n");
 	return pjmedia_transport_srtp_create(g_med_endpt, med_transport, &opt, srtp);
+}
+
+struct IceUserData {
+    volatile pj_bool_t init_done;
+    pj_status_t init_status;
+    volatile pj_bool_t nego_done;
+    pj_status_t nego_status;
+};
+
+static void ice_callback(pjmedia_transport *tp, pj_ice_strans_op op,
+                         pj_status_t status) {
+    IceUserData *ud = (IceUserData *)tp->user_data;
+    if (op == PJ_ICE_STRANS_OP_INIT) {
+        ud->init_done = PJ_TRUE;
+        ud->init_status = status;
+        printf("ICE init complete: status=%d\n", status);
+    } else if (op == PJ_ICE_STRANS_OP_NEGOTIATION) {
+        ud->nego_done = PJ_TRUE;
+        ud->nego_status = status;
+        printf("ICE negotiation complete: status=%d\n", status);
+    }
+}
+
+static pjmedia_transport *create_ice_transport(const pj_str_t *addr,
+                                                pj_uint16_t *allocated_port,
+                                                Value &descr,
+                                                pj_pool_t *pool,
+                                                IceUserData **out_ud) {
+    pj_ice_strans_cfg ice_cfg;
+    pjmedia_transport *ice_tp;
+    pj_status_t status;
+
+    pj_ice_strans_cfg_default(&ice_cfg);
+    pj_stun_config_init(&ice_cfg.stun_cfg, &g_cp.factory, 0,
+                        pjsip_endpt_get_ioqueue(g_sip_endpt),
+                        pjsip_endpt_get_timer_heap(g_sip_endpt));
+
+    Value &ice_val = descr["ice"];
+    if (ice_val.IsObject()) {
+        if (ice_val.HasMember("stun_server")) {
+            ice_cfg.stun_tp_cnt = 1;
+            pj_ice_strans_stun_cfg_default(&ice_cfg.stun_tp[0]);
+            pj_strdup2(pool, &ice_cfg.stun_tp[0].server,
+                       ice_val["stun_server"].GetString());
+            ice_cfg.stun_tp[0].port = PJ_STUN_PORT;
+            if (ice_val.HasMember("stun_port")) {
+                ice_cfg.stun_tp[0].port = (pj_uint16_t)ice_val["stun_port"].GetInt();
+            }
+            ice_cfg.stun_tp[0].af = pj_AF_INET();
+        }
+
+        if (ice_val.HasMember("turn_server")) {
+            ice_cfg.turn_tp_cnt = 1;
+            pj_ice_strans_turn_cfg_default(&ice_cfg.turn_tp[0]);
+            pj_strdup2(pool, &ice_cfg.turn_tp[0].server,
+                       ice_val["turn_server"].GetString());
+            ice_cfg.turn_tp[0].port = PJ_STUN_PORT;
+            if (ice_val.HasMember("turn_port")) {
+                ice_cfg.turn_tp[0].port = (pj_uint16_t)ice_val["turn_port"].GetInt();
+            }
+            ice_cfg.turn_tp[0].af = pj_AF_INET();
+            ice_cfg.turn_tp[0].conn_type = PJ_TURN_TP_UDP;
+
+            if (ice_val.HasMember("turn_username") && ice_val.HasMember("turn_password")) {
+                pj_stun_auth_cred cred;
+                pj_bzero(&cred, sizeof(cred));
+                cred.type = PJ_STUN_AUTH_CRED_STATIC;
+                pj_strdup2(pool, &cred.data.static_cred.username,
+                           ice_val["turn_username"].GetString());
+                pj_strdup2(pool, &cred.data.static_cred.data,
+                           ice_val["turn_password"].GetString());
+                cred.data.static_cred.data_type = PJ_STUN_PASSWD_PLAIN;
+                pj_memcpy(&ice_cfg.turn_tp[0].auth_cred, &cred, sizeof(cred));
+            }
+
+            if (ice_val.HasMember("turn_transport")) {
+                const char *tp_str = ice_val["turn_transport"].GetString();
+                if (strcmp(tp_str, "tcp") == 0)
+                    ice_cfg.turn_tp[0].conn_type = PJ_TURN_TP_TCP;
+                else if (strcmp(tp_str, "tls") == 0)
+                    ice_cfg.turn_tp[0].conn_type = PJ_TURN_TP_TLS;
+            }
+        }
+    }
+
+    IceUserData *ud = (IceUserData *)pj_pool_zalloc(pool, sizeof(IceUserData));
+
+    pjmedia_ice_cb cb;
+    pj_bzero(&cb, sizeof(cb));
+    cb.on_ice_complete = &ice_callback;
+
+    status = pjmedia_ice_create3(g_med_endpt, "ice", 1, &ice_cfg, &cb, 0, ud, &ice_tp);
+    if (status != PJ_SUCCESS) {
+        printf("pjmedia_ice_create3 failed: %d\n", status);
+        return NULL;
+    }
+
+    /* Wait for ICE init to complete */
+    if (!ud->init_done) {
+        pj_time_val timeout = {5, 0};
+        pj_time_val poll_interval = {0, 10};
+        while (!ud->init_done) {
+            pjsip_endpt_handle_events(g_sip_endpt, &poll_interval);
+            timeout.msec -= 10;
+            if (timeout.msec <= 0) {
+                timeout.msec += 1000;
+                timeout.sec--;
+            }
+            if (timeout.sec < 0 || (timeout.sec == 0 && timeout.msec < 0)) {
+                printf("ICE init timed out\n");
+                pjmedia_transport_close(ice_tp);
+                return NULL;
+            }
+        }
+    }
+
+    if (ud->init_status != PJ_SUCCESS) {
+        printf("ICE init failed: %d\n", ud->init_status);
+        pjmedia_transport_close(ice_tp);
+        return NULL;
+    }
+
+    /* Get port from ICE transport info */
+    pjmedia_transport_info tpinfo;
+    pjmedia_transport_info_init(&tpinfo);
+    pjmedia_transport_get_info(ice_tp, &tpinfo);
+    *allocated_port = pj_sockaddr_get_port(&tpinfo.sock_info.rtp_addr_name);
+
+    printf("create_ice_transport: port=%d\n", *allocated_port);
+    *out_ud = ud;
+    return ice_tp;
 }
 
 static int
@@ -5692,6 +5828,11 @@ bool restart_media_stream(Call *call, MediaEndpoint *me,
   }
 
   /* Start the UDP media transport */
+  if (me->use_ice && ae->ice_user_data) {
+    IceUserData *ud = (IceUserData *)ae->ice_user_data;
+    ud->nego_done = PJ_FALSE;
+  }
+
   status = pjmedia_transport_media_start(ae->med_transport, call->inv->pool, local_sdp, remote_sdp, idx);
   if (status != PJ_SUCCESS) {
     printf("status=%i\n", status);
@@ -5703,6 +5844,36 @@ bool restart_media_stream(Call *call, MediaEndpoint *me,
                           "setup_failed (pjmedia_transport_media_start failed)", "");
     dispatch_event(evt);
     return false;
+  }
+
+  /* Wait for ICE negotiation to complete */
+  if (me->use_ice && ae->ice_user_data) {
+    IceUserData *ud = (IceUserData *)ae->ice_user_data;
+    pj_time_val timeout = {10, 0};
+    while (!ud->nego_done) {
+        pj_time_val poll_interval = {0, 10};
+        pjsip_endpt_handle_events(g_sip_endpt, &poll_interval);
+        timeout.msec -= 10;
+        if (timeout.msec <= 0) {
+            timeout.msec += 1000;
+            timeout.sec--;
+        }
+        if (timeout.sec < 0 || (timeout.sec == 0 && timeout.msec < 0)) {
+            printf("ICE negotiation timed out\n");
+            make_evt_media_update(evt, sizeof(evt), call->id,
+                                  "setup_failed (ICE negotiation timed out)", "");
+            dispatch_event(evt);
+            return false;
+        }
+    }
+    if (ud->nego_status != PJ_SUCCESS) {
+        printf("ICE negotiation failed: %d\n", ud->nego_status);
+        make_evt_media_update(evt, sizeof(evt), call->id,
+                              "setup_failed (ICE negotiation failed)", "");
+        dispatch_event(evt);
+        return false;
+    }
+    printf("ICE negotiation completed successfully\n");
   }
 
   status = pjmedia_stream_get_port(ae->med_stream, &new_port);
@@ -7126,11 +7297,32 @@ bool create_media_endpoint(Call *call, Document &document, Value &descr,
     }
   }
 
+  pj_bool_t use_ice = PJ_FALSE;
+  if (descr.HasMember("ice")) {
+    if (descr["ice"].IsBool()) {
+      use_ice = descr["ice"].GetBool();
+    } else if (descr["ice"].IsObject()) {
+      use_ice = PJ_TRUE;
+    } else {
+      set_error("Parameter ice must be a boolean or object");
+      return false;
+    }
+  }
+  med_endpt->use_ice = use_ice;
+
   if (strcmp("audio", type) == 0) {
     pj_uint16_t allocated_port;
     pjmedia_transport *med_transport = NULL;
+    IceUserData *ud = NULL;
     if(must_not_be_used) {
       allocated_port = 0;
+    } else if (use_ice) {
+      med_transport = create_ice_transport(&str_addr, &allocated_port, descr, dlg->pool, &ud);
+      if (!med_transport) {
+        set_error("create_ice_transport failed");
+        return false;
+      }
+      printf("ICE transport created, port=%d\n", allocated_port);
     } else {
       med_transport = create_media_transport(&str_addr, &allocated_port);
       if (!med_transport) {
@@ -7142,6 +7334,7 @@ bool create_media_endpoint(Call *call, Document &document, Value &descr,
     AudioEndpoint *audio_endpt =
         (AudioEndpoint *)pj_pool_zalloc(dlg->pool, sizeof(AudioEndpoint));
     audio_endpt->med_transport = med_transport;
+    audio_endpt->ice_user_data = ud;
 
     med_endpt->type = ENDPOINT_TYPE_AUDIO;
     pj_strdup2(dlg->pool, &med_endpt->media, "audio");
@@ -7525,16 +7718,18 @@ bool process_media(Call *call, pjsip_dialog *dlg, Document &document, bool answe
       sdp->media[sdp->media_count++] = media;
     }
 
-    if(me->secure && me->endpoint.audio) {
+    if(me->endpoint.audio && me->endpoint.audio->med_transport) {
       pj_status_t status = pjmedia_transport_encode_sdp(me->endpoint.audio->med_transport, dlg->pool, sdp, rem_sdp, i);
       if(status != PJ_SUCCESS) {
         addon_log(L_DBG, "pjmedia_transport_encode_sdp failed");
         return false;
       }
 
-      // The below must be done after pjmedia_transport_encode_sdp() because although at this point med_transport is a transport_srtp, it calls the transport_encode_sdp of the underlying transpor_udp and it will fail when it sees "RTP/SAVP" instead of "RTP/AVP"
-      // So we change from RTP/AVP to RTP/SAVP after we add the crypto lines.
-      pj_strdup2(dlg->pool, &sdp->media[i]->desc.transport, "RTP/SAVP");
+      if(me->secure) {
+        // The below must be done after pjmedia_transport_encode_sdp() because although at this point med_transport is a transport_srtp, it calls the transport_encode_sdp of the underlying transpor_udp and it will fail when it sees "RTP/SAVP" instead of "RTP/AVP"
+        // So we change from RTP/AVP to RTP/SAVP after we add the crypto lines.
+        pj_strdup2(dlg->pool, &sdp->media[i]->desc.transport, "RTP/SAVP");
+      }
     }
   }
 

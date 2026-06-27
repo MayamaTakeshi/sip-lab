@@ -6,7 +6,7 @@ A nodejs module that helps to write functional/integration tests for SIP systems
 
 It permits to:
 
-- make audio calls using UDP, TCP and TLS transports
+- make audio calls using UDP, TCP, TLS and WebSocket transports
 - send/receive DTMF inband/RFC2833/INFO.
 - send/receive BFSK bits.
 - play/record audio on a call from/to a wav file
@@ -21,7 +21,6 @@ TODO:
 
 - add support for video playing/recording from/to file
 - add support for T.38 fax
-- add support for SIP over WebSocket
 - add support for WebRTC
 - add support for MSRP
 

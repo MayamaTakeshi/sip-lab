@@ -6,6 +6,8 @@ const sip_msg = require('sip-matching')
 var z = new Zeq()
 
 async function test() {
+    sip.dtmf_aggregation_on(500)
+
     z.trap_events(sip.event_source, 'event', (evt) => {
         return evt.args[0]
     })
@@ -92,6 +94,29 @@ async function test() {
             event: 'media_update',
             call_id: ic.id,
             status: 'ok',
+        },
+    ], 2000)
+
+    sip.call.start_inband_dtmf_detection(oc.id)
+    sip.call.start_inband_dtmf_detection(ic.id)
+
+    sip.call.send_dtmf(oc.id, {digits: '1234', mode: 1})
+    sip.call.send_dtmf(ic.id, {digits: '1234', mode: 1})
+
+    await z.wait([
+        {
+            event: 'dtmf',
+            call_id: ic.id,
+            digits: '1234',
+            mode: 1,
+            media_id: 0,
+        },
+        {
+            event: 'dtmf',
+            call_id: oc.id,
+            digits: '1234',
+            mode: 1,
+            media_id: 0,
         },
     ], 2000)
 

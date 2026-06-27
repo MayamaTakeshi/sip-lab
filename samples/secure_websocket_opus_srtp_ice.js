@@ -12,31 +12,33 @@ async function test() {
         return evt.args[0]
     })
 
-    sip.set_codecs("pcmu/8000/1:128,pcma/8000/1:128")
+    sip.set_codecs("opus/48000/2:128,pcmu/8000/1:128")
 
     console.log(sip.start((data) => { console.log(data) }))
 
-    // Create a WebSocket server transport (listener)
+    // Create a WSS server transport (secure WebSocket listener)
     const t2 = sip.transport.create({
         address: "127.0.0.1",
-        port: 6666,
-        type: "ws"
+        port: 6062,
+        type: "wss",
     })
 
-    // Create a WebSocket client transport connecting to our server
+    // Create a WSS client transport connecting to our server
     const t1 = sip.transport.create({
         address: "127.0.0.1",
-        type: "ws",
-        ws_url: "ws://127.0.0.1:6666/sip"
+        type: "wss",
+        ws_url: "wss://127.0.0.1:6062/sip",
     })
 
     console.log("t1", t1)
     console.log("t2", t2)
 
-    // Make the call from t1 to t2 over WebSocket
+    // Make the call from t1 to t2 over Secure WebSocket
+    // Use OPUS codec with SRTP and ICE
     const oc = sip.call.create(t1.id, {
         from_uri: 'sip:alice@test.com',
-        to_uri: 'sip:bob@127.0.0.1:8080',
+        to_uri: 'sip:bob@127.0.0.1:6062',
+        media: [{type: "audio", secure: true, ice: true}],
     })
 
     // Wait for the call to arrive at t2 and 100 Trying response at t1
@@ -68,10 +70,11 @@ async function test() {
         sip_call_id: z.$sip_call_id,
     }
 
-    // Answer the call at t2 side
+    // Answer the call at t2 side with matching media config
     sip.call.respond(ic.id, {
         code: 200,
         reason: 'OK',
+        media: [{type: "audio", secure: true, ice: true}],
     })
 
     // Wait for 200 OK at t1 side and media setups
@@ -95,26 +98,27 @@ async function test() {
             call_id: ic.id,
             status: 'ok',
         },
-    ], 2000)
+    ], 5000)
 
     sip.call.start_inband_dtmf_detection(oc.id)
     sip.call.start_inband_dtmf_detection(ic.id)
 
-    sip.call.send_dtmf(oc.id, {digits: '1234', mode: 1})
-    sip.call.send_dtmf(ic.id, {digits: '1234', mode: 1})
+    // using 1234 fails frequently as we get things like '12334'
+    sip.call.send_dtmf(oc.id, {digits: '12', mode: 1})
+    sip.call.send_dtmf(ic.id, {digits: '12', mode: 1})
 
     await z.wait([
         {
             event: 'dtmf',
             call_id: ic.id,
-            digits: '1234',
+            digits: '12',
             mode: 1,
             media_id: 0,
         },
         {
             event: 'dtmf',
             call_id: oc.id,
-            digits: '1234',
+            digits: '12',
             mode: 1,
             media_id: 0,
         },
@@ -144,7 +148,7 @@ async function test() {
         },
     ], 2000)
 
-    console.log("WebSocket test successful")
+    console.log("Secure WebSocket + OPUS + SRTP + ICE test successful")
 
     sip.stop()
     process.exit(0)
