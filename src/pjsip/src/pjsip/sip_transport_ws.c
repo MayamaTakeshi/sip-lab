@@ -230,7 +230,6 @@ static pj_status_t ws_do_shutdown(pjsip_transport *transport)
         pj_websock_close(ws_tp->ws, PJ_WEBSOCK_SC_NORMAL_CLOSURE, NULL);
         ws_tp->ws = NULL;
     }
-    pjsip_transport_destroy(transport);
     return PJ_SUCCESS;
 }
 
