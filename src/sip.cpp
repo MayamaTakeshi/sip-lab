@@ -23,6 +23,7 @@
 
 #include "websock.h"
 #include "http.h"
+#include <pjsip/sip_transport_ws.h>
 
 #include "dtmfdet.h"
 #include "bfsk_det.h"
@@ -72,233 +73,7 @@ static pjmedia_endpt *g_med_endpt;
 static pj_timer_heap_t *g_timer_heap = NULL;
 static pj_websock_endpoint *g_ws_endpt = NULL;
 
-static int g_ws_transport_type = 0;
-static int g_wss_transport_type = 0;
 
-struct WsListenerInfo {
-  char address[32];
-  int port;
-  int type;
-};
-
-static std::vector<pj_websock_t*> g_ws_listeners;
-
-struct WsTransport {
-  pjsip_transport base; // Must be first!
-  pj_pool_t *pool;
-  pj_pool_t *pool_rdata;
-  pj_websock_t *ws;
-  pj_sockaddr remote_addr;
-  char remote_url[512];
-  pj_bool_t is_connected;
-  pj_status_t connect_status;
-  pj_bool_t has_connect_result;
-  
-  // Back pointer to our addon Transport wrapper
-  int addon_transport_id;
-};
-
-static pj_status_t ws_send_msg(pjsip_transport *transport, 
-                               pjsip_tx_data *tdata,
-                               const pj_sockaddr_t *rem_addr,
-                               int addr_len,
-                               void *token,
-                               pjsip_transport_callback callback) {
-  WsTransport *ws_tp = (WsTransport *)transport;
-  
-  if (!ws_tp->is_connected) {
-    return PJ_RETURN_OS_ERROR(OSERR_ENOTCONN);
-  }
-  
-  pj_ssize_t size = tdata->buf.cur - tdata->buf.start;
-  addon_log(L_DBG, "WS Send %i bytes:\n%.*s\n", (int)size, (int)size, tdata->buf.start);
-  
-  pj_status_t status = pj_websock_send(ws_tp->ws, PJ_WEBSOCK_OP_TEXT, PJ_TRUE, PJ_TRUE, tdata->buf.start, size);
-  if (status == PJ_SUCCESS || status == PJ_EPENDING) {
-    return PJ_SUCCESS;
-  }
-  return status;
-}
-
-static pj_status_t ws_do_shutdown(pjsip_transport *transport) {
-  WsTransport *ws_tp = (WsTransport *)transport;
-  if (ws_tp->ws) {
-    pj_websock_close(ws_tp->ws, PJ_WEBSOCK_SC_NORMAL_CLOSURE, NULL);
-    ws_tp->ws = NULL;
-  }
-  pjsip_transport_destroy(transport);
-  return PJ_SUCCESS;
-}
-
-static pj_status_t ws_destroy(pjsip_transport *transport) {
-  WsTransport *ws_tp = (WsTransport *)transport;
-  addon_log(L_DBG, "WS Destroying transport\n");
-  if (ws_tp->ws) {
-    pj_websock_close(ws_tp->ws, PJ_WEBSOCK_SC_NORMAL_CLOSURE, NULL);
-    ws_tp->ws = NULL;
-  }
-  if (ws_tp->pool_rdata) {
-    pjsip_endpt_release_pool(ws_tp->base.endpt, ws_tp->pool_rdata);
-    ws_tp->pool_rdata = NULL;
-  }
-  if (ws_tp->pool) {
-    pj_pool_t *pool = ws_tp->pool;
-    ws_tp->pool = NULL;
-    pjsip_endpt_release_pool(ws_tp->base.endpt, pool);
-  }
-  return PJ_SUCCESS;
-}
-
-static pj_bool_t on_ws_connect_complete(pj_websock_t *c, pj_status_t status) {
-  WsTransport *ws_tp = (WsTransport *)pj_websock_get_userdata(c);
-  if (ws_tp) {
-    ws_tp->has_connect_result = PJ_TRUE;
-    if (status == PJ_SUCCESS) {
-      ws_tp->is_connected = PJ_TRUE;
-      addon_log(L_DBG, "WebSocket connection established to %s\n", ws_tp->remote_url);
-    } else {
-      ws_tp->connect_status = status;
-      ws_tp->ws = NULL;
-      addon_log(L_DBG, "WebSocket connection failed: %d\n", status);
-    }
-  }
-  return PJ_TRUE;
-}
-
-static pj_bool_t on_ws_rx_msg(pj_websock_t *c, pj_websock_rx_data *msg, pj_status_t status) {
-  WsTransport *ws_tp = (WsTransport *)pj_websock_get_userdata(c);
-  if (!ws_tp) return PJ_FALSE;
-  
-  if (status != PJ_SUCCESS || msg->hdr.opcode == PJ_WEBSOCK_OP_CLOSE) {
-    addon_log(L_DBG, "WebSocket closed or error on read\n");
-    ws_tp->is_connected = PJ_FALSE;
-    ws_tp->ws = NULL;
-    pjsip_transport_shutdown(&ws_tp->base);
-    return PJ_FALSE;
-  }
-  
-  if (msg->hdr.opcode == PJ_WEBSOCK_OP_TEXT || msg->hdr.opcode == PJ_WEBSOCK_OP_BIN) {
-    char *data = (char *)msg->data;
-    pj_size_t len = (pj_size_t)msg->data_len;
-    
-    addon_log(L_DBG, "WS Recv %i bytes:\n%.*s\n", (int)len, (int)len, data);
-    
-    if (len >= PJSIP_MAX_PKT_LEN) {
-      addon_log(LL_INFO, "WS recv buffer overflow, truncating\n");
-      len = PJSIP_MAX_PKT_LEN - 1;
-    }
-    
-    pj_pool_reset(ws_tp->pool_rdata);
-    pjsip_rx_data *rdata = PJ_POOL_ZALLOC_T(ws_tp->pool_rdata, pjsip_rx_data);
-    
-    rdata->tp_info.pool = ws_tp->pool_rdata;
-    rdata->tp_info.transport = &ws_tp->base;
-    rdata->tp_info.tp_data = NULL;
-    rdata->tp_info.op_key.rdata = rdata;
-    pj_ioqueue_op_key_init(&rdata->tp_info.op_key.op_key, sizeof(pj_ioqueue_op_key_t));
-    
-    rdata->pkt_info.len = (int)len;
-    pj_memcpy(rdata->pkt_info.packet, data, len);
-    rdata->pkt_info.zero = 0;
-    pj_gettimeofday(&rdata->pkt_info.timestamp);
-    pj_sockaddr_cp(&rdata->pkt_info.src_addr, &ws_tp->remote_addr);
-    rdata->pkt_info.src_addr_len = sizeof(pj_sockaddr);
-    pj_sockaddr_print(&rdata->pkt_info.src_addr, rdata->pkt_info.src_name, sizeof(rdata->pkt_info.src_name), 0);
-    rdata->pkt_info.src_port = pj_sockaddr_get_port(&rdata->pkt_info.src_addr);
-    rdata->tp_info.transport = &ws_tp->base;
-    pjsip_tpmgr_receive_packet(ws_tp->base.tpmgr, rdata);
-  } else if (msg->hdr.opcode == PJ_WEBSOCK_OP_PING) {
-    pj_websock_send(c, PJ_WEBSOCK_OP_PONG, PJ_TRUE, PJ_TRUE, NULL, 0);
-  }
-  
-  return PJ_TRUE;
-}
-
-static pj_bool_t on_ws_tx_msg(pj_websock_t *c, pj_websock_tx_data *msg, pj_ssize_t sent);
-static void on_ws_state_change(pj_websock_t *c, int state);
-
-static pj_bool_t on_ws_accept_complete(pj_websock_t *c, const pj_sockaddr_t *src_addr, int src_addr_len) {
-  pj_websock_t *parent = pj_websock_get_parent(c);
-  if (!parent) {
-    addon_log(L_DBG, "WS accept: no parent\n");
-    return PJ_TRUE;
-  }
-  WsListenerInfo *info = (WsListenerInfo*)pj_websock_get_userdata(parent);
-  if (!info) {
-    addon_log(L_DBG, "WS accept: no listener info\n");
-    return PJ_TRUE;
-  }
-
-  pj_pool_t *pool = pjsip_endpt_create_pool(g_sip_endpt, "ws_srv_tp", 1000, 1000);
-  if (!pool) return PJ_TRUE;
-  WsTransport *ws_tp = PJ_POOL_ZALLOC_T(pool, WsTransport);
-  ws_tp->pool = pool;
-  ws_tp->pool_rdata = pjsip_endpt_create_pool(g_sip_endpt, "ws_srv_rdata", PJSIP_POOL_RDATA_LEN, PJSIP_POOL_RDATA_INC);
-  pj_sockaddr_init(pj_AF_INET(), &ws_tp->remote_addr, NULL, 0);
-  ws_tp->is_connected = PJ_TRUE;
-  ws_tp->ws = c;
-
-  pj_lock_create_recursive_mutex(pool, "ws", &ws_tp->base.lock);
-  pj_atomic_create(pool, 0, &ws_tp->base.ref_cnt);
-  pj_ansi_snprintf(ws_tp->base.obj_name, sizeof(ws_tp->base.obj_name), "ws_srv:%p", ws_tp);
-  ws_tp->base.pool = pool;
-  ws_tp->base.endpt = g_sip_endpt;
-  ws_tp->base.tpmgr = pjsip_endpt_get_tpmgr(g_sip_endpt);
-  ws_tp->base.send_msg = &ws_send_msg;
-  ws_tp->base.do_shutdown = &ws_do_shutdown;
-  ws_tp->base.destroy = &ws_destroy;
-  ws_tp->base.type_name = (char*)(info->type == g_wss_transport_type ? "WSS" : "WS");
-  ws_tp->base.flag = PJSIP_TRANSPORT_RELIABLE | (info->type == g_wss_transport_type ? PJSIP_TRANSPORT_SECURE : 0);
-  ws_tp->base.info = (char*)"WebSocket Transport";
-  ws_tp->base.key.type = (pjsip_transport_type_e)info->type;
-  pj_bzero(&ws_tp->base.key.rem_addr, sizeof(pj_sockaddr));
-  ws_tp->base.key.rem_addr.addr.sa_family = PJ_AF_INET;
-  ws_tp->base.key.rem_addr.ipv4.sin_port = pj_htons(pj_sockaddr_get_port(src_addr));
-  ws_tp->base.addr_len = sizeof(pj_sockaddr);
-  pj_bzero(&ws_tp->base.local_addr, sizeof(pj_sockaddr));
-  ws_tp->base.local_addr.addr.sa_family = PJ_AF_INET;
-  ws_tp->base.local_addr.ipv4.sin_port = pj_htons(info->port);
-
-  pj_str_t local_host = pj_str(info->address);
-  ws_tp->base.local_name.host = local_host;
-  ws_tp->base.local_name.port = info->port;
-  pj_str_t remote_host = pj_str((char*)"incoming");
-  ws_tp->base.remote_name.host = remote_host;
-  ws_tp->base.remote_name.port = 0;
-  ws_tp->base.dir = PJSIP_TP_DIR_INCOMING;
-
-  pj_status_t status = pjsip_transport_register(ws_tp->base.tpmgr, &ws_tp->base);
-  if (status != PJ_SUCCESS) {
-    addon_log(L_DBG, "WS accept: transport register failed %d\n", status);
-    return PJ_TRUE;
-  }
-
-  pj_websock_set_userdata(c, ws_tp);
-
-  pj_websock_cb child_cb;
-  pj_bzero(&child_cb, sizeof(child_cb));
-  child_cb.on_rx_msg = &on_ws_rx_msg;
-  child_cb.on_tx_msg = &on_ws_tx_msg;
-  child_cb.on_state_change = &on_ws_state_change;
-  pj_websock_set_callbacks(c, &child_cb);
-
-  addon_log(L_DBG, "WS accept complete, registered incoming transport\n");
-  return PJ_TRUE;
-}
-
-static pj_bool_t on_ws_tx_msg(pj_websock_t *c, pj_websock_tx_data *msg, pj_ssize_t sent) {
-  return PJ_TRUE;
-}
-
-static void on_ws_state_change(pj_websock_t *c, int state) {
-  if (state == PJ_WEBSOCK_STATE_CLOSED || state == PJ_WEBSOCK_STATE_CLOSING) {
-    WsTransport *ws_tp = (WsTransport *)pj_websock_get_userdata(c);
-    if (ws_tp) {
-      addon_log(L_DBG, "WS state change: closing transport %s\n", ws_tp->base.obj_name);
-      pjsip_transport_shutdown(&ws_tp->base);
-    }
-  }
-}
 
 #define CERT_FILE "./cert/test.pem"
 #define CERT_KEY  "./cert/test.key"
@@ -1631,14 +1406,9 @@ int __pjw_init() {
     return 1;
   }
 
-  status = pjsip_transport_register_type(PJSIP_TRANSPORT_RELIABLE, "WS", 5060, &g_ws_transport_type);
+  status = pjsip_ws_transport_init();
   if (status != PJ_SUCCESS) {
-    addon_log(L_DBG, "pjsip_transport_register_type WS failed\n");
-    return 1;
-  }
-  status = pjsip_transport_register_type(PJSIP_TRANSPORT_RELIABLE | PJSIP_TRANSPORT_SECURE, "WSS", 5061, &g_wss_transport_type);
-  if (status != PJ_SUCCESS) {
-    addon_log(L_DBG, "pjsip_transport_register_type WSS failed\n");
+    addon_log(L_DBG, "pjsip_ws_transport_init failed\n");
     return 1;
   }
 
@@ -2139,9 +1909,9 @@ int pjw_transport_create(const char *json, int *out_t_id, char *out_t_address,
     } else if (strcmp(tp, "tls") == 0) {
       type = PJSIP_TRANSPORT_TLS;
     } else if (strcmp(tp, "ws") == 0) {
-      type = (pjsip_transport_type_e)g_ws_transport_type;
+      type = PJSIP_TRANSPORT_WS;
     } else if (strcmp(tp, "wss") == 0) {
-      type = (pjsip_transport_type_e)g_wss_transport_type;
+      type = PJSIP_TRANSPORT_WSS;
     } else {
       set_error(
           "Invalid type %s. It must be one of 'udp' (default), 'tcp', 'tls', 'ws' or 'wss'",
@@ -2236,6 +2006,8 @@ int pjw_transport_create(const char *json, int *out_t_id, char *out_t_address,
     }
   } else {
     // WebSocket transport (WS or WSS)
+    pjsip_transport *sip_transport = NULL;
+
     const char *ws_url = NULL;
     if (document.HasMember("ws_url") && document["ws_url"].IsString()) {
       ws_url = document["ws_url"].GetString();
@@ -2243,144 +2015,11 @@ int pjw_transport_create(const char *json, int *out_t_id, char *out_t_address,
 
     if (ws_url) {
       // === CLIENT MODE ===
-      pj_http_uri http_uri;
-      status = pj_http_uri_parse(ws_url, &http_uri);
+      status = pjsip_ws_transport_connect(g_sip_endpt, g_ws_endpt, ws_url, &sip_transport);
       if (status != PJ_SUCCESS) {
-        set_error("Failed to parse ws_url: %s", ws_url);
+        set_error("WebSocket connection failed: %d", status);
         goto out;
       }
-
-      pj_uint16_t remote_port = pj_http_uri_port(&http_uri);
-      char str_host[PJ_MAX_HOSTNAME];
-      pj_ansi_snprintf(str_host, sizeof(str_host), "%.*s:%u",
-                       (int)http_uri.host.slen, http_uri.host.ptr, remote_port);
-      pj_str_t host = pj_str(str_host);
-
-      pj_sockaddr remote_addr;
-      status = pj_sockaddr_parse(pj_AF_UNSPEC(), 0, &host, &remote_addr);
-      if (status != PJ_SUCCESS) {
-        set_error("Failed to resolve host in ws_url");
-        goto out;
-      }
-
-      pj_pool_t *pool = pjsip_endpt_create_pool(g_sip_endpt, "ws_tp", 1000, 1000);
-      if (!pool) {
-        set_error("Unable to create pool for WebSocket transport");
-        goto out;
-      }
-
-      WsTransport *ws_tp = PJ_POOL_ZALLOC_T(pool, WsTransport);
-      ws_tp->pool = pool;
-      ws_tp->pool_rdata = pjsip_endpt_create_pool(g_sip_endpt, "ws_rdata", PJSIP_POOL_RDATA_LEN, PJSIP_POOL_RDATA_INC);
-      strcpy(ws_tp->remote_url, ws_url);
-      ws_tp->remote_addr = remote_addr;
-
-      status = pj_lock_create_recursive_mutex(pool, "ws", &ws_tp->base.lock);
-      if (status != PJ_SUCCESS) {
-        pjsip_endpt_release_pool(g_sip_endpt, pool);
-        set_error("Failed to create lock");
-        goto out;
-      }
-      status = pj_atomic_create(pool, 0, &ws_tp->base.ref_cnt);
-      if (status != PJ_SUCCESS) {
-        pjsip_endpt_release_pool(g_sip_endpt, pool);
-        set_error("Failed to create atomic");
-        goto out;
-      }
-
-      pj_ansi_snprintf(ws_tp->base.obj_name, sizeof(ws_tp->base.obj_name), "ws:%p", ws_tp);
-      ws_tp->base.pool = pool;
-      ws_tp->base.endpt = g_sip_endpt;
-      ws_tp->base.tpmgr = pjsip_endpt_get_tpmgr(g_sip_endpt);
-      ws_tp->base.send_msg = &ws_send_msg;
-      ws_tp->base.do_shutdown = &ws_do_shutdown;
-      ws_tp->base.destroy = &ws_destroy;
-
-      ws_tp->base.type_name = (char*)(type == g_wss_transport_type ? "WSS" : "WS");
-      ws_tp->base.flag = PJSIP_TRANSPORT_RELIABLE | (type == g_wss_transport_type ? PJSIP_TRANSPORT_SECURE : 0);
-      ws_tp->base.info = (char*)"WebSocket Transport";
-
-      ws_tp->base.key.type = (pjsip_transport_type_e)type;
-      ws_tp->base.key.rem_addr = ws_tp->remote_addr;
-
-      ws_tp->base.addr_len = sizeof(pj_sockaddr);
-      ws_tp->base.local_addr = ws_tp->remote_addr;
-
-      pj_str_t local_host = pj_str("127.0.0.1");
-      ws_tp->base.local_name.host = local_host;
-      ws_tp->base.local_name.port = port != 0 ? port : 5060;
-
-      ws_tp->base.remote_name.host = http_uri.host;
-      ws_tp->base.remote_name.port = remote_port;
-      ws_tp->base.dir = PJSIP_TP_DIR_OUTGOING;
-
-      status = pjsip_transport_register(ws_tp->base.tpmgr, &ws_tp->base);
-      if (status != PJ_SUCCESS) {
-        pjsip_endpt_release_pool(g_sip_endpt, pool);
-        set_error("Failed to register WebSocket transport with PJSIP");
-        goto out;
-      }
-
-      pj_websock_cb ws_cb;
-      pj_bzero(&ws_cb, sizeof(ws_cb));
-      ws_cb.on_connect_complete = &on_ws_connect_complete;
-      ws_cb.on_rx_msg = &on_ws_rx_msg;
-      ws_cb.on_accept_complete = &on_ws_accept_complete;
-      ws_cb.on_tx_msg = &on_ws_tx_msg;
-      ws_cb.on_state_change = &on_ws_state_change;
-
-      ws_tp->has_connect_result = PJ_FALSE;
-      ws_tp->is_connected = PJ_FALSE;
-      ws_tp->connect_status = PJ_SUCCESS;
-
-      pj_websock_http_hdr sub_hdr;
-      sub_hdr.key = pj_str("Sec-WebSocket-Protocol");
-      sub_hdr.val = pj_str("sip");
-
-      status = pj_websock_connect(g_ws_endpt, ws_url, &ws_cb, ws_tp, &sub_hdr, 1, &ws_tp->ws);
-      if (status != PJ_EPENDING && status != PJ_SUCCESS) {
-        set_error("pj_websock_connect failed: %d", status);
-        pjsip_transport_shutdown(&ws_tp->base);
-        goto out;
-      }
-
-      if (status == PJ_SUCCESS) {
-        ws_tp->has_connect_result = PJ_TRUE;
-        ws_tp->is_connected = PJ_TRUE;
-      } else {
-        pj_time_val timeout;
-        pj_gettimeofday(&timeout);
-        timeout.sec += 5;
-
-        while (!ws_tp->has_connect_result) {
-          pj_time_val now;
-          pj_gettimeofday(&now);
-          if (now.sec > timeout.sec || (now.sec == timeout.sec && now.msec > timeout.msec)) {
-            break;
-          }
-          pj_time_val tv = {0, 10};
-          pjsip_endpt_handle_events(g_sip_endpt, &tv);
-        }
-      }
-
-      if (!ws_tp->is_connected) {
-        set_error("WebSocket connection failed or timed out: %d", ws_tp->connect_status);
-        pjsip_transport_shutdown(&ws_tp->base);
-        goto out;
-      }
-
-      transport = new Transport;
-      transport->type = (pjsip_transport_type_e)type;
-      transport->sip_transport = &ws_tp->base;
-      transport->tpfactory = NULL;
-
-      if (!g_transport_ids.add((long)transport, t_id)) {
-        pjsip_transport_shutdown(&ws_tp->base);
-        set_error("Failed to allocate id");
-        goto out;
-      }
-
-      ws_tp->addon_transport_id = t_id;
     } else {
       // === SERVER MODE ===
       if (port == 0) {
@@ -2388,7 +2027,6 @@ int pjw_transport_create(const char *json, int *out_t_id, char *out_t_address,
         goto out;
       }
 
-      // Resolve bind address
       pj_sockaddr local_addr;
       status = pj_sockaddr_init(pj_AF_INET(), &local_addr, &address, port);
       if (status != PJ_SUCCESS) {
@@ -2396,99 +2034,23 @@ int pjw_transport_create(const char *json, int *out_t_id, char *out_t_address,
         goto out;
       }
 
-      // Setup listener callbacks
-      pj_websock_cb ws_cb;
-      pj_bzero(&ws_cb, sizeof(ws_cb));
-      ws_cb.on_accept_complete = &on_ws_accept_complete;
-
-      // Allocate listener info
-      WsListenerInfo *info = new WsListenerInfo();
-      strcpy(info->address, addr);
-      info->port = port;
-      info->type = type;
-
-      // Start listening
-      pj_websock_t *listener_ws;
-      status = pj_websock_listen(g_ws_endpt,
-          (type == g_wss_transport_type) ? PJ_WEBSOCK_TRANSPORT_TLS : PJ_WEBSOCK_TRANSPORT_TCP,
-          &local_addr, &ws_cb, info, &listener_ws);
+      pj_bool_t secure = (type == PJSIP_TRANSPORT_WSS);
+      status = pjsip_ws_transport_start(g_sip_endpt, g_ws_endpt, &local_addr, secure, &sip_transport);
       if (status != PJ_SUCCESS) {
-        delete info;
-        set_error("pj_websock_listen failed: %d", status);
+        set_error("pjsip_ws_transport_start failed: %d", status);
         goto out;
       }
+    }
 
-      // Set allowed sub-protocol
-      pj_str_t sip_proto = pj_str((char*)"sip");
-      pj_websock_set_support_subproto(listener_ws, &sip_proto, 1);
+    transport = new Transport;
+    transport->type = (pjsip_transport_type_e)type;
+    transport->sip_transport = sip_transport;
+    transport->tpfactory = NULL;
 
-      // Create a pjsip_transport for the listener (used for tag matching)
-      pj_pool_t *listener_pool = pjsip_endpt_create_pool(g_sip_endpt, "ws_lstnr", 1000, 1000);
-      if (!listener_pool) {
-        set_error("Unable to create pool for WS listener transport");
-        goto out;
-      }
-
-      pjsip_transport *listener_tp = PJ_POOL_ZALLOC_T(listener_pool, pjsip_transport);
-      listener_tp->pool = listener_pool;
-      listener_tp->endpt = g_sip_endpt;
-      listener_tp->tpmgr = pjsip_endpt_get_tpmgr(g_sip_endpt);
-
-      // Listener transport cannot send messages
-      listener_tp->send_msg = [](pjsip_transport*, pjsip_tx_data*, const pj_sockaddr_t*, int, void*, pjsip_transport_callback) -> pj_status_t {
-        return PJ_RETURN_OS_ERROR(PJ_ENOTSUP);
-      };
-      listener_tp->do_shutdown = [](pjsip_transport *t) -> pj_status_t {
-        return PJ_SUCCESS;
-      };
-      listener_tp->destroy = [](pjsip_transport *t) -> pj_status_t {
-        if (t->pool) pjsip_endpt_release_pool(t->endpt, t->pool);
-        return PJ_SUCCESS;
-      };
-
-      status = pj_lock_create_recursive_mutex(listener_pool, "ws_lstnr", &listener_tp->lock);
-      if (status != PJ_SUCCESS) {
-        pjsip_endpt_release_pool(g_sip_endpt, listener_pool);
-        set_error("Failed to create lock for WS listener");
-        goto out;
-      }
-      status = pj_atomic_create(listener_pool, 0, &listener_tp->ref_cnt);
-      if (status != PJ_SUCCESS) {
-        pjsip_endpt_release_pool(g_sip_endpt, listener_pool);
-        set_error("Failed to create atomic for WS listener");
-        goto out;
-      }
-
-      pj_ansi_snprintf(listener_tp->obj_name, sizeof(listener_tp->obj_name), "ws_lstnr:%p", listener_tp);
-      listener_tp->type_name = (char*)(type == g_wss_transport_type ? "WSS" : "WS");
-      listener_tp->flag = PJSIP_TRANSPORT_RELIABLE | (type == g_wss_transport_type ? PJSIP_TRANSPORT_SECURE : 0);
-      listener_tp->info = (char*)"WebSocket Listener";
-      listener_tp->key.type = (pjsip_transport_type_e)type;
-      listener_tp->addr_len = sizeof(pj_sockaddr);
-      pj_str_t lh = pj_str((char*)addr);
-      listener_tp->local_name.host = lh;
-      listener_tp->local_name.port = port;
-      listener_tp->dir = PJSIP_TP_DIR_INCOMING;
-
-      status = pjsip_transport_register(listener_tp->tpmgr, listener_tp);
-      if (status != PJ_SUCCESS) {
-        pjsip_endpt_release_pool(g_sip_endpt, listener_pool);
-        set_error("Failed to register WS listener transport with PJSIP");
-        goto out;
-      }
-
-      transport = new Transport;
-      transport->type = (pjsip_transport_type_e)type;
-      transport->sip_transport = listener_tp;
-      transport->tpfactory = NULL;
-
-      if (!g_transport_ids.add((long)transport, t_id)) {
-        pjsip_transport_shutdown(listener_tp);
-        set_error("Failed to allocate id");
-        goto out;
-      }
-
-      g_ws_listeners.push_back(listener_ws);
+    if (!g_transport_ids.add((long)transport, t_id)) {
+      pjsip_transport_shutdown(sip_transport);
+      set_error("Failed to allocate id");
+      goto out;
     }
   }
 
@@ -2642,7 +2204,7 @@ int pjw_account_create(int t_id, const char *json, int *out_acc_id) {
     goto out;
   }
 
-  if (t->type == PJSIP_TRANSPORT_UDP || t->type == g_ws_transport_type || t->type == g_wss_transport_type) {
+  if (t->type == PJSIP_TRANSPORT_UDP || t->type == PJSIP_TRANSPORT_WS || t->type == PJSIP_TRANSPORT_WSS) {
     local_port = t->sip_transport->local_name.port;
     len = t->sip_transport->local_name.host.slen;
     strncpy(local_addr, t->sip_transport->local_name.host.ptr, len);
@@ -2701,7 +2263,7 @@ int pjw_account_create(int t_id, const char *json, int *out_acc_id) {
   }
 
   pj_bzero(&sel, sizeof(sel));
-  if (t->type == PJSIP_TRANSPORT_UDP || t->type == g_ws_transport_type || t->type == g_wss_transport_type) {
+  if (t->type == PJSIP_TRANSPORT_UDP || t->type == PJSIP_TRANSPORT_WS || t->type == PJSIP_TRANSPORT_WSS) {
     sel.type = PJSIP_TPSELECTOR_TRANSPORT;
     sel.u.transport = t->sip_transport;
   } else {
@@ -3199,7 +2761,7 @@ int pjw_request_create(long t_id, const char *json, long *out_request_id,
   }
   request_uri_s = pj_str(request_uri);
 
-  if (t->type == PJSIP_TRANSPORT_UDP || t->type == g_ws_transport_type || t->type == g_wss_transport_type) {
+  if (t->type == PJSIP_TRANSPORT_UDP || t->type == PJSIP_TRANSPORT_WS || t->type == PJSIP_TRANSPORT_WSS) {
     build_local_contact(local_contact, t->sip_transport, "sip-lab");
   } else {
     build_local_contact_from_tpfactory(local_contact, t->tpfactory, "sip-lab",
@@ -3468,7 +3030,7 @@ int pjw_call_create(long t_id, const char *json, long *out_call_id,
     }
   }
 
-  if (t->type == PJSIP_TRANSPORT_UDP || t->type == g_ws_transport_type || t->type == g_wss_transport_type) {
+  if (t->type == PJSIP_TRANSPORT_UDP || t->type == PJSIP_TRANSPORT_WS || t->type == PJSIP_TRANSPORT_WSS) {
     build_local_contact(local_contact, t->sip_transport, contact_username);
   } else {
     build_local_contact_from_tpfactory(local_contact, t->tpfactory,
@@ -3520,7 +3082,7 @@ bool dlg_set_transport_by_t(Transport *t, pjsip_dialog *dlg) {
       (pjsip_tpselector *)pj_pool_zalloc(dlg->pool, sizeof(pjsip_tpselector));
   // pjsip_tpselector sel;
   // pj_bzero(&sel, sizeof(sel));
-  if (t->type == PJSIP_TRANSPORT_UDP || t->type == g_ws_transport_type || t->type == g_wss_transport_type) {
+  if (t->type == PJSIP_TRANSPORT_UDP || t->type == PJSIP_TRANSPORT_WS || t->type == PJSIP_TRANSPORT_WSS) {
     sel->type = PJSIP_TPSELECTOR_TRANSPORT;
     sel->u.transport = t->sip_transport;
   } else {
@@ -3596,10 +3158,10 @@ void build_transport_tag_from_pjsip_transport(char *dest, pjsip_transport *t) {
   } else if (t->key.type == PJSIP_TRANSPORT_TCP) {
     type = "tcp";
     port = tport ? tport : 5060;
-  } else if (t->key.type == g_ws_transport_type) {
+  } else if (t->key.type == PJSIP_TRANSPORT_WS) {
     type = "ws";
     port = tport ? tport : 5060;
-  } else if (t->key.type == g_wss_transport_type) {
+  } else if (t->key.type == PJSIP_TRANSPORT_WSS) {
     type = "wss";
     port = tport ? tport : 5061;
   } else {
@@ -3625,9 +3187,9 @@ void build_local_contact(char *dest, pjsip_transport *t,
     p += sprintf(p, ">");
   } else if (t->key.type == PJSIP_TRANSPORT_TCP) {
     p += sprintf(p, ";transport=tcp>");
-  } else if (t->key.type == g_ws_transport_type) {
+  } else if (t->key.type == PJSIP_TRANSPORT_WS) {
     p += sprintf(p, ";transport=ws>");
-  } else if (t->key.type == g_wss_transport_type) {
+  } else if (t->key.type == PJSIP_TRANSPORT_WSS) {
     p += sprintf(p, ";transport=wss>");
   } else {
     p += sprintf(p, ";transport=tls>");
@@ -7273,11 +6835,6 @@ int __pjw_shutdown(int clean_up) {
 
 	PJW_UNLOCK();
 
-    addon_log(L_DBG, "Closing WS listeners\n");
-    for (auto *ws : g_ws_listeners) {
-        if (ws) pj_websock_close(ws, PJ_WEBSOCK_SC_NORMAL_CLOSURE, NULL);
-    }
-    g_ws_listeners.clear();
 
 	//uint32_t wait = 100000 * (g_call_ids.id_map.size() + g_account_ids.id_map.size()));
 	//wait += 1000000; //Wait one whole second to permit packet capture to get any final packets
