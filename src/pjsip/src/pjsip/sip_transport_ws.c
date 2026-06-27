@@ -68,6 +68,8 @@ struct ws_transport
     pj_sockaddr         remote_addr;
     pj_bool_t           is_connected;
     pj_bool_t           is_wss;
+    pj_bool_t           has_connect_result;
+    pj_status_t         connect_status;
 };
 
 /* Global linked list of active listeners */
@@ -263,11 +265,13 @@ static pj_bool_t on_ws_connect_complete(pj_websock_t *c, pj_status_t status)
     if (!ws_tp)
         return PJ_TRUE;
 
+    ws_tp->has_connect_result = PJ_TRUE;
     if (status == PJ_SUCCESS) {
         ws_tp->is_connected = PJ_TRUE;
         PJ_LOG(4, (ws_tp->base.obj_name, "WebSocket connection established"));
     } else {
         ws_tp->ws = NULL;
+        ws_tp->connect_status = status;
         ws_perror(ws_tp->base.obj_name, "WebSocket connection failed", status);
         ws_init_shutdown(ws_tp, status);
     }
@@ -805,6 +809,7 @@ PJ_DEF(pj_status_t) pjsip_ws_transport_connect(
     ws_cb.on_tx_msg = &on_ws_tx_msg;
     ws_cb.on_state_change = &on_ws_state_change;
 
+    ws_tp->has_connect_result = PJ_FALSE;
     ws_tp->is_connected = PJ_FALSE;
     ws_tp->ws = NULL;
 
@@ -822,13 +827,14 @@ PJ_DEF(pj_status_t) pjsip_ws_transport_connect(
 
     if (status == PJ_SUCCESS) {
         ws_tp->is_connected = PJ_TRUE;
+        ws_tp->has_connect_result = PJ_TRUE;
     } else {
         /* Wait for connection with timeout */
         pj_time_val timeout;
         pj_gettimeofday(&timeout);
         timeout.sec += 5;
 
-        while (!ws_tp->is_connected) {
+        while (!ws_tp->has_connect_result) {
             pj_time_val now;
             pj_gettimeofday(&now);
             if (now.sec > timeout.sec ||
@@ -843,7 +849,7 @@ PJ_DEF(pj_status_t) pjsip_ws_transport_connect(
 
     if (!ws_tp->is_connected) {
         pjsip_transport_shutdown(&ws_tp->base);
-        return PJ_ETIMEDOUT;
+        return ws_tp->connect_status ? ws_tp->connect_status : PJ_ETIMEDOUT;
     }
 
     *p_transport = &ws_tp->base;
