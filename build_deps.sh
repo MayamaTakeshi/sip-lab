@@ -110,7 +110,8 @@ if [[ ! -d pjwebsock ]]
 then
     git clone https://github.com/jimying/pjwebsock
     cd pjwebsock
-    git checkout a0616ea27f01d5e3bdfd5b801fb1499473a0b0cb
+    #git checkout a0616ea27f01d5e3bdfd5b801fb1499473a0b0cb
+    git checkout ed8bfee79e26ef4e023bac1359301c201ee133af
 fi
 
 
