@@ -69,6 +69,9 @@ PJ_DECL(pj_status_t) pjsip_ws_transport_start(
  * @param endpt         The SIP endpoint.
  * @param ws_endpt      The WebSocket endpoint.
  * @param ws_url        WebSocket URL (e.g. "ws://127.0.0.1:8080/sip").
+ * @param hdrs          Additional HTTP headers for the upgrade request
+ *                      (can be NULL).
+ * @param hdr_cnt       Number of headers in hdrs.
  * @param p_transport   Pointer to receive the created transport.
  *
  * @return PJ_SUCCESS on success.
@@ -77,6 +80,8 @@ PJ_DECL(pj_status_t) pjsip_ws_transport_connect(
     pjsip_endpoint *endpt,
     pj_websock_endpoint *ws_endpt,
     const char *ws_url,
+    const pj_websock_http_hdr *hdrs,
+    int hdr_cnt,
     pjsip_transport **p_transport);
 
 PJ_END_DECL

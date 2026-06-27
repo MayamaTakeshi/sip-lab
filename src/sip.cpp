@@ -1859,7 +1859,7 @@ int pjw_transport_create(const char *json, int *out_t_id, char *out_t_address,
 
   char buffer[MAX_JSON_INPUT];
 
-  const char *valid_params[] = {"address", "port", "type", "cert_file", "key_file", "ws_url", ""};
+  const char *valid_params[] = {"address", "port", "type", "cert_file", "key_file", "ws_url", "headers", ""};
 
   Document document;
 
@@ -2015,7 +2015,41 @@ int pjw_transport_create(const char *json, int *out_t_id, char *out_t_address,
 
     if (ws_url) {
       // === CLIENT MODE ===
-      status = pjsip_ws_transport_connect(g_sip_endpt, g_ws_endpt, ws_url, &sip_transport);
+      pj_websock_http_hdr *extra_hdrs = NULL;
+      int extra_hdr_cnt = 0;
+      pj_pool_t *hdr_pool = NULL;
+
+      if (document.HasMember("headers") && document["headers"].IsObject()) {
+        const Value &hdrs_obj = document["headers"];
+        extra_hdr_cnt = hdrs_obj.MemberCount();
+        if (extra_hdr_cnt > 0) {
+          hdr_pool = pjsip_endpt_create_pool(g_sip_endpt, "ws_hdrs%p", 1024, 512);
+          if (!hdr_pool) {
+            set_error("Failed to create pool for headers");
+            goto out;
+          }
+          extra_hdrs = (pj_websock_http_hdr*)pj_pool_alloc(
+              hdr_pool, extra_hdr_cnt * sizeof(pj_websock_http_hdr));
+          int i = 0;
+          for (Value::ConstMemberIterator it = hdrs_obj.MemberBegin();
+               it != hdrs_obj.MemberEnd(); ++it, ++i)
+          {
+            extra_hdrs[i].key = pj_str((char*)it->name.GetString());
+            if (it->value.IsString()) {
+              extra_hdrs[i].val = pj_str((char*)it->value.GetString());
+            } else {
+              extra_hdrs[i].val = pj_str((char*)"");
+            }
+          }
+        }
+      }
+
+      status = pjsip_ws_transport_connect(g_sip_endpt, g_ws_endpt, ws_url,
+                                          extra_hdrs, extra_hdr_cnt,
+                                          &sip_transport);
+      if (hdr_pool) {
+        pjsip_endpt_release_pool(g_sip_endpt, hdr_pool);
+      }
       if (status != PJ_SUCCESS) {
         set_error("WebSocket connection failed: %d", status);
         goto out;

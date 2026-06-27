@@ -684,6 +684,8 @@ PJ_DEF(pj_status_t) pjsip_ws_transport_connect(
                         pjsip_endpoint *endpt,
                         pj_websock_endpoint *ws_endpt,
                         const char *ws_url,
+                        const pj_websock_http_hdr *hdrs,
+                        int hdr_cnt,
                         pjsip_transport **p_transport)
 {
     pj_http_uri http_uri;
@@ -697,6 +699,7 @@ PJ_DEF(pj_status_t) pjsip_ws_transport_connect(
 
     PJ_ASSERT_RETURN(endpt && ws_endpt && ws_url && p_transport,
                      PJ_EINVAL);
+    PJ_ASSERT_RETURN(hdr_cnt == 0 || hdrs, PJ_EINVAL);
 
     /* Parse the WS URL */
     status = pj_http_uri_parse(ws_url, &http_uri);
@@ -813,13 +816,20 @@ PJ_DEF(pj_status_t) pjsip_ws_transport_connect(
     ws_tp->is_connected = PJ_FALSE;
     ws_tp->ws = NULL;
 
-    /* Set the SIP sub-protocol header */
-    pj_websock_http_hdr sub_hdr;
-    sub_hdr.key = pj_str("Sec-WebSocket-Protocol");
-    sub_hdr.val = pj_str("sip");
+    /* Build header list: SIP sub-protocol + user headers */
+    int total_hdr_cnt = 1 + hdr_cnt;
+    pj_websock_http_hdr *all_hdrs = (pj_websock_http_hdr*)
+        pj_pool_alloc(pool, total_hdr_cnt * sizeof(pj_websock_http_hdr));
+
+    all_hdrs[0].key = pj_str("Sec-WebSocket-Protocol");
+    all_hdrs[0].val = pj_str("sip");
+
+    if (hdrs && hdr_cnt > 0) {
+        pj_memcpy(&all_hdrs[1], hdrs, hdr_cnt * sizeof(pj_websock_http_hdr));
+    }
 
     status = pj_websock_connect(ws_endpt, ws_url, &ws_cb, ws_tp,
-                                &sub_hdr, 1, &ws_tp->ws);
+                                all_hdrs, total_hdr_cnt, &ws_tp->ws);
     if (status != PJ_EPENDING && status != PJ_SUCCESS) {
         pjsip_transport_shutdown(&ws_tp->base);
         return status;
