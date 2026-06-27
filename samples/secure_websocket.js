@@ -14,27 +14,27 @@ async function test() {
 
     console.log(sip.start((data) => { console.log(data) }))
 
-    // Create a WebSocket server transport (listener)
+    // Create a WSS server transport (secure WebSocket listener)
     const t2 = sip.transport.create({
         address: "127.0.0.1",
-        port: 6666,
-        type: "ws"
+        port: 6062,
+        type: "wss",
     })
 
-    // Create a WebSocket client transport connecting to our server
+    // Create a WSS client transport connecting to our server
     const t1 = sip.transport.create({
         address: "127.0.0.1",
-        type: "ws",
-        ws_url: "ws://127.0.0.1:6666/sip"
+        type: "wss",
+        ws_url: "wss://127.0.0.1:6062/sip",
     })
 
     console.log("t1", t1)
     console.log("t2", t2)
 
-    // Make the call from t1 to t2 over WebSocket
+    // Make the call from t1 to t2 over Secure WebSocket
     const oc = sip.call.create(t1.id, {
         from_uri: 'sip:alice@test.com',
-        to_uri: 'sip:bob@127.0.0.1:8080',
+        to_uri: 'sip:bob@127.0.0.1:6062',
     })
 
     // Wait for the call to arrive at t2 and 100 Trying response at t1
@@ -119,7 +119,7 @@ async function test() {
         },
     ], 2000)
 
-    console.log("WebSocket test successful")
+    console.log("Secure WebSocket test successful")
 
     sip.stop()
     process.exit(0)

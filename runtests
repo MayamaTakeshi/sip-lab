@@ -8,16 +8,21 @@ Usage: $0 [-g]
 
 Details:
       -g : run each test inside gdb
+      -e : include samples_extra
 EOF
 }
 
 use_gdb=0
+extra=0
 
-while getopts "gh" o; do
+while getopts "geh" o; do
     case "${o}" in
         g)
             use_gdb=1
 	    ;;
+        e)
+            extra=1;
+            ;;
         h)
             usage
 	    exit 0
@@ -42,7 +47,14 @@ function output_successful_tests() {
 
 echo
 
-for i in $(ls samples/*.js)
+tests=$(ls samples/*.js)
+
+if [[ "$extra" == 1 ]]
+then
+    tests="$tests `ls samples_extra/*.js`"
+fi
+
+for i in $tests
 do
     start_time=$(date +%s.%N)
 
@@ -66,7 +78,6 @@ do
 	successful_tests+=("$i: duration=$formatted_duration")
 
 	echo
-	echo "$i failed"
     fi
 done
 
