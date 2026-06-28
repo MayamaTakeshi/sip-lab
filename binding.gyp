@@ -41,6 +41,7 @@
           ],
           'link_settings': {
               'libraries': [
+                '-Wl,--start-group',
                 '-L ../3rdParty/pjproject/pjnath/lib',
                 '-L ../3rdParty/pjproject/pjlib/lib',
                 '-L ../3rdParty/pjproject/pjlib-util/lib',
@@ -94,6 +95,7 @@
 		'-lflite_cmu_us_slt',
 		'-lflite_cmu_us_kal16',
                 '-l srtp-x86_64-unknown-linux-gnu',
+                '-Wl,--end-group',
               ],
           },
        },
