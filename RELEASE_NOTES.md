@@ -3,6 +3,8 @@
 ## 1.40.0 (not released yet)
   - [Add SIP over WebSocket support](https://github.com/MayamaTakeshi/sip-lab/issues/51)
   - [Add support for webrtc](https://github.com/MayamaTakeshi/sip-lab/issues/81)
+  - [codec gsm not working](https://github.com/MayamaTakeshi/sip-lab/issues/127)
+  - [Codec ilbc not working](https://github.com/MayamaTakeshi/sip-lab/issues/90)
 
 ## 1.39.0
   - [failure to report mrcp message in case it is sent without delay from the previous one](https://github.com/MayamaTakeshi/sip-lab/issues/125)
