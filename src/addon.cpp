@@ -1264,6 +1264,32 @@ Napi::Value set_codecs(const Napi::CallbackInfo &info) {
   return env.Null();
 }
 
+Napi::Value set_opus_config(const Napi::CallbackInfo &info) {
+  Napi::Env env = info.Env();
+
+  if (info.Length() != 1) {
+    Napi::Error::New(env, "Wrong number of arguments. Expected: config")
+        .ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
+  if (!info[0].IsString()) {
+    Napi::TypeError::New(env, "config must be a JSON string.")
+        .ThrowAsJavaScriptException();
+    return env.Null();
+  }
+  string json = info[0].As<Napi::String>().Utf8Value();
+
+  int res = pjw_set_opus_config(json.c_str());
+
+  if (res != 0) {
+    Napi::Error::New(env, pjw_get_error()).ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
+  return env.Null();
+}
+
 Napi::Value notify(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
 
@@ -1649,6 +1675,7 @@ Napi::Object init(Napi::Env env, Napi::Object exports) {
 
   exports.Set("get_codecs", Napi::Function::New(env, get_codecs));
   exports.Set("set_codecs", Napi::Function::New(env, set_codecs));
+  exports.Set("_set_opus_config", Napi::Function::New(env, set_opus_config));
 
   exports.Set("notify", Napi::Function::New(env, notify));
   exports.Set("notify_xfer", Napi::Function::New(env, notify_xfer));

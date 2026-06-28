@@ -111,4 +111,6 @@ addon.subscription = {
     subscribe: (s_id, params) => { return addon.subscription_subscribe(s_id, JSON.stringify(params)) },
 }
 
+addon.set_opus_config = (params) => { return addon._set_opus_config(JSON.stringify(params)) }
+
 module.exports = addon;

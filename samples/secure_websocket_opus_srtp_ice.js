@@ -2,6 +2,7 @@ const sip = require('../index.js')
 const Zeq = require('@mayama/zeq')
 const m = require('data-matching')
 const sip_msg = require('sip-matching')
+const assert = require('assert')
 
 var z = new Zeq()
 
@@ -123,6 +124,15 @@ async function test() {
             media_id: 0,
         },
     ], 2000)
+
+    stat1 = JSON.parse(sip.call.get_stream_stat(oc.id, {media_id: 0}))
+    stat2 = JSON.parse(sip.call.get_stream_stat(ic.id, {media_id: 0}))
+
+    console.log("stat1", stat1)
+    console.log("stat2", stat2)
+
+    assert(stat1.CodecInfo == "opus/8000/1")
+    assert(stat2.CodecInfo == "opus/8000/1")
 
     // Terminate the call from t1 side
     sip.call.terminate(oc.id)

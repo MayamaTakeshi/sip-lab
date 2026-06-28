@@ -10,7 +10,7 @@
     "install": "node-gyp-build",
     "build": "node-gyp build",
     "rebuild": "node-gyp rebuild",
-    "test": "./runtests"
+    "test": "./runtests -a 3"
   },
   "repository": {
     "type": "git",

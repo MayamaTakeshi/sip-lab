@@ -6927,6 +6927,120 @@ out:
   return 0;
 }
 
+int pjw_set_opus_config(const char *json) {
+  char buffer[4096];
+  Document document;
+
+  if (!parse_json(document, json, buffer, sizeof(buffer))) {
+    return 1;
+  }
+
+  const char *valid_params[] = {
+    "sample_rate", "channel_cnt", "bit_rate", "packet_loss",
+    "complexity", "cbr", "frm_ptime", ""
+  };
+
+  if (!validate_params(document, valid_params)) {
+    return 1;
+  }
+
+  PJW_LOCK();
+
+  pjmedia_codec_mgr *codec_mgr;
+  codec_mgr = pjmedia_endpt_get_codec_mgr(g_med_endpt);
+  if (!codec_mgr) {
+    set_error("pjmedia_endpt_get_codec_mgr failed");
+    PJW_UNLOCK();
+    return 1;
+  }
+
+  pjmedia_codec_opus_config opus_cfg;
+  pjmedia_codec_opus_get_config(&opus_cfg);
+
+  unsigned tmp;
+  bool btmp;
+  if (json_get_uint_param(document, "sample_rate", true, &tmp) == FOUND) {
+    if (tmp != 8000 && tmp != 12000 && tmp != 16000 && tmp != 24000 && tmp != 48000) {
+      set_error("sample_rate must be 8000, 12000, 16000, 24000, or 48000");
+      PJW_UNLOCK();
+      return 1;
+    }
+    opus_cfg.sample_rate = tmp;
+  }
+  if (json_get_uint_param(document, "channel_cnt", true, &tmp) == FOUND) {
+    if (tmp != 1 && tmp != 2) {
+      set_error("channel_cnt must be 1 or 2");
+      PJW_UNLOCK();
+      return 1;
+    }
+    opus_cfg.channel_cnt = tmp;
+  }
+  if (json_get_uint_param(document, "bit_rate", true, &tmp) == FOUND) {
+    if (tmp > 510000) {
+      set_error("bit_rate must be 0 (auto) or up to 510000");
+      PJW_UNLOCK();
+      return 1;
+    }
+    opus_cfg.bit_rate = tmp;
+  }
+  if (json_get_uint_param(document, "packet_loss", true, &tmp) == FOUND) {
+    if (tmp > 99) {
+      set_error("packet_loss must be 0-99");
+      PJW_UNLOCK();
+      return 1;
+    }
+    opus_cfg.packet_loss = tmp;
+  }
+  if (json_get_uint_param(document, "complexity", true, &tmp) == FOUND) {
+    if (tmp > 10) {
+      set_error("complexity must be 0-10");
+      PJW_UNLOCK();
+      return 1;
+    }
+    opus_cfg.complexity = tmp;
+  }
+  if (json_get_uint_param(document, "frm_ptime", true, &tmp) == FOUND) {
+    opus_cfg.frm_ptime = tmp;
+  }
+  if (json_get_bool_param(document, "cbr", true, &btmp) == FOUND) {
+    opus_cfg.cbr = btmp;
+  }
+
+  unsigned cnt = 1;
+  const pjmedia_codec_info *pci;
+  pj_str_t codec_id = pj_str((char *)"opus/48000/2");
+  pj_status_t status;
+  status = pjmedia_codec_mgr_find_codecs_by_id(codec_mgr, &codec_id, &cnt, &pci, NULL);
+  if (status != PJ_SUCCESS) {
+    set_error("Failed to find opus codec");
+    PJW_UNLOCK();
+    return 1;
+  }
+
+  pjmedia_codec_param param;
+  status = pjmedia_codec_mgr_get_default_param(codec_mgr, pci, &param);
+  if (status != PJ_SUCCESS) {
+    set_error("pjmedia_codec_mgr_get_default_param failed");
+    PJW_UNLOCK();
+    return 1;
+  }
+
+  /* Clear dec_fmtp so generate_fmtp (inside pjmedia_codec_opus_set_default_param)
+   * builds it fresh from scratch rather than removing individual entries.
+   * This works around a bug in remove_fmtp that doesn't properly shift entries. */
+  param.setting.dec_fmtp.cnt = 0;
+
+  status = pjmedia_codec_opus_set_default_param(&opus_cfg, &param);
+  if (status != PJ_SUCCESS) {
+    set_error("pjmedia_codec_opus_set_default_param failed");
+    PJW_UNLOCK();
+    return 1;
+  }
+
+  PJW_UNLOCK();
+  return 0;
+}
+
 int pjw_disable_telephone_event() {
 	PJW_LOCK();
 
