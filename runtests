@@ -45,13 +45,24 @@ while getopts "gef:a:h" o; do
 done
 shift $((OPTIND-1))
 
-successful_tests=()
+passed_on_first_try=()
+passed_on_retry=()
 failed_tests=()
 
-function output_successful_tests() {
-    if [ ${#successful_tests[@]} -ne 0 ]; then
-        echo "Successful tests:"
-        for t in "${successful_tests[@]}"
+function output_passed_on_first_try_tests() {
+    if [ ${#passed_on_first_try[@]} -ne 0 ]; then
+        echo "Passed on first try:"
+        for t in "${passed_on_first_try[@]}"
+        do
+            echo "  - $t"
+        done
+    fi
+}
+
+function output_passed_on_retry_tests() {
+    if [ ${#passed_on_retry[@]} -ne 0 ]; then
+        echo "Passed on retry (flaky tests):"
+        for t in "${passed_on_retry[@]}"
         do
             echo "  - $t"
         done
@@ -127,11 +138,12 @@ do
         formatted_duration=$(printf "%.2f seconds" $duration)
         
         success_message="$i: duration=$formatted_duration"
-        # The variable c comes from the retry loop
         if [[ $c -gt 1 ]]; then
             success_message+=" (succeeded after $c attempts)"
+            passed_on_retry+=("$success_message")
+        else
+            passed_on_first_try+=("$success_message")
         fi
-        successful_tests+=("$success_message")
     fi
     echo
 done
@@ -139,7 +151,9 @@ done
 echo
 
 if [ ${#failed_tests[@]} -ne 0 ]; then
-    output_successful_tests
+    output_passed_on_first_try_tests
+    echo
+    output_passed_on_retry_tests
     echo
     output_failed_tests
     echo
@@ -149,7 +163,9 @@ if [ ${#failed_tests[@]} -ne 0 ]; then
 else
     echo "Success. All tests passed"
     echo
-    output_successful_tests
+    output_passed_on_first_try_tests
+    echo
+    output_passed_on_retry_tests
     echo
     echo "Everything OK"
     echo
