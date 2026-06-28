@@ -1,6 +1,11 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 
+/* Include pjwebsock before pjproject to prevent include-guard collision:
+ * both pjwebsock/websock.h and pjproject/pjlib-util/websock.h use the same
+ * guard (__PJLIB_UTIL_WEBSOCK_H__). Our server-side pjwebsock must win. */
+#include "websock.h"
+
 #include "sip.hpp"
 
 #include <deque>
@@ -21,7 +26,6 @@
 #include "idmanager.hpp"
 #include "event_templates.hpp"
 
-#include "websock.h"
 #include "http.h"
 #include <pjsip/sip_transport_ws.h>
 #include <pjmedia/transport_ice.h>
@@ -732,7 +736,9 @@ const char *translate_pjsip_inv_state(int state) {
 static pj_bool_t create_transport_srtp(pjmedia_transport *med_transport, pjmedia_transport **srtp) {
 	pjmedia_srtp_setting opt;
 	pjmedia_srtp_setting_default(&opt);
-	printf("calling pjmedia_transport_srtp_create\n");
+	opt.keying_count = 2;
+	opt.keying[0] = PJMEDIA_SRTP_KEYING_DTLS_SRTP;
+	opt.keying[1] = PJMEDIA_SRTP_KEYING_SDES;
 	return pjmedia_transport_srtp_create(g_med_endpt, med_transport, &opt, srtp);
 }
 
@@ -7718,7 +7724,7 @@ bool process_media(Call *call, pjsip_dialog *dlg, Document &document, bool answe
       sdp->media[sdp->media_count++] = media;
     }
 
-    if(me->endpoint.audio && me->endpoint.audio->med_transport) {
+    if(me->type == ENDPOINT_TYPE_AUDIO && me->endpoint.audio && me->endpoint.audio->med_transport) {
       pj_status_t status = pjmedia_transport_encode_sdp(me->endpoint.audio->med_transport, dlg->pool, sdp, rem_sdp, i);
       if(status != PJ_SUCCESS) {
         addon_log(L_DBG, "pjmedia_transport_encode_sdp failed");
@@ -7726,9 +7732,15 @@ bool process_media(Call *call, pjsip_dialog *dlg, Document &document, bool answe
       }
 
       if(me->secure) {
-        // The below must be done after pjmedia_transport_encode_sdp() because although at this point med_transport is a transport_srtp, it calls the transport_encode_sdp of the underlying transpor_udp and it will fail when it sees "RTP/SAVP" instead of "RTP/AVP"
-        // So we change from RTP/AVP to RTP/SAVP after we add the crypto lines.
-        pj_strdup2(dlg->pool, &sdp->media[i]->desc.transport, "RTP/SAVP");
+        // The keying method (SDES/DTLS) may have already changed the transport.
+        // If it's still "RTP/AVP", we change to "RTP/SAVP" for SDES.
+        // If it was changed to e.g. "UDP/TLS/RTP/SAVPF" by DTLS, leave it.
+        pj_str_t rtp_avp = pj_str("RTP/AVP");
+        if (pj_strcmp(&sdp->media[i]->desc.transport, &rtp_avp) == 0) {
+          pj_strdup2(dlg->pool, &sdp->media[i]->desc.transport, "RTP/SAVP");
+        }
+        // Update me->transport to match actual transport in SDP.
+        pj_strdup(dlg->pool, &me->transport, &sdp->media[i]->desc.transport);
       }
     }
   }

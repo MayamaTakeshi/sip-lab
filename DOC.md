@@ -21,7 +21,6 @@ TODO:
 
 - add support for video playing/recording from/to file
 - add support for T.38 fax
-- add support for WebRTC
 - add support for MSRP
 
 ## Installation

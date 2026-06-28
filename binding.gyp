@@ -25,9 +25,10 @@
           ],
           'conditions': [
             [ 'OS!="win"', {
-              'cflags': ['-g'],
+              'cflags': ['-g', '-DPJ_HAS_SSL_SOCK=1'],
               'cflags_cc': [
                 '-g',
+                '-DPJ_HAS_SSL_SOCK=1',
                 '-fexceptions',
                 '-Wno-maybe-uninitialized',
                 '-fPIC',

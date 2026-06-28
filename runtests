@@ -4,88 +4,153 @@ set -o nounset
 
 function usage() {
     cat <<EOF
-Usage: $0 [-g]
+Usage: $0 [-g] [-e] [-f test_name] [-a attempts]
 
 Details:
       -g : run each test inside gdb
       -e : include samples_extra
+      -f : start from a specific test, skipping any test before it
+      -a : if test fails, it can be retried up to XX times (default is 1)
 EOF
 }
 
 use_gdb=0
 extra=0
+from_test=""
+attempts=1
 
-while getopts "geh" o; do
+while getopts "gef:a:h" o; do
     case "${o}" in
         g)
             use_gdb=1
-	    ;;
+            ;;
         e)
-            extra=1;
+            extra=1
+            ;;
+        f)
+            from_test=${OPTARG}
+            ;;
+        a)
+            attempts=${OPTARG}
             ;;
         h)
             usage
-	    exit 0
-	    ;;
-	*)
+            exit 0
+            ;;
+        *)
             usage
-	    exit 1
-	    ;;
+            exit 1
+            ;;
     esac
 done
 shift $((OPTIND-1))
 
 successful_tests=()
+failed_tests=()
 
 function output_successful_tests() {
-    echo "Successful tests:"
-    for t in "${successful_tests[@]}"
-    do
-        echo "  - $t"
-    done
+    if [ ${#successful_tests[@]} -ne 0 ]; then
+        echo "Successful tests:"
+        for t in "${successful_tests[@]}"
+        do
+            echo "  - $t"
+        done
+    fi
+}
+
+function output_failed_tests() {
+    if [ ${#failed_tests[@]} -ne 0 ]; then
+        echo "Failed tests:"
+        for t in "${failed_tests[@]}"
+        do
+            echo "  - $t"
+        done
+    fi
 }
 
 echo
 
-tests=$(ls samples/*.js)
-
-if [[ "$extra" == 1 ]]
-then
-    tests="$tests `ls samples_extra/*.js`"
+# Get list of tests and sort them
+test_patterns="samples/*.js"
+if [[ "$extra" == 1 ]]; then
+    test_patterns="$test_patterns samples_extra/*.js"
 fi
 
-for i in $tests
-do
-    start_time=$(date +%s.%N)
+mapfile -t sorted_tests < <(ls -1 $test_patterns 2>/dev/null | sort)
 
-    if [[ $use_gdb -eq 0 ]]
-    then
-        node $i
-    else
-        gdb -ex "handle SIGSEGV stop" -ex "run" -ex "bt" -ex "quit" --args node $i
+start_running=0
+if [[ -z "$from_test" ]]; then
+    start_running=1
+fi
+
+for i in "${sorted_tests[@]}"
+do
+    if [[ "$start_running" -eq 0 && "$i" == "$from_test" ]]; then
+        start_running=1
     fi
 
-    if [[ $? -ne 0 ]]
+    if [[ "$start_running" -eq 0 ]]; then
+        echo "Skipping $i"
+        continue
+    fi
+
+    echo "Running test: $i"
+    start_time=$(date +%s.%N)
+    
+    success=0
+    for (( c=1; c<=$attempts; c++ ))
+    do
+        if [[ $use_gdb -eq 0 ]]
+        then
+            node $i
+        else
+            gdb -ex "handle SIGSEGV stop" -ex "run" -ex "bt" -ex "quit" --args node $i
+        fi
+
+        if [[ $? -eq 0 ]]; then
+            success=1
+            break
+        fi
+
+        if [[ $c -lt $attempts ]]; then
+            echo "Test $i failed. Retrying (attempt $(($c + 1)) of $attempts)..."
+        fi
+    done
+
+    if [[ $success -eq 0 ]]
     then
-        echo "$i failed"
-	echo
-	output_successful_tests
-        exit 1
+        echo "$i failed after $attempts attempts"
+        failed_tests+=("$i")
     else
         end_time=$(date +%s.%N)
         duration=$(echo "$end_time - $start_time" | bc)
-	formatted_duration=$(printf "%.2f seconds" $duration)
-	successful_tests+=("$i: duration=$formatted_duration")
-
-	echo
+        formatted_duration=$(printf "%.2f seconds" $duration)
+        
+        success_message="$i: duration=$formatted_duration"
+        # The variable c comes from the retry loop
+        if [[ $c -gt 1 ]]; then
+            success_message+=" (succeeded after $c attempts)"
+        fi
+        successful_tests+=("$success_message")
     fi
+    echo
 done
 
 echo
 
-echo "Success. All tests passed"
-echo
-output_successful_tests
-echo
-echo "Everything OK"
-echo
+if [ ${#failed_tests[@]} -ne 0 ]; then
+    output_successful_tests
+    echo
+    output_failed_tests
+    echo
+    echo "Some tests failed."
+    echo
+    exit 1
+else
+    echo "Success. All tests passed"
+    echo
+    output_successful_tests
+    echo
+    echo "Everything OK"
+    echo
+fi
