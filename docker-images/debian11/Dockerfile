@@ -3,6 +3,7 @@ FROM debian:11-slim
 ARG http_proxy
 ARG https_proxy
 ARG no_proxy
+ARG BUILD_DEPS_HASH
 
 ENV http_proxy=$http_proxy
 ENV https_proxy=$https_proxy

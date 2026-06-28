@@ -1,6 +1,6 @@
 ### Release Notes
 
-## 1.40.0
+## 1.40.1
   - [Add SIP over WebSocket support](https://github.com/MayamaTakeshi/sip-lab/issues/51)
   - [Add support for webrtc](https://github.com/MayamaTakeshi/sip-lab/issues/81)
   - [codec gsm not working](https://github.com/MayamaTakeshi/sip-lab/issues/127)
