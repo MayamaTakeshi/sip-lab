@@ -8,10 +8,11 @@ Basic tasks for development:
 ```
 sudo apt install build-essential automake autoconf libtool libspeex-dev libopus-dev libsdl2-dev libavdevice-dev libswscale-dev libv4l-dev libopencore-amrnb-dev libopencore-amrwb-dev libvo-amrwbenc-dev libvo-amrwbenc-dev libboost-dev libtiff-dev libpcap-dev libssl-dev uuid-dev cmake flite-dev
 
+nvm use v16.13.1 # other versions might work.
 npm install
 ```
 
-Thne confirm it is working:
+Then confirm it is working:
 ```
 node samples/simple.js
 ```
