@@ -11,9 +11,7 @@ See [Documentation](https://github.com/MayamaTakeshi/sip-lab/blob/master/DOC.md)
 
 ## Installation
 
-The npm package is built for Debian 11 and this is the recommended distro.
-
-You can use other debian/ubuntu version but they will require a build of dependencies that will take time (something like 7 minutes but this was measured on my slow PC).
+The npm package is built for Ubuntu/Debian and might work with other linux distros.
 
 First install apt packages:
 
@@ -21,21 +19,16 @@ First install apt packages:
 apt install build-essential automake autoconf libtool libspeex-dev libopus-dev libsdl2-dev libavdevice-dev libswscale-dev libv4l-dev libopencore-amrnb-dev libopencore-amrwb-dev libvo-amrwbenc-dev libvo-amrwbenc-dev libboost-dev libtiff-dev libpcap-dev libssl-dev uuid-dev flite-dev cmake git wget bc
 
 ```
+Obs: in ubuntu you might also need to install libssl1.1
 
-Then switch to node v19, switch to your node project folder and install sip-lab:
-
+Then:
 ```
-nvm install 19
-nvm use 19
-cd YOUR_NODE_PROJECT_FOLDER
 npm i sip-lab
 ```
-Obs: once you install sip-lab, you can switch to other node versions like v20, v21.
-
-
 Then run some sample script from subfolder samples:
 ```
-node node_modules/sip-lab/samples/simple.js
+cd node_modules/sip-lab
+node ./samples/simple.js
 ```
 
 The above script has detailed comments. 

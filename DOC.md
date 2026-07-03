@@ -25,34 +25,22 @@ TODO:
 
 ## Installation
 
-The npm package is built for Debian 11 and this is the recommended distro.
-
-You can use other debian/ubuntu version but they will require a build of dependencies that will take time (something like 7 minutes but this was measured on my slow PC).
-
+The npm package is built for Ubuntu/Debian but it might work with other linux distros.
 
 First install apt packages:
 
 ```
-apt install build-essential automake autoconf libtool libspeex-dev libopus-dev libsdl2-dev libavdevice-dev libswscale-dev libv4l-dev libopencore-amrnb-dev libopencore-amrwb-dev libvo-amrwbenc-dev libvo-amrwbenc-dev libboost-dev libtiff-dev libpcap-dev libssl-dev uuid-dev flite-dev cmake git wget
+apt install build-essential automake autoconf libtool libspeex-dev libopus-dev libsdl2-dev libavdevice-dev libswscale-dev libv4l-dev libopencore-amrnb-dev libopencore-amrwb-dev libvo-amrwbenc-dev libvo-amrwbenc-dev libboost-dev libtiff-dev libpcap-dev libssl-dev uuid-dev flite-dev cmake git wget bc
 
+Then:
 ```
-
-Then switch to node v19, switch to your node project folder and install sip-lab:
-
-```
-nvm install 19
-nvm use 19
-cd YOUR_NODE_PROJECT_FOLDER
 npm i sip-lab
 ```
-Obs: once you install sip-lab, you can switch to other node versions like v20, v21.
-
+If necessary, a build of the module from sorce will be executed.
 
 Notes:
   - Build will not work on Debian 10 as cmake version is older than required.
   - It will work on Debian 12 but a build process will be required. But you need to build using node v19 or older. But building with node v20 or v21 will fail (https://github.com/MayamaTakeshi/sip-lab/issues/107). But once you have it built, you can switch to a newer version of node.
-
-So basically, if you stick with Debian 11 and uses node v19, istallation should be smooth.
 
 ## Basic Usage
 
