@@ -181,5 +181,19 @@ Then do the actual publish:
 ```
 npm publish 
 ```
+If you get something like
+```
+npm timing command:publish Completed in 8775ms
+npm ERR! code E404
+npm ERR! 404 Not Found - PUT https://registry.npmjs.org/sip-lab - Not found
+npm ERR! 404 
+npm ERR! 404  'sip-lab@1.41.0' is not in this registry.
+
+```
+it means you are not logged in. 
+So first do:
+```
+npm login
+```
 
 
