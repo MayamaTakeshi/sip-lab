@@ -1,6 +1,6 @@
 {
   "name": "sip-lab",
-  "version": "1.40.1",
+  "version": "1.41.0",
   "description": "",
   "main": "index.js",
   "engines": {
@@ -34,7 +34,7 @@
   },
   "devDependencies": {
     "prebuildify": "^5.0.1",
-    "prebuildify-cross": "github:MayamaTakeshi/prebuildify-cross#use_existing_images"
+    "prebuildify-cross": "file:../prebuildify-cross/prebuildify-cross-5.0.0.tgz"
   },
   "files": [
     "index.js",
@@ -49,5 +49,10 @@
     "prebuilds",
     "pocketsphinx",
     "runtests"
-  ]
+  ],
+  "binary": {
+    "napi_versions": [
+      6
+    ]
+  }
 }

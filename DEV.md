@@ -45,15 +45,8 @@ npm install
 Then perform code changes and tests. When you are satisfied with them, update build_deps.sh with the new commit IDs.
 
 #### prebuild binaries
-Previously we would do:
 
-```
-nvm use v16.13.1 # if we try with v17 it will fail to build for -t 15.0.0
-npx prebuildify --strip -t 15.0.0 -t 16.0.0 -t 17.0.0 -t 18.0.0 19.0.0 20.0.0 21.0.0
-```
-However the above will build the addon to run on the current OS.
-
-Instead we will force the build on debian11 (using docker) using prebuildify-cross. So do this instead:
+We will use prebuildify-cross to generate the images for different architectures.
 
 Make sure you have the docker image built (the image must be rebuilt whenever we update build_deps.sh)
 
@@ -74,10 +67,10 @@ If it fails due to proxy problems, check if you have proxy configured in ~/.dock
 
 ```
 
-After the image is built you can pass them to prebuildify-cross:
+The to prebuild the addon versions:
 ```
 nvm use v16.13.1
-npx prebuildify-cross -i mayamatakeshi/sip-lab-debian11:latest -t 15.0.0 -t 16.0.0 -t 17.0.0 -t 18.0.0 -t 19.0.0 -t 20.0.0 -t 21.0.0 --strip
+./gen_prebuilds.sh
 ```
 Obs: however the above will fail if you are behind proxy (solution pending).
 

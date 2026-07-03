@@ -25,13 +25,14 @@
           ],
           'conditions': [
             [ 'OS!="win"', {
-              'cflags': ['-g', '-DPJ_HAS_SSL_SOCK=1'],
+              'cflags': ['-g', '-DPJ_HAS_SSL_SOCK=1', '-DNAPI_VERSION=6'],
               'cflags_cc': [
                 '-g',
                 '-DPJ_HAS_SSL_SOCK=1',
                 '-fexceptions',
                 '-Wno-maybe-uninitialized',
                 '-fPIC',
+		'-DNAPI_VERSION=6',
               ],
               'ldflags_cc': [
                 '-all-static',
