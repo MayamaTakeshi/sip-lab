@@ -1,8 +1,7 @@
-const addon = require('node-gyp-build')(__dirname);
+const addon = require('./sip_lab.node');
 
 var events = require('events');
 var eventEmitter = new events.EventEmitter();
-
 
 process.on('SIGINT', function() {
 	console.log("SIGINT");
@@ -15,7 +14,6 @@ addon.event_source = eventEmitter
 var timerId = setInterval(() => {
 	res = addon.do_poll();
 	if(res) {
-		//console.log("poll res", res)
 		var evt
 		var pos = res.indexOf("\n")
 		if(pos > 0) {
@@ -94,7 +92,6 @@ addon.call = {
   stop_speech_recog: (c_id, params) => { return addon.call_stop_speech_recog(c_id, JSON.stringify(params ? params : {})) },
 
   get_stream_stat: (c_id, params) => { return addon.call_get_stream_stat(c_id, JSON.stringify(params ? params : {})) },
-  //refer: (c_id, params) => { return addon.call_refer(c_id, JSON.stringify(params)) },
   get_info: addon.call_get_info,
   gen_string_replaces: addon.call_gen_string_replaces,
 

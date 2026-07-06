@@ -7,9 +7,9 @@
     "node": ">=15.0.0"
   },
   "scripts": {
-    "install": "node-gyp-build",
-    "build": "node-gyp build",
-    "rebuild": "node-gyp rebuild",
+    "install": "cd rust && cargo build --release && cp target/release/libsip_lab.so ../sip_lab.node || cp target/release/sip_lab.dll ../sip_lab.node || cp target/release/libsip_lab.dylib ../sip_lab.node",
+    "build": "cd rust && cargo build",
+    "rebuild": "cd rust && cargo clean && cargo build",
     "test": "./runtests -a 3"
   },
   "repository": {
@@ -18,7 +18,6 @@
   },
   "author": "",
   "license": "ISC",
-  "gypfile": true,
   "homepage": "https://github.com/MayamaTakeshi/sip-lab",
   "dependencies": {
     "@mayama/zeq": "^4.23.0",
