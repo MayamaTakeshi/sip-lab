@@ -27,6 +27,8 @@ TODO:
 
 The npm package is built for Ubuntu/Debian but it might work with other linux distros.
 
+Last tested node.js version: v21.7.3
+
 First install apt packages:
 
 ```
@@ -39,7 +41,7 @@ npm i sip-lab
 If necessary, a build of the module from sorce will be executed.
 
 Notes:
-  - Build will not work on Debian 10 as cmake version is older than required.
+  - Build will not work on Debian 10 as cmake version is older than required (update cmake and it will work).
   - It will work on Debian 12 but a build process will be required. But you need to build using node v19 or older. But building with node v20 or v21 will fail (https://github.com/MayamaTakeshi/sip-lab/issues/107). But once you have it built, you can switch to a newer version of node.
 
 ## Basic Usage
