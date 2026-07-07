@@ -27,7 +27,7 @@ TODO:
 
 The npm package is built for Ubuntu/Debian but it might work with other linux distros.
 
-Last tested node.js version: v21.7.3
+Last tested distro and node.js version: Debian 11 and node v21.7.3
 
 First install apt packages:
 
