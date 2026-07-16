@@ -8,3 +8,8 @@ Makefile
 *.mk
 *.Makefile
 out
+
+# Rust artifacts
+**/target/
+Cargo.lock
+*.log
