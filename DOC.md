@@ -27,11 +27,13 @@ TODO:
 
 The npm package is built for Ubuntu/Debian but it might work with other linux distros.
 
+Last tested distro and node.js version: Debian 11 and node v21.7.3
+
 First install apt packages:
 
 ```
 apt install build-essential automake autoconf libtool libspeex-dev libopus-dev libsdl2-dev libavdevice-dev libswscale-dev libv4l-dev libopencore-amrnb-dev libopencore-amrwb-dev libvo-amrwbenc-dev libvo-amrwbenc-dev libboost-dev libtiff-dev libpcap-dev libssl-dev uuid-dev flite-dev cmake git wget bc
-
+```
 Then:
 ```
 npm i sip-lab
@@ -39,7 +41,7 @@ npm i sip-lab
 If necessary, a build of the module from sorce will be executed.
 
 Notes:
-  - Build will not work on Debian 10 as cmake version is older than required.
+  - Build will not work on Debian 10 as cmake version is older than required (update cmake and it will work).
   - It will work on Debian 12 but a build process will be required. But you need to build using node v19 or older. But building with node v20 or v21 will fail (https://github.com/MayamaTakeshi/sip-lab/issues/107). But once you have it built, you can switch to a newer version of node.
 
 ## Basic Usage
