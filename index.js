@@ -74,7 +74,7 @@ addon.call = {
   stop_inband_dtmf_detection: (c_id, params) => { return addon.call_stop_inband_dtmf_detection(c_id, JSON.stringify(params ? params : {})) },
 
   start_bfsk_detection: (c_id, params) => { return addon.call_start_bfsk_detection(c_id, JSON.stringify(params ? params : {})) },
-  stop_bfsk_dtmf_detection: (c_id, params) => { return addon.call_stop_bfsk_detection(c_id, JSON.stringify(params ? params : {})) },
+  stop_bfsk_detection: (c_id, params) => { return addon.call_stop_bfsk_detection(c_id, JSON.stringify(params ? params : {})) },
 
   start_speech_recog: (c_id, params) => { 
     var ps = {}
