@@ -1,6 +1,6 @@
 ### Release Notes
 
-## 1.41.1
+## 1.41.2
   - Bug Correction: [Corrections in bfsk detection by kiro-cli](https://github.com/MayamaTakeshi/sip-lab/issues/135)
 
 ## 1.41.0
