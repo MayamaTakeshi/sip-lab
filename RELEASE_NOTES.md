@@ -1,10 +1,10 @@
 ### Release Notes
 
+## 1.41.1
+  - Bug Correction: [Corrections in bfsk detection by kiro-cli](https://github.com/MayamaTakeshi/sip-lab/issues/135)
+
 ## 1.41.0
   - Moved to NAPI
-
-## Next Release
-  - https://github.com/MayamaTakeshi/sip-lab/issues/135
 
 ## 1.40.1
   - New Feature: [Add SIP over WebSocket support](https://github.com/MayamaTakeshi/sip-lab/issues/51)
