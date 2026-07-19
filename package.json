@@ -1,12 +1,13 @@
 {
   "name": "sip-lab",
-  "version": "1.44.0",
+  "version": "1.45.0",
   "description": "",
   "main": "index.js",
   "engines": {
     "node": ">=15.0.0"
   },
   "scripts": {
+    "install": "true",
     "test": "./runtests -a 3"
   },
   "repository": {
