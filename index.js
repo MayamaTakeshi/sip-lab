@@ -91,7 +91,10 @@ function _connect() {
 
   _connectPromise = new Promise((resolve, reject) => {
     const binPath = findBinary()
-    const child = spawn(binPath, [], { stdio: ['ignore', 'inherit', 'pipe'] })
+    const serverEnv = Object.assign({}, process.env, {
+      POCKETSPHINX_PATH: path.join(__dirname, 'pocketsphinx', 'model'),
+    })
+    const child = spawn(binPath, [], { stdio: ['ignore', 'inherit', 'pipe'], env: serverEnv })
     _serverProcess = child
 
     let settled = false
@@ -233,12 +236,7 @@ addon.call = {
     _cmd({ cmd: 'call_stop_bfsk_detection', call_id: c_id, params: JSON.stringify(params || {}) }),
   start_speech_recog: (c_id, params) => {
     const ps = params ? { ...params } : {}
-    if (ps.model_path) {
-      process.env.POCKETSPHINX_PATH = ps.model_path
-      delete ps.model_path
-    } else {
-      process.env.POCKETSPHINX_PATH = path.join(__dirname, 'pocketsphinx', 'model')
-    }
+    delete ps.model_path  // handled via server env POCKETSPHINX_PATH
     return _cmd({ cmd: 'call_start_speech_recog', call_id: c_id, params: JSON.stringify(ps) })
   },
   stop_speech_recog: (c_id, params) =>
