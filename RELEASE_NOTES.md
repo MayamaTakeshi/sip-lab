@@ -1,5 +1,36 @@
 ### Release Notes
 
+## 1.42.0
+  - Improvement [Consider running sip-lab as an external process](https://github.com/MayamaTakeshi/sip-lab/issues/55)
+    Now we run the the core as an external tcp server and and this implies a breaking change as we need to wait for a reply from the server.
+
+    Before:
+```
+    t = sip.transport.create({address: "127.0.0.1", type: 'udp'})
+    
+    oc = sip.call.create(t1.id, { from_uri: 'sip:alice@test.com', to_uri: `sip:bob@${t2.address}:${t2.port}`}) 	   
+    
+    a = sip.account.create(t1.id, ...}
+    
+    s = sip.subscription.create(t1.id, ...}
+    
+    sip.stop()
+```
+Now:  
+``````
+
+    t = await sip.transport.create({address: "127.0.0.1", type: 'udp'})
+    
+    oc = await sip.call.create(t1.id, { from_uri: 'sip:alice@test.com', to_uri: `sip:bob@${t2.address}:${t2.port}`}) 	   
+    
+    a = await sip.account.create(t1.id, ...}
+    
+    s = await sip.subscription.create(t1.id, ...}    
+    
+    await sip.stop()
+```
+    
+
 ## 1.41.2
   - Bug Correction: [Corrections in bfsk detection by kiro-cli](https://github.com/MayamaTakeshi/sip-lab/issues/135)
 
