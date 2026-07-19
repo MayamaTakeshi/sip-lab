@@ -42,7 +42,7 @@ mkdir -p $START_DIR/3rdParty
 
 ensure_git_repo spandsp https://github.com/freeswitch/spandsp e59ca8fb8b1591e626e6a12fdc60a2ebe83435ed '
     ./bootstrap.sh
-    CFLAGS="-O -fPIC" ./configure --enable-shared
+    CFLAGS="-O -fPIC" ./configure --disable-shared --enable-static
     make
 '
 
@@ -55,13 +55,29 @@ ensure_git_repo bcg729 https://github.com/MayamaTakeshi/bcg729 faaa895862165acde
     cp -f src/libbcg729.a lib
 '
 
+cd $START_DIR/3rdParty
+ALSA_VERSION=1.2.6.1
+if [[ ! -d alsa-lib-${ALSA_VERSION} ]]; then
+    wget -q https://www.alsa-project.org/files/pub/lib/alsa-lib-${ALSA_VERSION}.tar.bz2
+    tar xf alsa-lib-${ALSA_VERSION}.tar.bz2
+    rm -f alsa-lib-${ALSA_VERSION}.tar.bz2
+fi
+if [[ ! -f alsa-lib-${ALSA_VERSION}/src/.libs/libasound.a ]]; then
+    cd alsa-lib-${ALSA_VERSION}
+    ./configure --disable-shared --enable-static
+    make
+    cd $START_DIR/3rdParty
+else
+    echo "alsa-lib: already built, skipping"
+fi
+
 ensure_git_repo pjproject https://github.com/pjsip/pjproject 9543a1bcf50be721d030be99afeeb63bd8cf2013 '
     cat > user.mak <<EOF
     export CFLAGS += -fPIC -g
     export LDFLAGS +=
 EOF
     sed -i -r "s/BCG729_LIBS=\"-lbcg729\"/BCG729_LIBS=\"\"/" aconfigure
-    LIBS=$(pwd)/../bcg729/src/libbcg729.a ./configure --with-bcg729=$(pwd)/../bcg729
+    LIBS=$(pwd)/../bcg729/src/libbcg729.a ./configure --disable-shared --enable-static --with-bcg729=$(pwd)/../bcg729
     cat > pjlib/include/pj/config_site.h <<EOF2
 #define PJSUA_MAX_ACC (20000)
 #define PJ_IOQUEUE_MAX_HANDLES (1024)

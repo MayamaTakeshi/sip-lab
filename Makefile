@@ -32,13 +32,16 @@ SERVER_SRCS := $(SHARED_SRCS) src/server.cpp
 
 SERVER_OBJS := $(patsubst %.cpp,$(OUTDIR)/%.o,$(patsubst %.c,$(OUTDIR)/%.o,$(SERVER_SRCS)))
 
-# Include directories (same as binding.gyp all-settings)
+PJ_LIB := 3rdParty/pjproject
+PJ_SUFFIX := -x86_64-unknown-linux-gnu.a
+
+# Include directories
 INCLUDES := \
-	-I3rdParty/pjproject/pjsip/include \
-	-I3rdParty/pjproject/pjlib/include \
-	-I3rdParty/pjproject/pjlib-util/include \
-	-I3rdParty/pjproject/pjnath/include \
-	-I3rdParty/pjproject/pjmedia/include \
+	-I$(PJ_LIB)/pjsip/include \
+	-I$(PJ_LIB)/pjlib/include \
+	-I$(PJ_LIB)/pjlib-util/include \
+	-I$(PJ_LIB)/pjnath/include \
+	-I$(PJ_LIB)/pjmedia/include \
 	-Iinclude \
 	-Isrc \
 	-Isrc/pjmedia/include \
@@ -49,9 +52,10 @@ INCLUDES := \
 	-I3rdParty/spandsp/src \
 	-I3rdParty/pocketsphinx/include \
 	-I3rdParty/pocketsphinx/build/include \
-	-I3rdParty/pjwebsock/websock
+	-I3rdParty/pjwebsock/websock \
+	-I3rdParty/alsa-lib-1.2.6.1/include
 
-# Compiler flags (from binding.gyp, without NAPI_VERSION)
+# Compiler flags
 CFLAGS_COMMON := -g -DPJ_HAS_SSL_SOCK=1 -fPIC -Wno-maybe-uninitialized
 CXXFLAGS_COMMON := $(CFLAGS_COMMON) -fexceptions
 CFLAGS_COMMON := $(CFLAGS_COMMON) -Wall
@@ -62,38 +66,36 @@ else
   CFLAGS_COMMON := -O0 $(CFLAGS_COMMON)
 endif
 
-# Libraries (from binding.gyp, paths relative to project root)
-LIBS := \
-	-Wl,--start-group \
-	-L3rdParty/pjproject/pjnath/lib \
-	-L3rdParty/pjproject/pjlib/lib \
-	-L3rdParty/pjproject/pjlib-util/lib \
-	-L3rdParty/pjproject/third_party/lib \
-	-L3rdParty/pjproject/pjmedia/lib \
-	-L3rdParty/pjproject/pjsip/lib \
-	-lpjnath-x86_64-unknown-linux-gnu \
-	-lilbccodec-x86_64-unknown-linux-gnu \
-	-lwebrtc-x86_64-unknown-linux-gnu \
-	-lyuv-x86_64-unknown-linux-gnu \
-	-lspeex-x86_64-unknown-linux-gnu \
-	-lgsmcodec-x86_64-unknown-linux-gnu \
-	-lg7221codec-x86_64-unknown-linux-gnu \
-	-lpjmedia-audiodev-x86_64-unknown-linux-gnu \
-	-lpjmedia-x86_64-unknown-linux-gnu \
-	-lresample-x86_64-unknown-linux-gnu \
-	-lpjmedia-codec-x86_64-unknown-linux-gnu \
-	-lpjmedia-videodev-x86_64-unknown-linux-gnu \
-	-lpjsdp-x86_64-unknown-linux-gnu \
-	-lpjsip-x86_64-unknown-linux-gnu \
-	-lpjsua2-x86_64-unknown-linux-gnu \
-	-lpjsip-ua-x86_64-unknown-linux-gnu \
-	-lpjsip-simple-x86_64-unknown-linux-gnu \
-	-lpjsua-x86_64-unknown-linux-gnu \
-	-lpj-x86_64-unknown-linux-gnu \
-	-lpjlib-util-x86_64-unknown-linux-gnu \
+# Static 3rdParty libraries (direct .a paths, no -L/-l indirection)
+STATIC_LIBS := \
+	$(PJ_LIB)/pjnath/lib/libpjnath$(PJ_SUFFIX) \
+	$(PJ_LIB)/third_party/lib/libilbccodec$(PJ_SUFFIX) \
+	$(PJ_LIB)/third_party/lib/libwebrtc$(PJ_SUFFIX) \
+	$(PJ_LIB)/third_party/lib/libyuv$(PJ_SUFFIX) \
+	$(PJ_LIB)/third_party/lib/libspeex$(PJ_SUFFIX) \
+	$(PJ_LIB)/third_party/lib/libgsmcodec$(PJ_SUFFIX) \
+	$(PJ_LIB)/third_party/lib/libg7221codec$(PJ_SUFFIX) \
+	$(PJ_LIB)/pjmedia/lib/libpjmedia-audiodev$(PJ_SUFFIX) \
+	$(PJ_LIB)/pjmedia/lib/libpjmedia$(PJ_SUFFIX) \
+	$(PJ_LIB)/third_party/lib/libresample$(PJ_SUFFIX) \
+	$(PJ_LIB)/pjmedia/lib/libpjmedia-codec$(PJ_SUFFIX) \
+	$(PJ_LIB)/pjmedia/lib/libpjmedia-videodev$(PJ_SUFFIX) \
+	$(PJ_LIB)/pjmedia/lib/libpjsdp$(PJ_SUFFIX) \
+	$(PJ_LIB)/pjsip/lib/libpjsip$(PJ_SUFFIX) \
+	$(PJ_LIB)/pjsip/lib/libpjsua2$(PJ_SUFFIX) \
+	$(PJ_LIB)/pjsip/lib/libpjsip-ua$(PJ_SUFFIX) \
+	$(PJ_LIB)/pjsip/lib/libpjsip-simple$(PJ_SUFFIX) \
+	$(PJ_LIB)/pjsip/lib/libpjsua$(PJ_SUFFIX) \
+	$(PJ_LIB)/pjlib/lib/libpj$(PJ_SUFFIX) \
+	$(PJ_LIB)/pjlib-util/lib/libpjlib-util$(PJ_SUFFIX) \
 	3rdParty/spandsp/src/.libs/libspandsp.a \
 	3rdParty/bcg729/src/libbcg729.a \
 	3rdParty/pocketsphinx/build/libpocketsphinx.a \
+	3rdParty/alsa-lib-1.2.6.1/src/.libs/libasound.a \
+	3rdParty/pjproject/third_party/lib/libsrtp$(PJ_SUFFIX)
+
+# System libraries (linked statically via -static flag)
+SYSTEM_LIBS := \
 	-lstdc++ \
 	-lopus \
 	-lssl \
@@ -104,21 +106,30 @@ LIBS := \
 	-ltiff \
 	-lrt \
 	-lpthread \
-	-lasound \
 	-lavformat \
 	-lavcodec \
 	-lswscale \
 	-lavutil \
 	-lspeex \
 	-lflite \
+	-lflite_usenglish \
+	-lflite_cmulex \
 	-lflite_cmu_us_awb \
 	-lflite_cmu_us_kal \
 	-lflite_cmu_us_rms \
 	-lflite_cmu_us_slt \
 	-lflite_cmu_us_kal16 \
-	-lsrtp-x86_64-unknown-linux-gnu \
 	-ljpeg \
-	-Wl,--end-group
+	-lz \
+	-lzstd \
+	-llzma \
+	-lwebp \
+	-ljbig \
+	-ldeflate \
+	-lpthread \
+	-ldl
+
+LIBS := -static -Wl,--start-group $(STATIC_LIBS) $(SYSTEM_LIBS) -Wl,--end-group
 
 # --- Targets ---
 
