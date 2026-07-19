@@ -13,7 +13,7 @@ See [Documentation](https://github.com/MayamaTakeshi/sip-lab/blob/master/DOC.md)
 
 The npm package is built for Ubuntu/Debian and might work with other linux distros.
 
-First install apt packages:
+First install required apt packages:
 
 ```
 apt install libspeex-dev libopus-dev libavdevice-dev libtiff-dev libssl-dev uuid-dev flite-dev

@@ -27,7 +27,7 @@ TODO:
 
 Last tested distro and node.js version: Debian 11 and node v21.7.3
 
-First install apt packages:
+First install required apt packages:
 
 ```
 apt install libspeex-dev libopus-dev libavdevice-dev libtiff-dev libssl-dev uuid-dev flite-dev
