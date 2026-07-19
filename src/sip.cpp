@@ -3188,7 +3188,7 @@ int pjw_call_create(long t_id, const char *json, long *out_call_id,
           }
           password = (char *)itr->value.GetString();
         } else {
-          set_error("Unknown auth paramter %s", itr->name.GetString());
+          set_error("Unknown auth parameter %s", itr->name.GetString());
           goto out;
         }
       }
@@ -9305,7 +9305,7 @@ int pjw_subscription_create(long transport_id, const char *json,
           }
           password = (char *)itr->value.GetString();
         } else {
-          set_error("Unknown auth paramter %s", itr->name.GetString());
+          set_error("Unknown auth parameter %s", itr->name.GetString());
           goto out;
         }
       }
