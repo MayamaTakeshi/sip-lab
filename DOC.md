@@ -204,7 +204,7 @@ Disables the telephone-event codec.
 
 ### `sip.transport`
 
-#### `create(options)`
+#### `async create(options)`
 
 Creates a new SIP transport.
 
