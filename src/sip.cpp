@@ -5225,6 +5225,10 @@ int pjw_call_stop_inband_dtmf_detection(long call_id, const char *json) {
   return audio_endpoint_stop_op(call_id, json, audio_endpoint_stop_inband_dtmf_detection);
 }
 
+int pjw_call_stop_bfsk_detection(long call_id, const char *json) {
+  return audio_endpoint_stop_op(call_id, json, audio_endpoint_stop_bfsk_detection);
+}
+
 
 
 int pjw_call_start_fax(long call_id, const char *json) {
