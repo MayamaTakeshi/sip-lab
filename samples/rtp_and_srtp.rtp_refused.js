@@ -23,15 +23,15 @@ async function test() {
         }),
     })
 
-    console.log(sip.start((data) => { console.log(data)} ))
+    console.log(await sip.start((data) => { console.log(data)} ))
 
-    const t1 = sip.transport.create({address: "127.0.0.1"})
-    const t2 = sip.transport.create({address: "127.0.0.1"})
+    const t1 = await sip.transport.create({address: "127.0.0.1"})
+    const t2 = await sip.transport.create({address: "127.0.0.1"})
 
     console.log("t1", t1)
     console.log("t2", t2)
 
-    const oc = sip.call.create(t1.id, {from_uri: 'sip:alice@test.com', to_uri: `sip:bob@${t2.address}:${t2.port}`,
+    const oc = await sip.call.create(t1.id, {from_uri: 'sip:alice@test.com', to_uri: `sip:bob@${t2.address}:${t2.port}`,
         media: [
             {
                 type: 'audio',
@@ -56,7 +56,7 @@ async function test() {
         sip_call_id: z.$sip_call_id,
     }
 
-    sip.call.respond(ic.id, {code: 200, reason: 'OK', media: [
+    await sip.call.respond(ic.id, {code: 200, reason: 'OK', media: [
         {
             type: 'audio',
             port: 0, // media refused
@@ -131,11 +131,11 @@ async function test() {
         },
     ], 1000)
 
-    sip.call.start_inband_dtmf_detection(oc.id, {media_id: 1})
-    sip.call.start_inband_dtmf_detection(ic.id, {media_id: 1})
+    await sip.call.start_inband_dtmf_detection(oc.id, {media_id: 1})
+    await sip.call.start_inband_dtmf_detection(ic.id, {media_id: 1})
 
-    sip.call.send_dtmf(oc.id, {digits: '1234', mode: 1})
-    sip.call.send_dtmf(ic.id, {digits: '1234', mode: 1})
+    await sip.call.send_dtmf(oc.id, {digits: '1234', mode: 1})
+    await sip.call.send_dtmf(ic.id, {digits: '1234', mode: 1})
 
     await z.wait([
         {
@@ -154,7 +154,7 @@ async function test() {
         },
     ], 2000)
 
-    sip.call.reinvite(oc.id, {media: [
+    await sip.call.reinvite(oc.id, {media: [
         {
             type: 'audio',
             secure: false,
@@ -172,7 +172,7 @@ async function test() {
         },
     ], 500)
 
-    sip.call.respond(ic.id, {code: 200, reason: 'OK', media: [
+    await sip.call.respond(ic.id, {code: 200, reason: 'OK', media: [
         {
             type: 'audio',
             port: 0, // media refused
@@ -252,8 +252,8 @@ async function test() {
         },
     ], 1000)
 
-    sip.call.send_dtmf(oc.id, {digits: '1234', mode: 1})
-    sip.call.send_dtmf(ic.id, {digits: '1234', mode: 1})
+    await sip.call.send_dtmf(oc.id, {digits: '1234', mode: 1})
+    await sip.call.send_dtmf(ic.id, {digits: '1234', mode: 1})
 
     await z.wait([
         {
@@ -273,7 +273,7 @@ async function test() {
     ], 2000)
 
 
-    sip.call.reinvite(ic.id, {media: [
+    await sip.call.reinvite(ic.id, {media: [
         {
             type: 'audio',
             secure: false,
@@ -291,7 +291,7 @@ async function test() {
         },
     ], 500)
 
-    sip.call.respond(oc.id, {code: 200, reason: 'OK', media: [
+    await sip.call.respond(oc.id, {code: 200, reason: 'OK', media: [
         {
             type: 'audio',
             port: 0, // media refused
@@ -371,8 +371,8 @@ async function test() {
         },
     ], 1000)
 
-    sip.call.send_dtmf(oc.id, {digits: '1234', mode: 1})
-    sip.call.send_dtmf(ic.id, {digits: '1234', mode: 1})
+    await sip.call.send_dtmf(oc.id, {digits: '1234', mode: 1})
+    await sip.call.send_dtmf(ic.id, {digits: '1234', mode: 1})
 
     await z.wait([
         {
@@ -391,7 +391,7 @@ async function test() {
         },
     ], 2000)
 
-    sip.call.terminate(oc.id)
+    await sip.call.terminate(oc.id)
 
     await z.wait([
         {
@@ -415,7 +415,7 @@ async function test() {
 
     console.log("Success")
 
-    sip.stop()
+    await sip.stop()
     process.exit(0)
 }
 

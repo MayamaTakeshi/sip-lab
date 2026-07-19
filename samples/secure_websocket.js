@@ -14,17 +14,17 @@ async function test() {
 
     sip.set_codecs("pcmu/8000/1:128,pcma/8000/1:128")
 
-    console.log(sip.start((data) => { console.log(data) }))
+    console.log(await sip.start((data) => { console.log(data) }))
 
     // Create a WSS server transport (secure WebSocket listener)
-    const t2 = sip.transport.create({
+    const t2 = await sip.transport.create({
         address: "127.0.0.1",
         port: 6062,
         type: "wss",
     })
 
     // Create a WSS client transport connecting to our server
-    const t1 = sip.transport.create({
+    const t1 = await sip.transport.create({
         address: "127.0.0.1",
         type: "wss",
         ws_url: "wss://127.0.0.1:6062/sip",
@@ -34,7 +34,7 @@ async function test() {
     console.log("t2", t2)
 
     // Make the call from t1 to t2 over Secure WebSocket
-    const oc = sip.call.create(t1.id, {
+    const oc = await sip.call.create(t1.id, {
         from_uri: 'sip:alice@test.com',
         to_uri: 'sip:bob@127.0.0.1:6062',
     })
@@ -69,7 +69,7 @@ async function test() {
     }
 
     // Answer the call at t2 side
-    sip.call.respond(ic.id, {
+    await sip.call.respond(ic.id, {
         code: 200,
         reason: 'OK',
     })
@@ -97,11 +97,11 @@ async function test() {
         },
     ], 2000)
 
-    sip.call.start_inband_dtmf_detection(oc.id)
-    sip.call.start_inband_dtmf_detection(ic.id)
+    await sip.call.start_inband_dtmf_detection(oc.id)
+    await sip.call.start_inband_dtmf_detection(ic.id)
 
-    sip.call.send_dtmf(oc.id, {digits: '1234', mode: 1})
-    sip.call.send_dtmf(ic.id, {digits: '1234', mode: 1})
+    await sip.call.send_dtmf(oc.id, {digits: '1234', mode: 1})
+    await sip.call.send_dtmf(ic.id, {digits: '1234', mode: 1})
 
     await z.wait([
         {
@@ -121,7 +121,7 @@ async function test() {
     ], 2000)
 
     // Terminate the call from t1 side
-    sip.call.terminate(oc.id)
+    await sip.call.terminate(oc.id)
 
     // Wait for call termination
     await z.wait([
@@ -146,7 +146,7 @@ async function test() {
 
     console.log("Secure WebSocket test successful")
 
-    sip.stop()
+    await sip.stop()
     process.exit(0)
 }
 

@@ -6,7 +6,7 @@ var sip_msg = require('sip-matching')
 var sdp = require('sdp-matching')
 
 async function test() {
-    //sip.set_log_level(6)
+    //await sip.set_log_level(6)
     sip.dtmf_aggregation_on(500)
 
     z.trap_events(sip.event_source, 'event', (evt) => {
@@ -14,15 +14,15 @@ async function test() {
         return e
     })
 
-    console.log(sip.start((data) => { console.log(data)} ))
+    console.log(await sip.start((data) => { console.log(data)} ))
 
-    t1 = sip.transport.create({address: "127.0.0.1"})
-    t2 = sip.transport.create({address: "127.0.0.1"})
+    t1 = await sip.transport.create({address: "127.0.0.1"})
+    t2 = await sip.transport.create({address: "127.0.0.1"})
 
     console.log("t1", t1)
     console.log("t2", t2)
 
-    oc = sip.call.create(t1.id, {
+    oc = await sip.call.create(t1.id, {
         from_uri: '"abc"<sip:alice@test.com>',
         to_uri: `sip:bob@${t2.address}:${t2.port}`,
     })
@@ -55,7 +55,7 @@ async function test() {
         sip_call_id: z.$sip_call_id,
     }
 
-    sip.call.respond(ic.id, {
+    await sip.call.respond(ic.id, {
         code: 200,
         reason:'OK',
     })
@@ -82,17 +82,17 @@ async function test() {
         },
     ], 1000)
 
-    sip.call.start_record_wav(oc.id, {file: './oc.wav'})
-    sip.call.start_record_wav(ic.id, {file: './ic.wav'})
+    await sip.call.start_record_wav(oc.id, {file: './oc.wav'})
+    await sip.call.start_record_wav(ic.id, {file: './ic.wav'})
 
     await z.sleep(100)
 
-    sip.call.start_play_wav(oc.id, {file: 'samples/artifacts/hello_good_morning.wav', end_of_file_event: true})
-    sip.call.start_play_wav(ic.id, {file: 'samples/artifacts/hello_good_morning.wav', end_of_file_event: true})
+    await sip.call.start_play_wav(oc.id, {file: 'samples/artifacts/hello_good_morning.wav', end_of_file_event: true})
+    await sip.call.start_play_wav(ic.id, {file: 'samples/artifacts/hello_good_morning.wav', end_of_file_event: true})
 
     await z.sleep(500)
 
-    sip.call.reinvite(oc.id)
+    await sip.call.reinvite(oc.id)
 
     await z.wait([
         {
@@ -101,7 +101,7 @@ async function test() {
         },
     ], 1000)
 
-    sip.call.respond(ic.id, {code: 200, reason: 'OK'})
+    await sip.call.respond(ic.id, {code: 200, reason: 'OK'})
 
     await z.wait([
         {
@@ -146,7 +146,7 @@ async function test() {
     ], 5000)
 
 
-    sip.call.reinvite(ic.id)
+    await sip.call.reinvite(ic.id)
 
     await z.wait([
         {
@@ -155,7 +155,7 @@ async function test() {
         },
     ], 1000)
 
-    sip.call.respond(oc.id, {code: 200, reason: 'OK'})
+    await sip.call.respond(oc.id, {code: 200, reason: 'OK'})
 
     await z.wait([
         {
@@ -199,16 +199,16 @@ async function test() {
         },
     ], 5000)
 
-    stat1 = sip.call.get_stream_stat(oc.id, {media_id: 0})
-    stat2 = sip.call.get_stream_stat(ic.id, {media_id: 0})
+    stat1 = await sip.call.get_stream_stat(oc.id, {media_id: 0})
+    stat2 = await sip.call.get_stream_stat(ic.id, {media_id: 0})
 
     console.log("stat1", stat1)
     console.log("stat2", stat2)
 
-    sip.call.stop_record_wav(oc.id)
-    sip.call.stop_record_wav(ic.id)
+    await sip.call.stop_record_wav(oc.id)
+    await sip.call.stop_record_wav(ic.id)
 
-    sip.call.terminate(oc.id)
+    await sip.call.terminate(oc.id)
 
     await z.wait([
         {
@@ -234,7 +234,7 @@ async function test() {
 
     console.log("Success")
 
-    sip.stop()
+    await sip.stop()
     process.exit(0)
 }
 

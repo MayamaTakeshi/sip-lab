@@ -24,7 +24,7 @@ async function test() {
 
     sip.set_codecs("pcmu/8000/1:128,pcma/8000/1:128,gsm/8000/1:128")
 
-    console.log(sip.start((data) => { console.log(data)} ))
+    console.log(await sip.start((data) => { console.log(data)} ))
 
     const address = "127.0.0.1"
 
@@ -38,11 +38,11 @@ async function test() {
     // hack to not lose first INVITE
     await z.sleep(0)
 
-    const t1 = sip.transport.create({address})
+    const t1 = await sip.transport.create({address})
 
     const sip_call_id = uuid.v4()
 
-    var oc = sip.call.create(t1.id, {
+    var oc = await sip.call.create(t1.id, {
         from_uri: 'sip:alice@test.com',
         to_uri: `sip:bob@${address}:${e1_port}`,
         headers: {
@@ -101,7 +101,7 @@ async function test() {
 
     delete z.$dialog_id
 
-    oc = sip.call.create(t1.id, {
+    oc = await sip.call.create(t1.id, {
         from_uri: 'sip:alice@test.com',
         to_uri: `sip:bob@${address}:${e1_port}`,
         headers: {
@@ -220,7 +220,7 @@ a=ptime:20`.replace(/\n/g, "\r\n")
         // sleep here as much as you like
         await z.sleep(0)
 
-        sip.call.update(oc.id, {
+        await sip.call.update(oc.id, {
             headers: {
                 'Supported': 'timer',
                 'Min-SE': '300',
@@ -275,7 +275,7 @@ a=ptime:20`.replace(/\n/g, "\r\n")
 
     }
 
-    sip.call.terminate(oc.id)
+    await sip.call.terminate(oc.id)
 
     delete z.$req
 
@@ -317,7 +317,7 @@ a=ptime:20`.replace(/\n/g, "\r\n")
 
     console.log("Success")
 
-    sip.stop()
+    await sip.stop()
     process.exit(0)
 }
 

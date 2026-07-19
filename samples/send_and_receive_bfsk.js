@@ -6,9 +6,9 @@ var sip_msg = require('sip-matching')
 var sdp = require('sdp-matching')
 
 async function test() {
-    //sip.set_log_level(9)
+    //await sip.set_log_level(9)
 
-    //sip.set_log_level(6)
+    //await sip.set_log_level(6)
     sip.dtmf_aggregation_on(500)
 
     z.trap_events(sip.event_source, 'event', (evt) => {
@@ -19,15 +19,15 @@ async function test() {
     //sip.set_codecs("pcmu/8000/1:128,pcma/8000/1:128,gsm/8000/1:128")
     sip.set_codecs("pcma/8000/1:128")
 
-    console.log(sip.start((data) => { console.log(data)} ))
+    console.log(await sip.start((data) => { console.log(data)} ))
 
-    t1 = sip.transport.create({address: "127.0.0.1", type: 'udp'})
-    t2 = sip.transport.create({address: "127.0.0.1", type: 'udp'})
+    t1 = await sip.transport.create({address: "127.0.0.1", type: 'udp'})
+    t2 = await sip.transport.create({address: "127.0.0.1", type: 'udp'})
 
     console.log("t1", t1)
     console.log("t2", t2)
 
-    oc = sip.call.create(t1.id, {from_uri: 'sip:alice@test.com', to_uri: `sip:bob@${t2.address}:${t2.port}`})
+    oc = await sip.call.create(t1.id, {from_uri: 'sip:alice@test.com', to_uri: `sip:bob@${t2.address}:${t2.port}`})
 
     await z.wait([
         {
@@ -51,7 +51,7 @@ async function test() {
         sip_call_id: z.$sip_call_id,
     }
 
-    sip.call.respond(ic.id, {code: 200, reason: 'OK'})
+    await sip.call.respond(ic.id, {code: 200, reason: 'OK'})
 
     await z.wait([
         {
@@ -97,11 +97,11 @@ async function test() {
         },
     ], 1000)
 
-    sip.call.start_record_wav(oc.id, {file: 'oc.wav'})
-    sip.call.start_record_wav(ic.id, {file: 'ic.wav'})
+    await sip.call.start_record_wav(oc.id, {file: 'oc.wav'})
+    await sip.call.start_record_wav(ic.id, {file: 'ic.wav'})
 
-    sip.call.start_bfsk_detection(oc.id, {freq_zero: 500, freq_one: 2000})
-    sip.call.start_bfsk_detection(ic.id, {freq_zero: 500, freq_one: 2000})
+    await sip.call.start_bfsk_detection(oc.id, {freq_zero: 500, freq_one: 2000})
+    await sip.call.start_bfsk_detection(ic.id, {freq_zero: 500, freq_one: 2000})
 
     oc_bits = '1010'
     ic_bits = '1100'
@@ -110,8 +110,8 @@ async function test() {
     await z.sleep(50)
 
     for(var i=0 ; i<5 ; i++) {
-        sip.call.send_bfsk(ic.id, {bits: ic_bits, freq_zero: 500, freq_one: 2000})
-        sip.call.send_bfsk(oc.id, {bits: oc_bits, freq_zero: 500, freq_one: 2000})
+        await sip.call.send_bfsk(ic.id, {bits: ic_bits, freq_zero: 500, freq_one: 2000})
+        await sip.call.send_bfsk(oc.id, {bits: oc_bits, freq_zero: 500, freq_one: 2000})
 
         await z.wait([
            {
@@ -129,10 +129,10 @@ async function test() {
         ], 10000)
     }
 
-    sip.call.stop_record_wav(oc.id)
-    sip.call.stop_record_wav(ic.id)
+    await sip.call.stop_record_wav(oc.id)
+    await sip.call.stop_record_wav(ic.id)
 
-    sip.call.terminate(oc.id)
+    await sip.call.terminate(oc.id)
 
     await z.wait([
         {
@@ -156,7 +156,7 @@ async function test() {
 
     console.log("Success")
 
-    sip.stop()
+    await sip.stop()
     process.exit(0)
 }
 

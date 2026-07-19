@@ -13,12 +13,12 @@ async function test() {
         return e
     })
 
-    console.log(sip.start((data) => { console.log(data)} ))
+    console.log(await sip.start((data) => { console.log(data)} ))
 
-    const t1 = sip.transport.create({address: "127.0.0.1"})
-    const t2 = sip.transport.create({address: "127.0.0.1"})
+    const t1 = await sip.transport.create({address: "127.0.0.1"})
+    const t2 = await sip.transport.create({address: "127.0.0.1"})
 
-    const oc = sip.call.create(t1.id, {
+    const oc = await sip.call.create(t1.id, {
         from_uri: 'sip:alice@test.com',
         to_uri: `sip:bob@${t2.address}:${t2.port}`,
         headers: {
@@ -55,7 +55,7 @@ async function test() {
         sip_call_id: z.$sip_call_id,
     }
 
-    sip.call.respond(ic.id, {
+    await sip.call.respond(ic.id, {
         code: 200,
         reason: 'OK',
     })
@@ -84,11 +84,11 @@ async function test() {
 
     // Now force an error in the script.
     // This will be catched by exception handler at the end of the script where
-    // sip.stop(true) will be called (true: terminate all remaining calls, registrations and subscriptions)
+    // await sip.stop(true) will be called (true: terminate all remaining calls, registrations and subscriptions)
 
     throw "SOME ERROR"
 
-    sip.call.terminate(oc.id)
+    await sip.call.terminate(oc.id)
 
     // and wait for termination events
     await z.wait([
@@ -113,15 +113,15 @@ async function test() {
 
     console.log("Success")
 
-    sip.stop()
+    await sip.stop()
     process.exit(0)
 }
 
 
 test()
-.catch(e => {
+.catch(async e => {
     console.error(e)
-    sip.stop(true)
+    await sip.stop(true)
 
     if(e == "SOME ERROR") {
         console.log("Expected error catched")

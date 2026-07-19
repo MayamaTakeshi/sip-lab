@@ -8,9 +8,9 @@ var mrcp = require('mrcp')
 var mrcp_msg = require('mrcp-matching')
 
 async function test() {
-    sip.set_log_level(9)
+    await sip.set_log_level(9)
 
-    //sip.set_log_level(6)
+    //await sip.set_log_level(6)
     sip.dtmf_aggregation_on(500)
 
     z.trap_events(sip.event_source, 'event', (evt) => {
@@ -18,10 +18,10 @@ async function test() {
         return e
     })
 
-    console.log(sip.start((data) => { console.log(data)} ))
+    console.log(await sip.start((data) => { console.log(data)} ))
 
-    var t1 = sip.transport.create({address: "127.0.0.1", type: 'udp'})
-    var t2 = sip.transport.create({address: "127.0.0.1", type: 'udp'})
+    var t1 = await sip.transport.create({address: "127.0.0.1", type: 'udp'})
+    var t2 = await sip.transport.create({address: "127.0.0.1", type: 'udp'})
 
     console.log("t1", t1)
     console.log("t2", t2)
@@ -63,7 +63,7 @@ async function test() {
         },
     ]
 
-    oc = sip.call.create(t1.id, {
+    oc = await sip.call.create(t1.id, {
         from_uri: 'sip:alice@test.com',
         to_uri: `sip:bob@${t2.address}:${t2.port}`,
         media: client_media,
@@ -91,7 +91,7 @@ async function test() {
         sip_call_id: z.$sip_call_id,
     }
 
-    sip.call.respond(ic.id, {
+    await sip.call.respond(ic.id, {
         code: 200,
         reason: 'OK',
         media: server_media,
@@ -167,7 +167,7 @@ async function test() {
     var request_id = 1;
     var msg = mrcp.builder.build_request('SPEAK', request_id, {'channel-identifier': mrcp_channel, 'content-type': 'application/xml'}, "<root>test</root>")
 
-    sip.call.send_mrcp_msg(oc.id, {msg})
+    await sip.call.send_mrcp_msg(oc.id, {msg})
 
     await z.wait([
         {
@@ -187,10 +187,10 @@ async function test() {
     ], 1000)
 
     msg = mrcp.builder.build_response(request_id, 200, 'IN-PROGRESS', {'channel-identifier': mrcp_channel})
-    sip.call.send_mrcp_msg(ic.id, {msg})
+    await sip.call.send_mrcp_msg(ic.id, {msg})
 
     msg = mrcp.builder.build_event('SPEAK-COMPLETE', request_id, 'COMPLETE', {'channel-identifier': mrcp_channel})
-    sip.call.send_mrcp_msg(ic.id, {msg})
+    await sip.call.send_mrcp_msg(ic.id, {msg})
 
     await z.wait([
         {
@@ -217,7 +217,7 @@ async function test() {
         },
     ], 1000)
 
-    sip.call.terminate(oc.id)
+    await sip.call.terminate(oc.id)
 
     await z.wait([
         {
@@ -241,7 +241,7 @@ async function test() {
 
     console.log("Success")
 
-    sip.stop()
+    await sip.stop()
     process.exit(0)
 }
 

@@ -6,7 +6,7 @@ var sip_msg = require('sip-matching')
 var sdp = require('sdp-matching')
 
 async function test() {
-    sip.set_log_level(6)
+    await sip.set_log_level(6)
     sip.dtmf_aggregation_on(500)
 
     z.trap_events(sip.event_source, 'event', (evt) => {
@@ -14,15 +14,15 @@ async function test() {
         return e
     })
 
-    console.log(sip.start((data) => { console.log(data)} ))
+    console.log(await sip.start((data) => { console.log(data)} ))
 
-    t1 = sip.transport.create({address: "127.0.0.1", type: 'udp'})
-    t2 = sip.transport.create({address: "127.0.0.1", type: 'udp'})
+    t1 = await sip.transport.create({address: "127.0.0.1", type: 'udp'})
+    t2 = await sip.transport.create({address: "127.0.0.1", type: 'udp'})
 
     console.log("t1", t1)
     console.log("t2", t2)
 
-    oc = sip.call.create(t1.id, {from_uri: 'sip:alice@test.com', to_uri: `sip:bob@${t2.address}:${t2.port}`})
+    oc = await sip.call.create(t1.id, {from_uri: 'sip:alice@test.com', to_uri: `sip:bob@${t2.address}:${t2.port}`})
 
     await z.wait([
         {
@@ -46,7 +46,7 @@ async function test() {
         sip_call_id: z.$sip_call_id,
     }
 
-    sip.call.respond(ic.id, {code: 180, reason: 'Ringing'})
+    await sip.call.respond(ic.id, {code: 180, reason: 'Ringing'})
 
     await z.wait([
         {
@@ -60,7 +60,7 @@ async function test() {
         },
     ], 1000)
 
-    sip.call.terminate(oc.id)
+    await sip.call.terminate(oc.id)
 
     await z.wait([
         /*
@@ -103,7 +103,7 @@ async function test() {
 
     console.log("Success")
 
-    sip.stop()
+    await sip.stop()
     process.exit(0)
 }
 

@@ -7,7 +7,7 @@ var sdp = require('sdp-matching')
 var assert = require('assert')
 
 async function test() {
-    sip.set_log_level(9)
+    await sip.set_log_level(9)
     sip.dtmf_aggregation_on(500)
 
     z.trap_events(sip.event_source, 'event', (evt) => {
@@ -15,10 +15,10 @@ async function test() {
         return e
     })
 
-    console.log(sip.start((data) => { console.log(data)} ))
+    console.log(await sip.start((data) => { console.log(data)} ))
 
-    t1 = sip.transport.create({address: "127.0.0.1", type: 'udp'})
-    t2 = sip.transport.create({address: "127.0.0.1", type: 'udp'})
+    t1 = await sip.transport.create({address: "127.0.0.1", type: 'udp'})
+    t2 = await sip.transport.create({address: "127.0.0.1", type: 'udp'})
 
     console.log("t1", t1)
     console.log("t2", t2)
@@ -26,7 +26,7 @@ async function test() {
     var server = `${t2.address}:${t2.port}`
     var domain = 'test1.com'
 
-    var a1 = sip.account.create(t1.id, {
+    var a1 = await sip.account.create(t1.id, {
         domain, 
         server,
         username: 'user1',
@@ -38,7 +38,7 @@ async function test() {
         expires: 0, // this will cause suppression of header Expires.
     })
 
-    sip.account.register(a1, {auto_refresh: true})
+    await sip.account.register(a1, {auto_refresh: true})
 
     await z.wait([
         {
@@ -57,7 +57,7 @@ async function test() {
         },
     ], 1000)
 
-    sip.request.respond(z.$req_id, {code: 200, reason: 'OK', headers: {Expires: '120'}})
+    await sip.request.respond(z.$req_id, {code: 200, reason: 'OK', headers: {Expires: '120'}})
 
     await z.wait([
         {
@@ -71,7 +71,7 @@ async function test() {
 
     console.log("Success")
 
-    sip.stop()
+    await sip.stop()
     process.exit(0)
 }
 

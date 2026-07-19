@@ -41,13 +41,13 @@ async function test() {
     sip.set_codecs("pcmu/8000/1:128,pcma/8000/1:128,gsm/8000/1:128")
 
     // here we start sip-lab
-    console.log(sip.start((data) => { console.log(data)} ))
+    console.log(await sip.start((data) => { console.log(data)} ))
 
     // Here we create the SIP endpoints (transports).
     // Since we don't specify the port, an available port will be allocated.
     // Since we don't specify the type ('udp' or 'tcp' or 'tls'), 'udp' will be used by default.
-    const t1 = sip.transport.create({address: "127.0.0.1"})
-    const t2 = sip.transport.create({address: "127.0.0.1"})
+    const t1 = await sip.transport.create({address: "127.0.0.1"})
+    const t2 = await sip.transport.create({address: "127.0.0.1"})
 
     // here we just print the transports
     console.log("t1", t1)
@@ -60,7 +60,7 @@ async function test() {
     var realm = 'test.com'
 
     // make the call from t1 to t2 with some custom heaaders
-    const oc = sip.call.create(t1.id, {
+    const oc = await sip.call.create(t1.id, {
         from_uri: 'sip:alice@test.com',
         to_uri: `sip:bob@${t2.address}:${t2.port}`,
         auth: {
@@ -110,7 +110,7 @@ async function test() {
     var qop = 'auth'
     var algorithm = 'MD5'
     var uri = z.$ruri
-    sip.call.respond(ic.id, {
+    await sip.call.respond(ic.id, {
         code: 407,
         reason: 'Proxy Authentication Required',
         headers: {
@@ -187,7 +187,7 @@ async function test() {
     }
 
     // now we answer the call
-    sip.call.respond(ic.id, {
+    await sip.call.respond(ic.id, {
         code: 200,
         reason: 'OK',
     })
@@ -216,11 +216,11 @@ async function test() {
         },
     ], 1000)
 
-    sip.call.start_inband_dtmf_detection(oc.id)
-    sip.call.start_inband_dtmf_detection(ic.id)
+    await sip.call.start_inband_dtmf_detection(oc.id)
+    await sip.call.start_inband_dtmf_detection(ic.id)
 
-    sip.call.send_dtmf(oc.id, {digits: '1234', mode: 1})
-    sip.call.send_dtmf(ic.id, {digits: '1234', mode: 1})
+    await sip.call.send_dtmf(oc.id, {digits: '1234', mode: 1})
+    await sip.call.send_dtmf(ic.id, {digits: '1234', mode: 1})
 
     await z.wait([
         {
@@ -240,7 +240,7 @@ async function test() {
     ], 2000)
 
     // now we terminate the call from t1 side
-    sip.call.terminate(oc.id)
+    await sip.call.terminate(oc.id)
 
     // and wait for termination events
     await z.wait([
@@ -265,7 +265,7 @@ async function test() {
 
     console.log("Success")
 
-    sip.stop()
+    await sip.stop()
     process.exit(0)
 }
 

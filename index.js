@@ -5,10 +5,9 @@ const path = require('path')
 const fs = require('fs')
 const { spawn } = require('child_process')
 const { EventEmitter } = require('events')
-const deasync = require('deasync')
 
 /* ------------------------------------------------------------------ */
-/* Locate the server binary (built by node-gyp).                      */
+/* Locate the server binary.                                           */
 /* ------------------------------------------------------------------ */
 function findBinary() {
   const candidates = [
@@ -35,9 +34,10 @@ let _recvBuf = ''            // partial line accumulator
 
 let _serverProcess = null
 let _connected = false
+let _connectPromise = null  // guards against concurrent _connect calls
 
 /* ------------------------------------------------------------------ */
-/* Parse lines arriving from the server.                              */
+/* Parse lines arriving from the server.                               */
 /* ------------------------------------------------------------------ */
 function _handleLine(line) {
   line = line.trim()
@@ -45,13 +45,11 @@ function _handleLine(line) {
 
   let msg
   try { msg = JSON.parse(line) } catch (_) {
-    // Non-JSON line — forwarded as raw event (e.g. MRCP message body)
     eventEmitter.emit('_raw_msg', line)
     return
   }
 
   if (typeof msg.seq === 'number') {
-    // Response to a command
     const pending = _pending.get(msg.seq)
     if (pending) {
       _pending.delete(msg.seq)
@@ -61,77 +59,12 @@ function _handleLine(line) {
     return
   }
 
-  // Async event from the SIP engine — emit to callers
   eventEmitter.emit('event', msg)
 }
 
 /* ------------------------------------------------------------------ */
-/* Start the server process and connect synchronously.                 */
-/* Called lazily on the first command.                                 */
+/* Socket data handler                                                 */
 /* ------------------------------------------------------------------ */
-function _connect() {
-  if (_connected) return
-
-  const binPath = findBinary()
-  const child = spawn(binPath, [], { stdio: ['ignore', 'inherit', 'pipe'] })
-  _serverProcess = child
-
-  // Read "READY <port>" from the child's stdout synchronously
-  let portLine = ''
-  let portReady = false
-  let startupError = null
-
-  child.on('error', (err) => { startupError = err })
-  child.on('exit', (code, signal) => {
-    if (!_connected) {
-      startupError = new Error(
-        `sip-lab-server exited before READY (code=${code} signal=${signal})`
-      )
-      portReady = true  // unblock the wait loop
-    }
-  })
-
-  // Buffer stderr until we have the READY line; after that stderr is
-  // no longer needed (all pjsip log output goes via inherited stdout).
-  child.stderr.on('data', (chunk) => {
-    portLine += chunk.toString('utf8')
-    const nl = portLine.indexOf('\n')
-    if (nl !== -1 && !portReady) {
-      // Check each line for READY
-      const lines = portLine.split('\n')
-      for (let i = 0; i < lines.length; i++) {
-        const m = lines[i].match(/^READY\s+(\d+)/)
-        if (m) {
-          const port = parseInt(m[1], 10)
-          portLine = ''
-
-          const sock = net.connect(port, '127.0.0.1')
-          _socket = sock
-
-          sock.on('connect', () => {
-            _connected = true
-            portReady = true
-            sock.on('data', _onSocketData)
-          })
-
-          sock.on('error', (err) => {
-            if (!_connected) { startupError = err; portReady = true }
-            else _rejectAll(err)
-          })
-
-          sock.on('close', () => _rejectAll(new Error('sip-lab-server connection closed')))
-
-          return
-        }
-      }
-    }
-  })
-
-  // Synchronously wait for the READY line and TCP connection
-  deasync.loopWhile(() => !portReady)
-  if (startupError) throw startupError
-}
-
 function _onSocketData(chunk) {
   _recvBuf += chunk.toString('utf8')
   let nl
@@ -148,30 +81,72 @@ function _rejectAll(err) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Send a command and block synchronously until the response arrives.  */
+/* Start the server process and connect.  Called lazily on the first   */
+/* command.  Returns a Promise that resolves once the TCP link is up.  */
+/* Concurrent calls are coalesced into a single connection attempt.    */
 /* ------------------------------------------------------------------ */
-function _cmd(obj) {
-  _connect()
+function _connect() {
+  if (_connected) return Promise.resolve()
+  if (_connectPromise) return _connectPromise
 
-  let done = false, result, error
+  _connectPromise = new Promise((resolve, reject) => {
+    const binPath = findBinary()
+    const child = spawn(binPath, [], { stdio: ['ignore', 'inherit', 'pipe'] })
+    _serverProcess = child
 
-  const seq = ++_seq
-  obj.seq = seq
-  _pending.set(seq, {
-    resolve: (v) => { result = v; done = true },
-    reject:  (e) => { error = e;  done = true },
+    let settled = false
+    const settle = (fn, val) => { if (!settled) { settled = true; fn(val) } }
+
+    child.on('error', (err) => settle(reject, err))
+    child.on('exit', (code, signal) => {
+      settle(reject, new Error(
+        `sip-lab-server exited before READY (code=${code} signal=${signal})`
+      ))
+    })
+
+    child.stderr.on('data', function onStderr(chunk) {
+      const text = chunk.toString('utf8')
+      // Scan for READY <port> across the accumulated stream
+      const m = text.match(/READY\s+(\d+)/)
+      if (!m) return
+      child.stderr.removeListener('data', onStderr)
+      // Forward any subsequent stderr from the server
+      child.stderr.on('data', (chunk) => process.stderr.write(chunk))
+
+      const port = parseInt(m[1], 10)
+      const sock = net.connect(port, '127.0.0.1')
+      _socket = sock
+
+      sock.on('connect', () => {
+        _connected = true
+        sock.on('data', _onSocketData)
+        settle(resolve)
+      })
+
+      sock.on('error', (err) => settle(reject, err))
+      sock.on('close', () => _rejectAll(new Error('sip-lab-server connection closed')))
+    })
   })
 
-  _socket.write(JSON.stringify(obj) + '\n')
-
-  deasync.loopWhile(() => !done)
-
-  if (error) throw error
-  return result
+  return _connectPromise
 }
 
 /* ------------------------------------------------------------------ */
-/* Public API object — identical surface to the old NAPI addon.        */
+/* Send a command and return a Promise for the response.               */
+/* ------------------------------------------------------------------ */
+async function _cmd(obj) {
+  await _connect()
+
+  return new Promise((resolve, reject) => {
+    const seq = ++_seq
+    obj.seq = seq
+    _pending.set(seq, { resolve, reject })
+    _socket.write(JSON.stringify(obj) + '\n')
+  })
+}
+
+/* ------------------------------------------------------------------ */
+/* Public API                                                          */
 /* ------------------------------------------------------------------ */
 const addon = { event_source: eventEmitter }
 
@@ -181,8 +156,10 @@ process.on('SIGINT', () => {
   process.exit(1)
 })
 
-addon.stop = (cleanUp = false) => {
-  try { _cmd({ cmd: 'shutdown', clean_up: cleanUp ? 1 : 0 }) } catch (_) {}
+addon.stop = async (cleanUp = false) => {
+  if (_connected) {
+    try { await _cmd({ cmd: 'shutdown', clean_up: cleanUp ? 1 : 0 }) } catch (_) {}
+  }
   if (_serverProcess) {
     setTimeout(() => { if (_serverProcess) _serverProcess.kill() }, 500)
   }

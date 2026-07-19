@@ -25,7 +25,7 @@ async function test() {
         return e
     })
 
-    console.log(sip.start((data) => { console.log(data)} ))
+    console.log(await sip.start((data) => { console.log(data)} ))
 
     const caller_ts = []
     const callee_ts = []
@@ -33,13 +33,13 @@ async function test() {
     const ocs = []
 
     for(var i=0 ; i<NUMBER_OF_CALLS ; i++) {   
-        const caller_t = sip.transport.create({address: "127.0.0.1"})
+        const caller_t = await sip.transport.create({address: "127.0.0.1"})
         caller_ts.push(caller_t)
-        const callee_t = sip.transport.create({address: "127.0.0.1"})
+        const callee_t = await sip.transport.create({address: "127.0.0.1"})
         callee_ts.push(callee_t)
 
         // make the call 
-        const oc = sip.call.create(caller_t.id, {from_uri: 'sip:alice@test.com', to_uri: `sip:bob@${callee_t.address}:${callee_t.port}`})
+        const oc = await sip.call.create(caller_t.id, {from_uri: 'sip:alice@test.com', to_uri: `sip:bob@${callee_t.address}:${callee_t.port}`})
         ocs.push(oc)
     }
 
@@ -51,8 +51,8 @@ async function test() {
     })).value(), 50000)
 
     // Now we answer the calls
-    z.$ic_ids.forEach(ic_id => { 
-        sip.call.respond(ic_id, {code: 200, reason: 'OK'})
+    z.$ic_ids.forEach(async ic_id => { 
+        await sip.call.respond(ic_id, {code: 200, reason: 'OK'})
     })
 
     // Then we wait for the '200 OK' at the caller side
@@ -80,13 +80,13 @@ async function test() {
 
     await z.wait(events, 50000)
 
-    ocs.forEach(oc => {
-        sip.call.start_inband_dtmf_detection(oc.id)
+    ocs.forEach(async oc => {
+        await sip.call.start_inband_dtmf_detection(oc.id)
     })
 
     // first send RFC2833 DTMF digits
-    ocs.forEach(oc => {
-        sip.call.send_dtmf(oc.id, {digits: '1234', mode: 0})
+    ocs.forEach(async oc => {
+        await sip.call.send_dtmf(oc.id, {digits: '1234', mode: 0})
     })
 
     await z.wait(_.chain(z.$ic_ids).map(ic_id => ({
@@ -98,8 +98,8 @@ async function test() {
     })).value(), 50000)
 
     // now send inband DTMF digits
-    z.$ic_ids.forEach(ic_id => {
-        sip.call.send_dtmf(ic_id, {digits: '4321', mode: 1})
+    z.$ic_ids.forEach(async ic_id => {
+        await sip.call.send_dtmf(ic_id, {digits: '4321', mode: 1})
     })
 
     await z.wait(_.chain(ocs).map(oc => ({
@@ -111,8 +111,8 @@ async function test() {
     })).value(), 50000)
 
     // now we terminate the calls
-    ocs.forEach(oc => {
-        sip.call.terminate(oc.id)
+    ocs.forEach(async oc => {
+        await sip.call.terminate(oc.id)
     })
 
     // and wait for termination events
@@ -140,7 +140,7 @@ async function test() {
 
     console.log("Success")
 
-    sip.stop()
+    await sip.stop()
     process.exit(0)
 }
 

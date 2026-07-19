@@ -17,20 +17,20 @@ async function test() {
     })
 
     // here we start sip-lab
-    console.log(sip.start((data) => { console.log(data)} ))
+    console.log(await sip.start((data) => { console.log(data)} ))
 
     // Here we create the SIP endpoints (transports).
     // Since we don't specify the port, an available port will be allocated.
     // Since we don't specify the type ('udp' or 'tcp' or 'tls'), 'udp' will be used by default.
-    const t1 = sip.transport.create({address: "127.0.0.1"})
-    const t2 = sip.transport.create({address: "127.0.0.1"})
+    const t1 = await sip.transport.create({address: "127.0.0.1"})
+    const t2 = await sip.transport.create({address: "127.0.0.1"})
 
     // here we just print the transports
     console.log("t1", t1)
     console.log("t2", t2)
 
     // make the call from t1 to t2
-    const oc = sip.call.create(t1.id, {from_uri: 'sip:alice@test.com', to_uri: `sip:bob@${t2.address}:${t2.port}`})
+    const oc = await sip.call.create(t1.id, {from_uri: 'sip:alice@test.com', to_uri: `sip:bob@${t2.address}:${t2.port}`})
 
     // Here we will wait for the call to arrive at t2
     // We will also get a '100 Trying' that is sent by sip-lab automatically
@@ -61,7 +61,7 @@ async function test() {
     }
 
     // Now we answer the call at t2 side
-    sip.call.respond(ic.id, {code: 200, reason: 'OK'})
+    await sip.call.respond(ic.id, {code: 200, reason: 'OK'})
 
     // Then we wait for the '200 OK' at the t1 side
     // We will also get event 'media_update' for both sides indicating media streams (RTP) were set up successfully
@@ -87,7 +87,7 @@ async function test() {
         },
     ], 1000)
 
-    sip.call.send_request(oc.id, {method: 'REFER', headers: {'Refer-To': '0312341234'}})
+    await sip.call.send_request(oc.id, {method: 'REFER', headers: {'Refer-To': '0312341234'}})
 
     await z.wait([
         {
@@ -100,7 +100,7 @@ async function test() {
         },
     ], 1000)
 
-    sip.call.respond(ic.id, {code: 202, reason: 'Accepted'})
+    await sip.call.respond(ic.id, {code: 202, reason: 'Accepted'})
 
     await z.wait([
         {
@@ -114,7 +114,7 @@ async function test() {
         },
     ], 1000)
 
-    sip.call.send_request(ic.id, {method: 'NOTIFY', headers: {
+    await sip.call.send_request(ic.id, {method: 'NOTIFY', headers: {
         'Event': 'refer',
         'Subscription-State': 'active;expires=60',
     }, body: 'SIP/2.0 100 Trying', ct_type: 'message', ct_subtype: 'sipfrag;version=2.0'})
@@ -132,7 +132,7 @@ async function test() {
         },
     ], 1000)
 
-    sip.call.respond(oc.id, {code: 200, reason: 'OK'})
+    await sip.call.respond(oc.id, {code: 200, reason: 'OK'})
 
     await z.wait([
         {
@@ -146,7 +146,7 @@ async function test() {
         },
     ], 1000)
 
-    sip.call.send_request(ic.id, {method: 'NOTIFY', headers: {'Event': 'refer',
+    await sip.call.send_request(ic.id, {method: 'NOTIFY', headers: {'Event': 'refer',
         'Subscription-State': 'terminated;reason=noresource',
     }, body: 'SIP/2.0 200 OK', ct_type: 'message', ct_subtype: 'sipfrag;version=2.0'})
 
@@ -163,7 +163,7 @@ async function test() {
         },
     ], 1000)
 
-    sip.call.respond(oc.id, {code: 200, reason: 'OK'})
+    await sip.call.respond(oc.id, {code: 200, reason: 'OK'})
 
     await z.wait([
         {
@@ -180,7 +180,7 @@ async function test() {
     await z.sleep(100)
 
     // now we terminate the call from t1 side
-    sip.call.terminate(oc.id)
+    await sip.call.terminate(oc.id)
 
     // and wait for termination events
     await z.wait([
@@ -205,7 +205,7 @@ async function test() {
 
     console.log("Success")
 
-    sip.stop()
+    await sip.stop()
     process.exit(0)
 }
 

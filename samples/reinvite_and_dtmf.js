@@ -6,9 +6,9 @@ var sip_msg = require('sip-matching')
 var sdp = require('sdp-matching')
 
 async function test() {
-    //sip.set_log_level(9)
+    //await sip.set_log_level(9)
 
-    //sip.set_log_level(6)
+    //await sip.set_log_level(6)
     sip.dtmf_aggregation_on(500)
 
     z.trap_events(sip.event_source, 'event', (evt) => {
@@ -18,15 +18,15 @@ async function test() {
 
     sip.set_codecs("pcmu/8000/1:128,pcma/8000/1:128,gsm/8000/1:128")
 
-    console.log(sip.start((data) => { console.log(data)} ))
+    console.log(await sip.start((data) => { console.log(data)} ))
 
-    t1 = sip.transport.create({address: "127.0.0.1", type: 'udp'})
-    t2 = sip.transport.create({address: "127.0.0.1", type: 'udp'})
+    t1 = await sip.transport.create({address: "127.0.0.1", type: 'udp'})
+    t2 = await sip.transport.create({address: "127.0.0.1", type: 'udp'})
 
     console.log("t1", t1)
     console.log("t2", t2)
 
-    oc = sip.call.create(t1.id, {from_uri: 'sip:alice@test.com', to_uri: `sip:bob@${t2.address}:${t2.port}`})
+    oc = await sip.call.create(t1.id, {from_uri: 'sip:alice@test.com', to_uri: `sip:bob@${t2.address}:${t2.port}`})
 
     await z.wait([
         {
@@ -53,7 +53,7 @@ async function test() {
     // force answer with pcma
     sip.set_codecs("pcma/8000/1:128")
 
-    sip.call.respond(ic.id, {code: 200, reason: 'OK'})
+    await sip.call.respond(ic.id, {code: 200, reason: 'OK'})
 
     await z.wait([
         {
@@ -111,11 +111,11 @@ async function test() {
         },
     ], 1000)
 
-    sip.call.start_inband_dtmf_detection(oc.id)
-    sip.call.start_inband_dtmf_detection(ic.id)
+    await sip.call.start_inband_dtmf_detection(oc.id)
+    await sip.call.start_inband_dtmf_detection(ic.id)
 
-    sip.call.send_dtmf(oc.id, {digits: '1234', mode: 0})
-    sip.call.send_dtmf(ic.id, {digits: '4321', mode: 1})
+    await sip.call.send_dtmf(oc.id, {digits: '1234', mode: 0})
+    await sip.call.send_dtmf(ic.id, {digits: '4321', mode: 1})
 
     await z.wait([
         {
@@ -137,7 +137,7 @@ async function test() {
     for(i=0 ;i< 3; i++) {
         sip.set_codecs("pcmu/8000/1:128,pcma/8000/1:128,gsm/8000/1:128")
 
-        sip.call.reinvite(oc.id)
+        await sip.call.reinvite(oc.id)
 
         await z.wait([
             {
@@ -149,7 +149,7 @@ async function test() {
         // force answer with pcma
         sip.set_codecs("pcma/8000/1:128")
 
-        sip.call.respond(ic.id, {code: 200, reason: 'OK'})
+        await sip.call.respond(ic.id, {code: 200, reason: 'OK'})
 
         await z.wait([
             {
@@ -218,7 +218,7 @@ async function test() {
 
         sip.set_codecs("pcmu/8000/1:128,pcma/8000/1:128,gsm/8000/1:128")
 
-        sip.call.reinvite(ic.id)
+        await sip.call.reinvite(ic.id)
 
         await z.wait([
             {
@@ -230,7 +230,7 @@ async function test() {
         // force answer with pcma
         sip.set_codecs("pcma/8000/1:128")
 
-        sip.call.respond(oc.id, {code: 200, reason: 'OK'})
+        await sip.call.respond(oc.id, {code: 200, reason: 'OK'})
 
         await z.wait([
             {
@@ -297,7 +297,7 @@ async function test() {
         ], 500)
 
         //await z.sleep(100)
-        sip.call.send_request(oc.id, {method: 'INFO'})
+        await sip.call.send_request(oc.id, {method: 'INFO'})
 
         await z.wait([
             {
@@ -309,7 +309,7 @@ async function test() {
             },
         ], 500)
 
-        sip.call.respond(ic.id, {code: 100, reason: 'Trying'})
+        await sip.call.respond(ic.id, {code: 100, reason: 'Trying'})
 
         await z.wait([
             {
@@ -323,7 +323,7 @@ async function test() {
             },
         ], 500)
 
-        sip.call.respond(ic.id, {code: 200, reason: 'OK'})
+        await sip.call.respond(ic.id, {code: 200, reason: 'OK'})
 
         await z.wait([
             {
@@ -339,7 +339,7 @@ async function test() {
 
 
         //await z.sleep(100)
-        sip.call.send_request(oc.id, {method: 'INFO'})
+        await sip.call.send_request(oc.id, {method: 'INFO'})
 
         await z.wait([
             {
@@ -351,7 +351,7 @@ async function test() {
             },
         ], 500)
 
-        sip.call.respond(ic.id, {code: 100, reason: 'Trying'})
+        await sip.call.respond(ic.id, {code: 100, reason: 'Trying'})
 
         await z.wait([
             {
@@ -366,7 +366,7 @@ async function test() {
         ], 500)
 
 
-        sip.call.respond(ic.id, {code: 200, reason: 'OK'})
+        await sip.call.respond(ic.id, {code: 200, reason: 'OK'})
 
         await z.wait([
             {
@@ -381,7 +381,7 @@ async function test() {
         ], 500)
 
         //await z.sleep(100)
-        sip.call.send_request(ic.id, {method: 'INFO'})
+        await sip.call.send_request(ic.id, {method: 'INFO'})
 
         await z.wait([
             {
@@ -393,7 +393,7 @@ async function test() {
             },
         ], 500)
 
-        sip.call.respond(oc.id, {code: 200, reason: 'OK'})
+        await sip.call.respond(oc.id, {code: 200, reason: 'OK'})
 
         await z.wait([
             {
@@ -410,7 +410,7 @@ async function test() {
 
     //await z.sleep(100)
 
-    sip.call.terminate(oc.id)
+    await sip.call.terminate(oc.id)
 
     await z.wait([
         {
@@ -434,7 +434,7 @@ async function test() {
 
     console.log("Success")
 
-    sip.stop()
+    await sip.stop()
     process.exit(0)
 }
 

@@ -16,17 +16,17 @@ async function test() {
 
     sip.set_codecs("pcmu/8000/1:128,pcma/8000/1:128,gsm/8000/1:128")
 
-    console.log(sip.start((data) => { console.log(data)} ))
+    console.log(await sip.start((data) => { console.log(data)} ))
 
-    const t1 = sip.transport.create({address: "127.0.0.1"})
-    const t2 = sip.transport.create({address: "127.0.0.1"})
+    const t1 = await sip.transport.create({address: "127.0.0.1"})
+    const t2 = await sip.transport.create({address: "127.0.0.1"})
 
     console.log("t1", t1)
     console.log("t2", t2)
 
     const call_id = uuid.v4()
 
-    var oc = sip.call.create(t1.id, {
+    var oc = await sip.call.create(t1.id, {
         from_uri: 'sip:alice@test.com',
         to_uri: `sip:bob@${t2.address}:${t2.port}`,
         headers: {
@@ -70,7 +70,7 @@ async function test() {
         sip_call_id: z.$sip_call_id,
     }
 
-    sip.call.respond(ic.id, {
+    await sip.call.respond(ic.id, {
         code: 422,
         reason: 'Session Timer Too Small',
         headers: {
@@ -100,7 +100,7 @@ async function test() {
         },
     ], 1000)
 
-    oc = sip.call.create(t1.id, {
+    oc = await sip.call.create(t1.id, {
         from_uri: 'sip:alice@test.com;tag=1c619456422',
         to_uri: `sip:bob@${t2.address}:${t2.port}`,
         headers: {
@@ -145,7 +145,7 @@ async function test() {
         sip_call_id: z.$sip_call_id,
     }
 
-    sip.call.respond(ic.id, {
+    await sip.call.respond(ic.id, {
         code: 200,
         reason: 'OK',
         headers: {
@@ -182,7 +182,7 @@ async function test() {
 
     await z.sleep(5000)
 
-    sip.call.terminate(oc.id)
+    await sip.call.terminate(oc.id)
 
     // and wait for termination events
     await z.wait([
@@ -207,7 +207,7 @@ async function test() {
 
     console.log("Success")
 
-    sip.stop()
+    await sip.stop()
     process.exit(0)
 }
 
