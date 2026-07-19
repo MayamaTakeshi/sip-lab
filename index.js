@@ -82,7 +82,7 @@ function _rejectAll(err) {
 
 /* ------------------------------------------------------------------ */
 /* Start the server process and connect.  Called lazily on the first   */
-/* command.  Returns a Promise that resolves once the UDS link is up. */
+/* command.  Returns a Promise that resolves once the TCP link is up. */
 /* Concurrent calls are coalesced into a single connection attempt.    */
 /* ------------------------------------------------------------------ */
 function _connect() {
@@ -109,16 +109,15 @@ function _connect() {
 
     child.stderr.on('data', function onStderr(chunk) {
       const text = chunk.toString('utf8')
-      // Scan for READY @<name> (abstract Unix socket) across the accumulated stream
-      const m = text.match(/READY\s+@(\S+)/)
+      // Scan for READY <port> across the accumulated stream
+      const m = text.match(/READY\s+(\d+)/)
       if (!m) return
       child.stderr.removeListener('data', onStderr)
       // Forward any subsequent stderr from the server
       child.stderr.on('data', (chunk) => process.stderr.write(chunk))
 
-      const sockName = m[1]
-      // Abstract socket: null-byte prefix tells Node.js/libuv to use the kernel namespace
-      const sock = net.createConnection({ path: '\0' + sockName })
+      const port = parseInt(m[1], 10)
+      const sock = net.connect(port, '127.0.0.1')
       _socket = sock
 
       sock.on('connect', () => {

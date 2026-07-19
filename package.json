@@ -1,18 +1,12 @@
 {
   "name": "sip-lab",
-  "version": "1.41.2",
+  "version": "1.42.0",
   "description": "",
   "main": "index.js",
   "engines": {
     "node": ">=15.0.0"
   },
   "scripts": {
-    "install": "node-gyp rebuild",
-    "build": "node-gyp build",
-    "rebuild": "node-gyp rebuild",
-    "build-server": "make",
-    "build-server-release": "make BUILD=release",
-    "clean-server": "make clean",
     "test": "./runtests -a 3"
   },
   "repository": {
@@ -28,24 +22,18 @@
     "data-matching": "^1.47.1",
     "mrcp": "^1.4.0",
     "mrcp-matching": "^1.3.0",
-    "node-gyp": "^9.3.0",
     "sdp-matching": "^1.5.0",
     "sip-matching": "^1.9.0",
     "sipjs-lab": "^1.4.0"
   },
   "files": [
     "index.js",
-    "index_server.js",
-    "binding.gyp",
-    "build_deps.sh",
-    "Makefile",
-    "include",
-    "src",
     "README.md",
     "DEV.md",
     "samples",
     "samples_extra",
     "pocketsphinx",
-    "runtests"
+    "runtests",
+    "sip_lab_server"
   ]
 }

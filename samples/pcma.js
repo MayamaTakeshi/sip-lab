@@ -52,7 +52,7 @@ async function test() {
         sip_call_id: z.$sip_call_id,
     }
 
-    await sip.call.respond(ic.id, {code: 200, reason: 'OK'})
+    sip.call.respond(ic.id, {code: 200, reason: 'OK'})
 
     await z.wait([
         {
@@ -76,7 +76,7 @@ async function test() {
         },
     ], 1000)
 
-    await sip.call.reinvite(oc.id)
+    sip.call.reinvite(oc.id)
 
     await z.wait([
         {
@@ -85,7 +85,7 @@ async function test() {
         },
     ], 1000)
 
-    await sip.call.respond(ic.id, {code: 200, reason: 'OK'})
+    sip.call.respond(ic.id, {code: 200, reason: 'OK'})
 
     await z.wait([
         {
@@ -118,7 +118,7 @@ async function test() {
         },
     ], 500)
 
-    await sip.call.reinvite(oc.id, false, 0)
+    sip.call.reinvite(oc.id, false, 0)
 
     await z.wait([
         {
@@ -127,7 +127,7 @@ async function test() {
         },
     ], 1000)
 
-    await sip.call.respond(ic.id, {code: 200, reason: 'OK'})
+    sip.call.respond(ic.id, {code: 200, reason: 'OK'})
 
     await z.wait([
         {
@@ -172,7 +172,7 @@ async function test() {
     assert(oc_stat.CodecInfo == 'PCMA/8000/1')
     assert(ic_stat.CodecInfo == 'PCMA/8000/1')
 
-    await sip.call.terminate(oc.id)
+    sip.call.terminate(oc.id)
 
     await z.wait([
         {

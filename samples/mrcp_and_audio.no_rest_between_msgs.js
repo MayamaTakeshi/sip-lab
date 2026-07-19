@@ -91,7 +91,7 @@ async function test() {
         sip_call_id: z.$sip_call_id,
     }
 
-    await sip.call.respond(ic.id, {
+    sip.call.respond(ic.id, {
         code: 200,
         reason: 'OK',
         media: server_media,
@@ -167,7 +167,7 @@ async function test() {
     var request_id = 1;
     var msg = mrcp.builder.build_request('SPEAK', request_id, {'channel-identifier': mrcp_channel, 'content-type': 'application/xml'}, "<root>test</root>")
 
-    await sip.call.send_mrcp_msg(oc.id, {msg})
+    sip.call.send_mrcp_msg(oc.id, {msg})
 
     await z.wait([
         {
@@ -187,10 +187,10 @@ async function test() {
     ], 1000)
 
     msg = mrcp.builder.build_response(request_id, 200, 'IN-PROGRESS', {'channel-identifier': mrcp_channel})
-    await sip.call.send_mrcp_msg(ic.id, {msg})
+    sip.call.send_mrcp_msg(ic.id, {msg})
 
     msg = mrcp.builder.build_event('SPEAK-COMPLETE', request_id, 'COMPLETE', {'channel-identifier': mrcp_channel})
-    await sip.call.send_mrcp_msg(ic.id, {msg})
+    sip.call.send_mrcp_msg(ic.id, {msg})
 
     await z.wait([
         {
@@ -217,7 +217,7 @@ async function test() {
         },
     ], 1000)
 
-    await sip.call.terminate(oc.id)
+    sip.call.terminate(oc.id)
 
     await z.wait([
         {

@@ -57,7 +57,7 @@ async function test() {
         sip_call_id: z.$sip_call_id,
     }
 
-    await sip.call.respond(ic.id, {
+    sip.call.respond(ic.id, {
         code: 200,
         reason:'OK',
     })
@@ -86,16 +86,16 @@ async function test() {
 
     await z.sleep(100)
 
-    await sip.call.start_record_wav(oc.id, {file: './oc.wav'})
-    await sip.call.start_record_wav(ic.id, {file: './ic.wav'})
+    sip.call.start_record_wav(oc.id, {file: './oc.wav'})
+    sip.call.start_record_wav(ic.id, {file: './ic.wav'})
 
-    await sip.call.start_speech_recog(oc.id)
-    await sip.call.start_speech_recog(ic.id)
+    sip.call.start_speech_recog(oc.id)
+    sip.call.start_speech_recog(ic.id)
 
     await z.sleep(100)
 
-    await sip.call.start_speech_synth(oc.id, {voice: 'kal16', text: 'Good morning.'})
-    await sip.call.start_speech_synth(ic.id, {voice: 'kal16', text: 'How are you?'})
+    sip.call.start_speech_synth(oc.id, {voice: 'kal16', text: 'Good morning.'})
+    sip.call.start_speech_synth(ic.id, {voice: 'kal16', text: 'How are you?'})
 
     await z.wait([
         {
@@ -118,16 +118,16 @@ async function test() {
         },
     ], 3000)
 
-    await sip.call.stop_speech_synth(oc.id) // this is not actually necessary. It is used just to confirm the command works
-    await sip.call.stop_speech_synth(ic.id) // this is not actually necessary. It is used just to confirm the command works
+    sip.call.stop_speech_synth(oc.id) // this is not actually necessary. It is used just to confirm the command works
+    sip.call.stop_speech_synth(ic.id) // this is not actually necessary. It is used just to confirm the command works
 
-    await sip.call.stop_speech_recog(oc.id) // this is not actually necessary. It is used just to confirm the command works
-    await sip.call.stop_speech_recog(ic.id) // this is not actually necessary. It is used just to confirm the command works
+    sip.call.stop_speech_recog(oc.id) // this is not actually necessary. It is used just to confirm the command works
+    sip.call.stop_speech_recog(ic.id) // this is not actually necessary. It is used just to confirm the command works
 
-    await sip.call.stop_record_wav(oc.id)
-    await sip.call.stop_record_wav(ic.id)
+    sip.call.stop_record_wav(oc.id)
+    sip.call.stop_record_wav(ic.id)
 
-    await sip.call.terminate(oc.id)
+    sip.call.terminate(oc.id)
 
     await z.wait([
         {

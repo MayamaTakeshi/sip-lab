@@ -111,7 +111,7 @@ async function test() {
     }
 
     // Now we answer the call at t2 side sending custom headers.
-    await sip.call.respond(ic.id, {
+    sip.call.respond(ic.id, {
         code: 200,
         reason: 'OK',
         headers: {
@@ -153,7 +153,7 @@ async function test() {
     ], 1000)
 
     // now we terminate the call from t1 side
-    await sip.call.terminate(oc.id)
+    sip.call.terminate(oc.id)
 
     // and wait for termination events
     await z.wait([

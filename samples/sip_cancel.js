@@ -46,7 +46,7 @@ async function test() {
         sip_call_id: z.$sip_call_id,
     }
 
-    await sip.call.respond(ic.id, {code: 180, reason: 'Ringing'})
+    sip.call.respond(ic.id, {code: 180, reason: 'Ringing'})
 
     await z.wait([
         {
@@ -60,7 +60,7 @@ async function test() {
         },
     ], 1000)
 
-    await sip.call.terminate(oc.id)
+    sip.call.terminate(oc.id)
 
     await z.wait([
         /*

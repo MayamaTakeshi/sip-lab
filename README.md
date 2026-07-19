@@ -16,10 +16,8 @@ The npm package is built for Ubuntu/Debian and might work with other linux distr
 First install apt packages:
 
 ```
-apt install build-essential automake autoconf libtool libspeex-dev libopus-dev libsdl2-dev libavdevice-dev libswscale-dev libv4l-dev libopencore-amrnb-dev libopencore-amrwb-dev libvo-amrwbenc-dev libvo-amrwbenc-dev libboost-dev libtiff-dev libpcap-dev libssl-dev uuid-dev flite-dev cmake git wget bc
-
+apt install libspeex-dev libopus-dev libavdevice-dev libtiff-dev libssl-dev uuid-dev flite-dev
 ```
-Obs: in ubuntu you might also need to install libssl1.1
 
 Then:
 ```
@@ -64,7 +62,7 @@ node node_modules/sip-lab/samples_extra/ws_speech_server.google.js
 
 ## About the code
 
-Although the code in written in *.cpp/*.hpp named files, this is not actually a C++ project.
+Although the code is written in *.cpp/*.hpp named files, this is not actually a C++ project.
 
 It is mostly written in C using some C++ facilities.
 

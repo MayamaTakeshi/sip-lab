@@ -55,7 +55,7 @@ async function test() {
         sip_call_id: z.$sip_call_id,
     }
 
-    await sip.call.respond(ic.id, {
+    sip.call.respond(ic.id, {
         code: 200,
         reason:'OK',
     })
@@ -82,13 +82,13 @@ async function test() {
         },
     ], 1000)
 
-    await sip.call.start_record_wav(oc.id, {file: './oc.wav'})
-    await sip.call.start_record_wav(ic.id, {file: './ic.wav'})
+    sip.call.start_record_wav(oc.id, {file: './oc.wav'})
+    sip.call.start_record_wav(ic.id, {file: './ic.wav'})
 
-    await sip.call.start_inband_dtmf_detection(oc.id)
+    sip.call.start_inband_dtmf_detection(oc.id)
 
-    await sip.call.send_dtmf(oc.id, {digits: '1234', mode: 0})
-    await sip.call.send_dtmf(ic.id, {digits: '4321', mode: 1})
+    sip.call.send_dtmf(oc.id, {digits: '1234', mode: 0})
+    sip.call.send_dtmf(ic.id, {digits: '4321', mode: 1})
 
     await z.wait([
         {
@@ -105,7 +105,7 @@ async function test() {
         },
     ], 2000)
 
-    await sip.call.reinvite(oc.id)
+    sip.call.reinvite(oc.id)
 
     await z.wait([
         {
@@ -114,7 +114,7 @@ async function test() {
         },
     ], 1000)
 
-    await sip.call.respond(ic.id, {code: 200, reason: 'OK'})
+    sip.call.respond(ic.id, {code: 200, reason: 'OK'})
 
     await z.wait([
         {
@@ -147,8 +147,8 @@ async function test() {
         },
     ], 500)
 
-    await sip.call.send_dtmf(oc.id, {digits: '1234', mode: 0})
-    await sip.call.send_dtmf(ic.id, {digits: '4321', mode: 1})
+    sip.call.send_dtmf(oc.id, {digits: '1234', mode: 0})
+    sip.call.send_dtmf(ic.id, {digits: '4321', mode: 1})
 
     await z.wait([
         {
@@ -166,7 +166,7 @@ async function test() {
 
     ], 2000)
 
-    await sip.call.reinvite(ic.id)
+    sip.call.reinvite(ic.id)
 
     await z.wait([
         {
@@ -175,7 +175,7 @@ async function test() {
         },
     ], 1000)
 
-    await sip.call.respond(oc.id, {code: 200, reason: 'OK'})
+    sip.call.respond(oc.id, {code: 200, reason: 'OK'})
 
     await z.wait([
         {
@@ -208,8 +208,8 @@ async function test() {
         },
     ], 500)
 
-    await sip.call.send_dtmf(oc.id, {digits: '1234', mode: 0})
-    await sip.call.send_dtmf(ic.id, {digits: '4321', mode: 1})
+    sip.call.send_dtmf(oc.id, {digits: '1234', mode: 0})
+    sip.call.send_dtmf(ic.id, {digits: '4321', mode: 1})
 
     await z.wait([
         {
@@ -226,7 +226,7 @@ async function test() {
         },
     ], 2000)
 
-    await sip.call.send_request(oc.id, {method: 'INFO'})
+    sip.call.send_request(oc.id, {method: 'INFO'})
 
     await z.wait([
         {
@@ -238,7 +238,7 @@ async function test() {
         },
     ], 500)
 
-    await sip.call.respond(ic.id, {code: 200, reason: 'OK'})
+    sip.call.respond(ic.id, {code: 200, reason: 'OK'})
 
     await z.wait([
         {
@@ -252,7 +252,7 @@ async function test() {
         },
     ], 500)
 
-    await sip.call.reinvite(oc.id)
+    sip.call.reinvite(oc.id)
 
     await z.wait([
         {
@@ -261,7 +261,7 @@ async function test() {
         },
     ], 1000)
 
-    await sip.call.respond(ic.id, {code: 200, reason: 'OK'})
+    sip.call.respond(ic.id, {code: 200, reason: 'OK'})
 
     await z.wait([
         {
@@ -294,8 +294,8 @@ async function test() {
         },
     ], 500)
 
-    await sip.call.send_dtmf(oc.id, {digits: '1234', mode: 0})
-    await sip.call.send_dtmf(ic.id, {digits: '4321', mode: 1})
+    sip.call.send_dtmf(oc.id, {digits: '1234', mode: 0})
+    sip.call.send_dtmf(ic.id, {digits: '4321', mode: 1})
 
     await z.wait([
         {
@@ -312,12 +312,12 @@ async function test() {
         },
     ], 2000)
 
-    await sip.call.start_play_wav(oc.id, {file: 'samples/artifacts/hello_good_morning.wav'})
-    await sip.call.start_play_wav(ic.id, {file: 'samples/artifacts/hello_good_morning.wav'})
+    sip.call.start_play_wav(oc.id, {file: 'samples/artifacts/hello_good_morning.wav'})
+    sip.call.start_play_wav(ic.id, {file: 'samples/artifacts/hello_good_morning.wav'})
 
     await z.sleep(2000)
 
-    await sip.call.reinvite(oc.id)
+    sip.call.reinvite(oc.id)
 
     await z.wait([
         {
@@ -326,7 +326,7 @@ async function test() {
         },
     ], 1000)
 
-    await sip.call.respond(ic.id, {code: 200, reason: 'OK'})
+    sip.call.respond(ic.id, {code: 200, reason: 'OK'})
 
     await z.wait([
         {
@@ -367,14 +367,14 @@ async function test() {
     console.log("stat1", stat1)
     console.log("stat2", stat2)
 
-    await sip.call.stop_play_wav(oc.id) // this is not really necessary. We are just confirming it works
-    await sip.call.stop_play_wav(ic.id) // this is not really necessary. We are just confirming it works
+    sip.call.stop_play_wav(oc.id) // this is not really necessary. We are just confirming it works
+    sip.call.stop_play_wav(ic.id) // this is not really necessary. We are just confirming it works
 
-    await sip.call.stop_record_wav(oc.id)
-    await sip.call.stop_record_wav(ic.id)
+    sip.call.stop_record_wav(oc.id)
+    sip.call.stop_record_wav(ic.id)
 
 
-    await sip.call.terminate(oc.id)
+    sip.call.terminate(oc.id)
 
     await z.wait([
         {

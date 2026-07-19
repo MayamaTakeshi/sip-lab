@@ -55,7 +55,7 @@ async function test() {
         sip_call_id: z.$sip_call_id,
     }
 
-    await sip.call.respond(ic.id, {
+    sip.call.respond(ic.id, {
         code: 200,
         reason:'OK',
     })
@@ -82,17 +82,17 @@ async function test() {
         },
     ], 1000)
 
-    await sip.call.start_record_wav(oc.id, {file: './oc.wav'})
-    await sip.call.start_record_wav(ic.id, {file: './ic.wav'})
+    sip.call.start_record_wav(oc.id, {file: './oc.wav'})
+    sip.call.start_record_wav(ic.id, {file: './ic.wav'})
 
     await z.sleep(100)
 
-    await sip.call.start_play_wav(oc.id, {file: 'samples/artifacts/hello_good_morning.wav', end_of_file_event: true})
-    await sip.call.start_play_wav(ic.id, {file: 'samples/artifacts/hello_good_morning.wav', end_of_file_event: true})
+    sip.call.start_play_wav(oc.id, {file: 'samples/artifacts/hello_good_morning.wav', end_of_file_event: true})
+    sip.call.start_play_wav(ic.id, {file: 'samples/artifacts/hello_good_morning.wav', end_of_file_event: true})
 
     await z.sleep(500)
 
-    await sip.call.reinvite(oc.id)
+    sip.call.reinvite(oc.id)
 
     await z.wait([
         {
@@ -101,7 +101,7 @@ async function test() {
         },
     ], 1000)
 
-    await sip.call.respond(ic.id, {code: 200, reason: 'OK'})
+    sip.call.respond(ic.id, {code: 200, reason: 'OK'})
 
     await z.wait([
         {
@@ -146,7 +146,7 @@ async function test() {
     ], 5000)
 
 
-    await sip.call.reinvite(ic.id)
+    sip.call.reinvite(ic.id)
 
     await z.wait([
         {
@@ -155,7 +155,7 @@ async function test() {
         },
     ], 1000)
 
-    await sip.call.respond(oc.id, {code: 200, reason: 'OK'})
+    sip.call.respond(oc.id, {code: 200, reason: 'OK'})
 
     await z.wait([
         {
@@ -205,10 +205,10 @@ async function test() {
     console.log("stat1", stat1)
     console.log("stat2", stat2)
 
-    await sip.call.stop_record_wav(oc.id)
-    await sip.call.stop_record_wav(ic.id)
+    sip.call.stop_record_wav(oc.id)
+    sip.call.stop_record_wav(ic.id)
 
-    await sip.call.terminate(oc.id)
+    sip.call.terminate(oc.id)
 
     await z.wait([
         {

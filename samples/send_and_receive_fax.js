@@ -46,7 +46,7 @@ async function test() {
         sip_call_id: z.$sip_call_id,
     }
 
-    await sip.call.respond(ic.id, {code: 200, reason: 'OK'})
+    sip.call.respond(ic.id, {code: 200, reason: 'OK'})
 
     await z.wait([
         {
@@ -76,8 +76,8 @@ async function test() {
     var out_file = "received.tiff"
 
     // transmit_on_idle: true/true: OK, true/false: OK, false/true: OK, false/false: NG
-    await sip.call.start_fax(oc.id, {is_sender: true, file: in_file, transmit_on_idle: false})
-    await sip.call.start_fax(ic.id, {is_sender: false, file: out_file, transmit_on_idle: true})
+    sip.call.start_fax(oc.id, {is_sender: true, file: in_file, transmit_on_idle: false})
+    sip.call.start_fax(ic.id, {is_sender: false, file: out_file, transmit_on_idle: true})
 
     await z.wait([
         {
@@ -92,7 +92,7 @@ async function test() {
         },
     ], 180 * 1000)
 
-    await sip.call.terminate(oc.id)
+    sip.call.terminate(oc.id)
 
     await z.wait([
         {

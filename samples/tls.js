@@ -64,7 +64,7 @@ async function test() {
     }
 
     // Now we answer the call at t2 side
-    await sip.call.respond(ic.id, {code: 200, reason: 'OK'})
+    sip.call.respond(ic.id, {code: 200, reason: 'OK'})
 
     // Then we wait for the '200 OK' at the t1 side
     // We will also get event 'media_update' for both sides indicating media streams (RTP) were set up successfully
@@ -91,7 +91,7 @@ async function test() {
     ], 1000)
 
     // now we terminate the call from t1 side
-    await sip.call.terminate(oc.id)
+    sip.call.terminate(oc.id)
 
     // and wait for termination events
     await z.wait([

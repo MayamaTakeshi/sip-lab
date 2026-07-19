@@ -56,7 +56,7 @@ async function test() {
         sip_call_id: z.$sip_call_id,
     }
 
-    await sip.call.respond(ic.id, {
+    sip.call.respond(ic.id, {
         code: 200,
         reason:'OK',
     })
@@ -83,14 +83,14 @@ async function test() {
         },
     ], 1000)
 
-    await sip.call.start_record_wav(oc.id, {file: './oc.wav'})
-    await sip.call.start_record_wav(ic.id, {file: './ic.wav'})
+    sip.call.start_record_wav(oc.id, {file: './oc.wav'})
+    sip.call.start_record_wav(ic.id, {file: './ic.wav'})
 
-    await sip.call.start_speech_recog(oc.id, {server_url: 'ws://0.0.0.0:8080', engine: 'bfsk-sr', language: '500:2000'})
-    await sip.call.start_speech_recog(ic.id, {server_url: 'ws://0.0.0.0:8080', engine: 'bfsk-sr', language: '500:2000'})
+    sip.call.start_speech_recog(oc.id, {server_url: 'ws://0.0.0.0:8080', engine: 'bfsk-sr', language: '500:2000'})
+    sip.call.start_speech_recog(ic.id, {server_url: 'ws://0.0.0.0:8080', engine: 'bfsk-sr', language: '500:2000'})
 
-    await sip.call.start_speech_synth(oc.id, {server_url: 'ws://0.0.0.0:8080', engine: 'bfsk-ss', voice: '5', language: '500:2000', text: 'abcdefgh', times: 1})
-    await sip.call.start_speech_synth(ic.id, {server_url: 'ws://0.0.0.0:8080', engine: 'bfsk-ss', voice: '5', language: '500:2000', text: 'hgfedcba', times: 1})
+    sip.call.start_speech_synth(oc.id, {server_url: 'ws://0.0.0.0:8080', engine: 'bfsk-ss', voice: '5', language: '500:2000', text: 'abcdefgh', times: 1})
+    sip.call.start_speech_synth(ic.id, {server_url: 'ws://0.0.0.0:8080', engine: 'bfsk-ss', voice: '5', language: '500:2000', text: 'hgfedcba', times: 1})
 
     await z.wait([
         {
@@ -113,10 +113,10 @@ async function test() {
         }
     ], 3000)
 
-    await sip.call.stop_record_wav(oc.id)
-    await sip.call.stop_record_wav(ic.id)
+    sip.call.stop_record_wav(oc.id)
+    sip.call.stop_record_wav(ic.id)
 
-    await sip.call.terminate(oc.id)
+    sip.call.terminate(oc.id)
 
     await z.wait([
         {

@@ -110,7 +110,7 @@ async function test() {
     var qop = 'auth'
     var algorithm = 'MD5'
     var uri = z.$ruri
-    await sip.call.respond(ic.id, {
+    sip.call.respond(ic.id, {
         code: 407,
         reason: 'Proxy Authentication Required',
         headers: {
@@ -187,7 +187,7 @@ async function test() {
     }
 
     // now we answer the call
-    await sip.call.respond(ic.id, {
+    sip.call.respond(ic.id, {
         code: 200,
         reason: 'OK',
     })
@@ -216,11 +216,11 @@ async function test() {
         },
     ], 1000)
 
-    await sip.call.start_inband_dtmf_detection(oc.id)
-    await sip.call.start_inband_dtmf_detection(ic.id)
+    sip.call.start_inband_dtmf_detection(oc.id)
+    sip.call.start_inband_dtmf_detection(ic.id)
 
-    await sip.call.send_dtmf(oc.id, {digits: '1234', mode: 1})
-    await sip.call.send_dtmf(ic.id, {digits: '1234', mode: 1})
+    sip.call.send_dtmf(oc.id, {digits: '1234', mode: 1})
+    sip.call.send_dtmf(ic.id, {digits: '1234', mode: 1})
 
     await z.wait([
         {
@@ -240,7 +240,7 @@ async function test() {
     ], 2000)
 
     // now we terminate the call from t1 side
-    await sip.call.terminate(oc.id)
+    sip.call.terminate(oc.id)
 
     // and wait for termination events
     await z.wait([

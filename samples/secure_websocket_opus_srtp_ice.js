@@ -72,7 +72,7 @@ async function test() {
     }
 
     // Answer the call at t2 side with matching media config
-    await sip.call.respond(ic.id, {
+    sip.call.respond(ic.id, {
         code: 200,
         reason: 'OK',
         media: [{type: "audio", secure: true, ice: true}],
@@ -101,12 +101,12 @@ async function test() {
         },
     ], 5000)
 
-    await sip.call.start_inband_dtmf_detection(oc.id)
-    await sip.call.start_inband_dtmf_detection(ic.id)
+    sip.call.start_inband_dtmf_detection(oc.id)
+    sip.call.start_inband_dtmf_detection(ic.id)
 
     // using 1234 fails frequently as we get things like '12334'
-    await sip.call.send_dtmf(oc.id, {digits: '12', mode: 1})
-    await sip.call.send_dtmf(ic.id, {digits: '12', mode: 1})
+    sip.call.send_dtmf(oc.id, {digits: '12', mode: 1})
+    sip.call.send_dtmf(ic.id, {digits: '12', mode: 1})
 
     await z.wait([
         {
@@ -135,7 +135,7 @@ async function test() {
     assert(stat2.CodecInfo == "opus/8000/1")
 
     // Terminate the call from t1 side
-    await sip.call.terminate(oc.id)
+    sip.call.terminate(oc.id)
 
     // Wait for call termination
     await z.wait([

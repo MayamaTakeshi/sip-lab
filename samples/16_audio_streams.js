@@ -64,7 +64,7 @@ async function test() {
     }
 
     // Now we answer the call at t2 side and accept all 16 streams
-    await sip.call.respond(ic.id, {code: 200, reason: 'OK', media: 'audio,audio,audio,audio,audio,audio,audio,audio,audio,audio,audio,audio,audio,audio,audio,audio'})
+    sip.call.respond(ic.id, {code: 200, reason: 'OK', media: 'audio,audio,audio,audio,audio,audio,audio,audio,audio,audio,audio,audio,audio,audio,audio,audio'})
 
     // Then we wait for the '200 OK' at the t1 side
     // We will also get event 'media_update' for both sides indicating media streams (RTP) were set up successfully
@@ -90,7 +90,7 @@ async function test() {
         },
     ], 1000)
 
-    await sip.call.send_dtmf(oc.id, {digits: '1234', mode: 0})
+    sip.call.send_dtmf(oc.id, {digits: '1234', mode: 0})
 
     await z.wait(_.chain(_.range(16)).map(n => ({
         event: 'dtmf',
@@ -100,9 +100,9 @@ async function test() {
         media_id: n,
     })).value(), 3000)
 
-    await sip.call.start_inband_dtmf_detection(oc.id)
+    sip.call.start_inband_dtmf_detection(oc.id)
 
-    await sip.call.send_dtmf(ic.id, {digits: '4321', mode: 1})
+    sip.call.send_dtmf(ic.id, {digits: '4321', mode: 1})
 
     await z.wait(_.chain(_.range(16)).map(n => ({
         event: 'dtmf',
@@ -113,7 +113,7 @@ async function test() {
     })).value(), 3000)
 
     // now we terminate the call from t1 side
-    await sip.call.terminate(oc.id)
+    sip.call.terminate(oc.id)
 
     // and wait for termination events
     await z.wait([

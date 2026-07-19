@@ -61,7 +61,7 @@ async function test() {
     }
 
     // Now we answer the call at t2 side
-    await sip.call.respond(ic.id, {code: 200, reason: 'OK'})
+    sip.call.respond(ic.id, {code: 200, reason: 'OK'})
 
     // Then we wait for the '200 OK' at the t1 side
     // We will also get event 'media_update' for both sides indicating media streams (RTP) were set up successfully
@@ -87,7 +87,7 @@ async function test() {
         },
     ], 1000)
 
-    await sip.call.send_request(oc.id, {method: 'REFER', headers: {'Refer-To': '0312341234'}})
+    sip.call.send_request(oc.id, {method: 'REFER', headers: {'Refer-To': '0312341234'}})
 
     await z.wait([
         {
@@ -100,7 +100,7 @@ async function test() {
         },
     ], 1000)
 
-    await sip.call.respond(ic.id, {code: 202, reason: 'Accepted'})
+    sip.call.respond(ic.id, {code: 202, reason: 'Accepted'})
 
     await z.wait([
         {
@@ -114,7 +114,7 @@ async function test() {
         },
     ], 1000)
 
-    await sip.call.send_request(ic.id, {method: 'NOTIFY', headers: {
+    sip.call.send_request(ic.id, {method: 'NOTIFY', headers: {
         'Event': 'refer',
         'Subscription-State': 'active;expires=60',
     }, body: 'SIP/2.0 100 Trying', ct_type: 'message', ct_subtype: 'sipfrag;version=2.0'})
@@ -132,7 +132,7 @@ async function test() {
         },
     ], 1000)
 
-    await sip.call.respond(oc.id, {code: 200, reason: 'OK'})
+    sip.call.respond(oc.id, {code: 200, reason: 'OK'})
 
     await z.wait([
         {
@@ -146,7 +146,7 @@ async function test() {
         },
     ], 1000)
 
-    await sip.call.send_request(ic.id, {method: 'NOTIFY', headers: {'Event': 'refer',
+    sip.call.send_request(ic.id, {method: 'NOTIFY', headers: {'Event': 'refer',
         'Subscription-State': 'terminated;reason=noresource',
     }, body: 'SIP/2.0 200 OK', ct_type: 'message', ct_subtype: 'sipfrag;version=2.0'})
 
@@ -163,7 +163,7 @@ async function test() {
         },
     ], 1000)
 
-    await sip.call.respond(oc.id, {code: 200, reason: 'OK'})
+    sip.call.respond(oc.id, {code: 200, reason: 'OK'})
 
     await z.wait([
         {
@@ -180,7 +180,7 @@ async function test() {
     await z.sleep(100)
 
     // now we terminate the call from t1 side
-    await sip.call.terminate(oc.id)
+    sip.call.terminate(oc.id)
 
     // and wait for termination events
     await z.wait([

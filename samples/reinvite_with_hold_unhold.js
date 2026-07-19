@@ -48,7 +48,7 @@ async function test() {
         sip_call_id: z.$sip_call_id,
     }
 
-    await sip.call.respond(ic.id, {code: 200, reason: 'OK'})
+    sip.call.respond(ic.id, {code: 200, reason: 'OK'})
 
     await z.wait([
         {
@@ -98,10 +98,10 @@ async function test() {
         },
     ], 1000)
 
-    await sip.call.start_inband_dtmf_detection(oc.id)
+    sip.call.start_inband_dtmf_detection(oc.id)
 
-    await sip.call.send_dtmf(oc.id, {digits: '1234', mode: 0})
-    await sip.call.send_dtmf(ic.id, {digits: '4321', mode: 1})
+    sip.call.send_dtmf(oc.id, {digits: '1234', mode: 0})
+    sip.call.send_dtmf(ic.id, {digits: '4321', mode: 1})
 
     await z.wait([
         {
@@ -120,7 +120,7 @@ async function test() {
         },
     ], 1500)
 
-    await sip.call.reinvite(oc.id, {media: [{type: 'audio', fields: ['a=sendonly', 'a=fakeattr1:1234', 'a=fakeattr2: a b c']}]}) // this will put the call on hold
+    sip.call.reinvite(oc.id, {media: [{type: 'audio', fields: ['a=sendonly', 'a=fakeattr1:1234', 'a=fakeattr2: a b c']}]}) // this will put the call on hold
 
     await z.wait([
         {
@@ -134,7 +134,7 @@ async function test() {
         },
     ], 500)
 
-    await sip.call.respond(ic.id, {code: 200, reason: 'OK'})
+    sip.call.respond(ic.id, {code: 200, reason: 'OK'})
 
     await z.wait([
         {
@@ -167,8 +167,8 @@ async function test() {
         },
     ], 500)
 
-    await sip.call.send_dtmf(oc.id, {digits: '1234', mode: 0})
-    await sip.call.send_dtmf(ic.id, {digits: '4321', mode: 1}) // This will not generate event 'dtmf' because this side of the call is on hold
+    sip.call.send_dtmf(oc.id, {digits: '1234', mode: 0})
+    sip.call.send_dtmf(ic.id, {digits: '4321', mode: 1}) // This will not generate event 'dtmf' because this side of the call is on hold
 
     await z.wait([
         {
@@ -180,7 +180,7 @@ async function test() {
         },
     ], 1500)
 
-    await sip.call.reinvite(oc.id) // defaule mode is 'sendrecv' so this will put the call off hold
+    sip.call.reinvite(oc.id) // defaule mode is 'sendrecv' so this will put the call off hold
 
     await z.wait([
         {
@@ -192,7 +192,7 @@ async function test() {
         },
     ], 500)
 
-    await sip.call.respond(ic.id, {code: 200, reason: 'OK'})
+    sip.call.respond(ic.id, {code: 200, reason: 'OK'})
 
     await z.wait([
         {
@@ -225,8 +225,8 @@ async function test() {
         },
     ], 500)
 
-    await sip.call.send_dtmf(oc.id, {digits: '1234', mode: 0})
-    await sip.call.send_dtmf(ic.id, {digits: '4321', mode: 1})
+    sip.call.send_dtmf(oc.id, {digits: '1234', mode: 0})
+    sip.call.send_dtmf(ic.id, {digits: '4321', mode: 1})
 
     await z.wait([
         {
@@ -246,7 +246,7 @@ async function test() {
     ], 1500)
  
     //await z.sleep(100)
-    await sip.call.reinvite(ic.id, {media: [{type: 'audio', fields: ['a=sendonly']}]})
+    sip.call.reinvite(ic.id, {media: [{type: 'audio', fields: ['a=sendonly']}]})
 
     await z.wait([
         {
@@ -258,7 +258,7 @@ async function test() {
         },
     ], 500)
 
-    await sip.call.respond(oc.id, {code: 200, reason: 'OK'})
+    sip.call.respond(oc.id, {code: 200, reason: 'OK'})
 
     await z.wait([
         {
@@ -290,8 +290,8 @@ async function test() {
         },
     ], 500)
 
-    await sip.call.send_dtmf(oc.id, {digits: '1234', mode: 0}) // This will not generate event 'dtmf' because this side of the call is on hold
-    await sip.call.send_dtmf(ic.id, {digits: '4321', mode: 1})
+    sip.call.send_dtmf(oc.id, {digits: '1234', mode: 0}) // This will not generate event 'dtmf' because this side of the call is on hold
+    sip.call.send_dtmf(ic.id, {digits: '4321', mode: 1})
 
     await z.wait([
         {
@@ -303,7 +303,7 @@ async function test() {
         },
     ], 1500)
 
-    await sip.call.reinvite(ic.id) // defaule mode is 'sendrecv' so this will put the call off hold
+    sip.call.reinvite(ic.id) // defaule mode is 'sendrecv' so this will put the call off hold
 
     await z.wait([
         {
@@ -315,7 +315,7 @@ async function test() {
         },
     ], 500)
 
-    await sip.call.respond(oc.id, {code: 200, reason: 'OK'})
+    sip.call.respond(oc.id, {code: 200, reason: 'OK'})
 
     await z.wait([
         {
@@ -348,8 +348,8 @@ async function test() {
         },
     ], 500)
 
-    await sip.call.send_dtmf(oc.id, {digits: '1234', mode: 0})
-    await sip.call.send_dtmf(ic.id, {digits: '4321', mode: 1})
+    sip.call.send_dtmf(oc.id, {digits: '1234', mode: 0})
+    sip.call.send_dtmf(ic.id, {digits: '4321', mode: 1})
 
     await z.wait([
         {
@@ -368,7 +368,7 @@ async function test() {
         },
     ], 1500)
  
-    await sip.call.terminate(oc.id)
+    sip.call.terminate(oc.id)
 
     await z.wait([
         {

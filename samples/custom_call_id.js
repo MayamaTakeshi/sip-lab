@@ -70,7 +70,7 @@ async function test() {
         sip_call_id: z.$sip_call_id,
     }
 
-    await sip.call.respond(ic.id, {
+    sip.call.respond(ic.id, {
         code: 422,
         reason: 'Session Timer Too Small',
         headers: {
@@ -145,7 +145,7 @@ async function test() {
         sip_call_id: z.$sip_call_id,
     }
 
-    await sip.call.respond(ic.id, {
+    sip.call.respond(ic.id, {
         code: 200,
         reason: 'OK',
         headers: {
@@ -182,7 +182,7 @@ async function test() {
 
     await z.sleep(5000)
 
-    await sip.call.terminate(oc.id)
+    sip.call.terminate(oc.id)
 
     // and wait for termination events
     await z.wait([

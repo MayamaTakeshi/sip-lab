@@ -50,7 +50,7 @@ async function test() {
         sip_call_id: z.$sip_call_id,
     }
 
-    await sip.call.respond(ic.id, {code: 200, reason: 'OK'})
+    sip.call.respond(ic.id, {code: 200, reason: 'OK'})
 
     await z.wait([
         {
@@ -100,11 +100,11 @@ async function test() {
         },
     ], 1000)
 
-    await sip.call.start_inband_dtmf_detection(oc.id)
-    await sip.call.start_inband_dtmf_detection(ic.id)
+    sip.call.start_inband_dtmf_detection(oc.id)
+    sip.call.start_inband_dtmf_detection(ic.id)
 
-    await sip.call.send_dtmf(oc.id, {digits: '1234', mode: 1})
-    await sip.call.send_dtmf(ic.id, {digits: '4321', mode: 1})
+    sip.call.send_dtmf(oc.id, {digits: '1234', mode: 1})
+    sip.call.send_dtmf(ic.id, {digits: '4321', mode: 1})
 
     await z.wait([
         {
@@ -123,7 +123,7 @@ async function test() {
         },
     ], 1500)
 
-    await sip.call.terminate(oc.id)
+    sip.call.terminate(oc.id)
 
     await z.wait([
         {

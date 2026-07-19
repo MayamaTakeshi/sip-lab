@@ -275,7 +275,7 @@ a=ptime:20`.replace(/\n/g, "\r\n")
 
     }
 
-    await sip.call.terminate(oc.id)
+    sip.call.terminate(oc.id)
 
     delete z.$req
 

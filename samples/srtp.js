@@ -52,7 +52,7 @@ async function test() {
         sip_call_id: z.$sip_call_id,
     }
 
-    await sip.call.respond(ic.id, {code: 200, reason: 'OK', media: [
+    sip.call.respond(ic.id, {code: 200, reason: 'OK', media: [
 	    {
             type: 'audio',
             secure: true,
@@ -81,11 +81,11 @@ async function test() {
         },
     ], 1000)
 
-    await sip.call.start_inband_dtmf_detection(oc.id)
-    await sip.call.start_inband_dtmf_detection(ic.id)
+    sip.call.start_inband_dtmf_detection(oc.id)
+    sip.call.start_inband_dtmf_detection(ic.id)
 
-    await sip.call.send_dtmf(oc.id, {digits: '1234', mode: 1})
-    await sip.call.send_dtmf(ic.id, {digits: '1234', mode: 1})
+    sip.call.send_dtmf(oc.id, {digits: '1234', mode: 1})
+    sip.call.send_dtmf(ic.id, {digits: '1234', mode: 1})
 
     await z.wait([
         {
@@ -104,7 +104,7 @@ async function test() {
         },
     ], 2000)
 
-    await sip.call.reinvite(oc.id, {media: [
+    sip.call.reinvite(oc.id, {media: [
         {
             type: 'audio',
             secure: true,
@@ -118,7 +118,7 @@ async function test() {
         },
     ], 500)
 
-    await sip.call.respond(ic.id, {code: 200, reason: 'OK', media: [
+    sip.call.respond(ic.id, {code: 200, reason: 'OK', media: [
         {
             type: 'audio',
             secure: true,
@@ -184,8 +184,8 @@ async function test() {
         },
     ], 1000)
 
-    await sip.call.send_dtmf(oc.id, {digits: '1234', mode: 1})
-    await sip.call.send_dtmf(ic.id, {digits: '1234', mode: 1})
+    sip.call.send_dtmf(oc.id, {digits: '1234', mode: 1})
+    sip.call.send_dtmf(ic.id, {digits: '1234', mode: 1})
 
     await z.wait([
         {
@@ -205,7 +205,7 @@ async function test() {
     ], 2000)
 
 
-    await sip.call.reinvite(ic.id, {media: [
+    sip.call.reinvite(ic.id, {media: [
         {
             type: 'audio',
             secure: true,
@@ -219,7 +219,7 @@ async function test() {
         },
     ], 500)
 
-    await sip.call.respond(oc.id, {code: 200, reason: 'OK', media: [
+    sip.call.respond(oc.id, {code: 200, reason: 'OK', media: [
         {
             type: 'audio',
             secure: true,
@@ -285,8 +285,8 @@ async function test() {
         },
     ], 1000)
 
-    await sip.call.send_dtmf(oc.id, {digits: '1234', mode: 1})
-    await sip.call.send_dtmf(ic.id, {digits: '1234', mode: 1})
+    sip.call.send_dtmf(oc.id, {digits: '1234', mode: 1})
+    sip.call.send_dtmf(ic.id, {digits: '1234', mode: 1})
 
     await z.wait([
         {
@@ -305,7 +305,7 @@ async function test() {
         },
     ], 2000)
 
-    await sip.call.terminate(oc.id)
+    sip.call.terminate(oc.id)
 
     await z.wait([
         {

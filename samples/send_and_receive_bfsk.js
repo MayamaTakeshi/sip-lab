@@ -51,7 +51,7 @@ async function test() {
         sip_call_id: z.$sip_call_id,
     }
 
-    await sip.call.respond(ic.id, {code: 200, reason: 'OK'})
+    sip.call.respond(ic.id, {code: 200, reason: 'OK'})
 
     await z.wait([
         {
@@ -97,11 +97,11 @@ async function test() {
         },
     ], 1000)
 
-    await sip.call.start_record_wav(oc.id, {file: 'oc.wav'})
-    await sip.call.start_record_wav(ic.id, {file: 'ic.wav'})
+    sip.call.start_record_wav(oc.id, {file: 'oc.wav'})
+    sip.call.start_record_wav(ic.id, {file: 'ic.wav'})
 
-    await sip.call.start_bfsk_detection(oc.id, {freq_zero: 500, freq_one: 2000})
-    await sip.call.start_bfsk_detection(ic.id, {freq_zero: 500, freq_one: 2000})
+    sip.call.start_bfsk_detection(oc.id, {freq_zero: 500, freq_one: 2000})
+    sip.call.start_bfsk_detection(ic.id, {freq_zero: 500, freq_one: 2000})
 
     oc_bits = '1010'
     ic_bits = '1100'
@@ -110,8 +110,8 @@ async function test() {
     await z.sleep(50)
 
     for(var i=0 ; i<5 ; i++) {
-        await sip.call.send_bfsk(ic.id, {bits: ic_bits, freq_zero: 500, freq_one: 2000})
-        await sip.call.send_bfsk(oc.id, {bits: oc_bits, freq_zero: 500, freq_one: 2000})
+        sip.call.send_bfsk(ic.id, {bits: ic_bits, freq_zero: 500, freq_one: 2000})
+        sip.call.send_bfsk(oc.id, {bits: oc_bits, freq_zero: 500, freq_one: 2000})
 
         await z.wait([
            {
@@ -129,10 +129,10 @@ async function test() {
         ], 10000)
     }
 
-    await sip.call.stop_record_wav(oc.id)
-    await sip.call.stop_record_wav(ic.id)
+    sip.call.stop_record_wav(oc.id)
+    sip.call.stop_record_wav(ic.id)
 
-    await sip.call.terminate(oc.id)
+    sip.call.terminate(oc.id)
 
     await z.wait([
         {

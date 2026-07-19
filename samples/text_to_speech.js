@@ -55,7 +55,7 @@ async function test() {
         sip_call_id: z.$sip_call_id,
     }
 
-    await sip.call.respond(ic.id, {
+    sip.call.respond(ic.id, {
         code: 200,
         reason:'OK',
     })
@@ -84,14 +84,14 @@ async function test() {
 
     await z.sleep(500)
 
-    await sip.call.start_record_wav(oc.id, {file: './oc.wav'})
-    await sip.call.start_record_wav(ic.id, {file: './ic.wav'})
+    sip.call.start_record_wav(oc.id, {file: './oc.wav'})
+    sip.call.start_record_wav(ic.id, {file: './ic.wav'})
 
-    await sip.call.start_inband_dtmf_detection(oc.id)
-    await sip.call.start_inband_dtmf_detection(ic.id)
+    sip.call.start_inband_dtmf_detection(oc.id)
+    sip.call.start_inband_dtmf_detection(ic.id)
 
-    await sip.call.send_dtmf(oc.id, {digits: '1234', mode: 1})
-    await sip.call.send_dtmf(ic.id, {digits: '1234', mode: 1})
+    sip.call.send_dtmf(oc.id, {digits: '1234', mode: 1})
+    sip.call.send_dtmf(ic.id, {digits: '1234', mode: 1})
 
     await z.wait([
 	{
@@ -110,8 +110,8 @@ async function test() {
 	},
     ], 3000)
 
-    await sip.call.start_speech_synth(oc.id, {voice: 'slt', text: 'Hello World.'})
-    await sip.call.start_speech_synth(ic.id, {voice: 'kal', text: 'How are you?'})
+    sip.call.start_speech_synth(oc.id, {voice: 'slt', text: 'Hello World.'})
+    sip.call.start_speech_synth(ic.id, {voice: 'kal', text: 'How are you?'})
 
     await z.wait([
         {
@@ -124,13 +124,13 @@ async function test() {
         },
     ], 3000)
 
-    await sip.call.stop_speech_synth(oc.id) // this is not actually necessary. It is used just to confirm the command works
-    await sip.call.stop_speech_synth(ic.id) // this is not actually necessary. It is used just to confirm the command works
+    sip.call.stop_speech_synth(oc.id) // this is not actually necessary. It is used just to confirm the command works
+    sip.call.stop_speech_synth(ic.id) // this is not actually necessary. It is used just to confirm the command works
 
-    await sip.call.stop_record_wav(oc.id)
-    await sip.call.stop_record_wav(ic.id)
+    sip.call.stop_record_wav(oc.id)
+    sip.call.stop_record_wav(ic.id)
 
-    await sip.call.terminate(oc.id)
+    sip.call.terminate(oc.id)
 
     await z.wait([
         {

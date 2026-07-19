@@ -2,9 +2,9 @@
  * sip-lab-server.cpp
  *
  * Standalone server wrapping the pjw_* SIP engine.
- * Communicates with the Node.js parent over a Unix domain socket.
+ * Communicates with the Node.js parent over a TCP loopback socket.
  *
- * Protocol (newline-delimited JSON over UDS):
+ * Protocol (newline-delimited JSON over TCP):
  *
  * Client -> Server (command):
  *   {"seq":<int>, "cmd":"<name>", ...args...}\n
@@ -25,9 +25,10 @@
 #include <arpa/inet.h>
 #include <cstring>
 #include <errno.h>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <signal.h>
 #include <stdio.h>
-#include <sys/un.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/select.h>
@@ -645,9 +646,6 @@ static void serve_client(int client_fd) {
     /* Event poll buffer */
     static char evt_buf[4096];
 
-    /* Notify server port on stdout so the JS side can read it */
-    fflush(stdout);
-
     while (1) {
         fd_set rfds;
         FD_ZERO(&rfds);
@@ -659,9 +657,8 @@ static void serve_client(int client_fd) {
 
         int ret = select(client_fd + 1, &rfds, NULL, NULL, &tv);
 
-        /* Poll for pjw events regardless of whether we got data */
-        int poll_res = __pjw_poll(evt_buf);
-        if (poll_res == 0) {
+        /* Drain ALL pending pjw events before checking client data */
+        while (__pjw_poll(evt_buf) == 0) {
             /* evt_buf may contain "json\nmsg" — if so, parse the JSON part,
              * inject msg as a field, and send the merged object.
              * This matches what the original index.js poll handler did. */
@@ -745,11 +742,11 @@ static void serve_client(int client_fd) {
 /* main                                                                */
 /* ------------------------------------------------------------------ */
 int main(int argc, char *argv[]) {
-    /* Build a unique abstract socket name.  Abstract sockets (sun_path[0]
-     * == '\0') live in the kernel namespace only — no file on disk is
-     * created, so there is nothing to clean up on crash. */
-    char sock_name[128];
-    snprintf(sock_name, sizeof(sock_name), "sip-lab-%d", (int)getpid());
+    int port = 0; /* 0 = let OS assign a free port */
+
+    if (argc >= 2) {
+        port = atoi(argv[1]);
+    }
 
     /* Initialise the SIP engine */
     int init_res = __pjw_init();
@@ -758,18 +755,21 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    /* Create listening abstract Unix domain socket */
-    int listen_fd = socket(AF_UNIX, SOCK_STREAM, 0);
+    /* Create listening TCP socket on loopback */
+    int listen_fd = socket(AF_INET, SOCK_STREAM, 0);
     if (listen_fd < 0) {
         perror("sip-lab-server: socket");
         return 1;
     }
 
-    struct sockaddr_un addr;
+    int opt = 1;
+    setsockopt(listen_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+
+    struct sockaddr_in addr;
     memset(&addr, 0, sizeof(addr));
-    addr.sun_family = AF_UNIX;
-    addr.sun_path[0] = '\0';  /* abstract namespace */
-    strncpy(addr.sun_path + 1, sock_name, sizeof(addr.sun_path) - 2);
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK); /* 127.0.0.1 only */
+    addr.sin_port = htons((uint16_t)port);
 
     if (bind(listen_fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
         perror("sip-lab-server: bind");
@@ -781,8 +781,13 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    /* Print the socket name on stderr so the Node.js parent can connect. */
-    fprintf(stderr, "READY @%s\n", sock_name);
+    /* Discover the actual bound port */
+    socklen_t addrlen = sizeof(addr);
+    getsockname(listen_fd, (struct sockaddr *)&addr, &addrlen);
+    int actual_port = ntohs(addr.sin_port);
+
+    /* Print the port on stderr so the Node.js parent can connect. */
+    fprintf(stderr, "READY %d\n", actual_port);
     fflush(stderr);
 
     /* Accept exactly one client (Node.js process) and serve it */
@@ -791,6 +796,8 @@ int main(int argc, char *argv[]) {
         perror("sip-lab-server: accept");
         return 1;
     }
+    opt = 1;
+    setsockopt(client_fd, IPPROTO_TCP, TCP_NODELAY, &opt, sizeof(opt));
 
     close(listen_fd);
 
