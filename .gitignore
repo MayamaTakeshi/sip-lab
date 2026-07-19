@@ -4,10 +4,10 @@ build
 *.so
 *.a
 pjproject
-Makefile
 *.mk
 *.Makefile
 out
+sip_lab_server
 
 # Rust artifacts
 **/target/

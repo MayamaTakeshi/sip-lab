@@ -12,6 +12,7 @@ const deasync = require('deasync')
 /* ------------------------------------------------------------------ */
 function findBinary() {
   const candidates = [
+    path.join(__dirname, 'sip_lab_server'),
     path.join(__dirname, 'build', 'Release', 'sip_lab_server'),
     path.join(__dirname, 'build', 'Debug', 'sip_lab_server'),
   ]
@@ -19,7 +20,7 @@ function findBinary() {
     try { fs.accessSync(p, fs.constants.X_OK); return p } catch (_) {}
   }
   throw new Error(
-    'sip-lab: could not find sip_lab_server binary. Run "npm run build" first.'
+    'sip-lab: could not find sip_lab_server binary. Run "make" or "npm run build-server" first.'
   )
 }
 

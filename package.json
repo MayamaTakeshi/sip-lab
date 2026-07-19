@@ -10,6 +10,9 @@
     "install": "node-gyp rebuild",
     "build": "node-gyp build",
     "rebuild": "node-gyp rebuild",
+    "build-server": "make",
+    "build-server-release": "make BUILD=release",
+    "clean-server": "make clean",
     "test": "./runtests -a 3"
   },
   "repository": {
@@ -33,8 +36,10 @@
   },
   "files": [
     "index.js",
+    "index_server.js",
     "binding.gyp",
     "build_deps.sh",
+    "Makefile",
     "include",
     "src",
     "README.md",

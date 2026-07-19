@@ -21,18 +21,24 @@
             "3rdParty/pocketsphinx/include",
             "3rdParty/pocketsphinx/build/include",
             "3rdParty/pjwebsock/websock",
+            "<!@(node -p \"require('node-addon-api').include\")",
           ],
           'conditions': [
             [ 'OS!="win"', {
-              'cflags': ['-g', '-DPJ_HAS_SSL_SOCK=1'],
+              'cflags': ['-g', '-DPJ_HAS_SSL_SOCK=1', '-DNAPI_VERSION=6'],
               'cflags_cc': [
                 '-g',
                 '-DPJ_HAS_SSL_SOCK=1',
                 '-fexceptions',
                 '-Wno-maybe-uninitialized',
                 '-fPIC',
+		'-DNAPI_VERSION=6',
               ],
-            }]
+              'ldflags_cc': [
+                '-all-static',
+              ]
+              }
+            ]
           ],
           'link_settings': {
               'libraries': [
@@ -83,12 +89,12 @@
                 '-lswscale',
                 '-lavutil',
                 '-lspeex',
-                '-lflite',
-                '-lflite_cmu_us_awb',
-                '-lflite_cmu_us_kal',
-                '-lflite_cmu_us_rms',
-                '-lflite_cmu_us_slt',
-                '-lflite_cmu_us_kal16',
+		'-lflite',
+		'-lflite_cmu_us_awb',
+		'-lflite_cmu_us_kal',
+		'-lflite_cmu_us_rms',
+		'-lflite_cmu_us_slt',
+		'-lflite_cmu_us_kal16',
                 '-l srtp-x86_64-unknown-linux-gnu',
                 '-ljpeg',
                 '-Wl,--end-group',
@@ -98,10 +104,10 @@
     },
 
     {
-      'target_name': 'sip_lab_server',
-      'type': 'executable',
+      'target_name': 'addon',
+      'type': 'loadable_module', # this is default for node-gyp but gyp will complain if absent.
       'dependencies': ['all-settings'],
-
+    
       'actions': [
         {
           'action_name': 'build_deps',
@@ -117,7 +123,7 @@
         'src/event_templates.cpp',
         'src/idmanager.cpp',
         'src/sip.cpp',
-        'src/server.cpp',
+        'src/addon.cpp',
         'src/pjsip/src/pjsip/sip_transport_ws.c',
         'src/pjmedia/src/pjmedia/dtmfdet.c',
         'src/pjmedia/src/pjmedia/bfsk_det.c',
