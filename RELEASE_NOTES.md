@@ -5,7 +5,8 @@
 
     Now we run the the core as an external tcp server and and implies a breaking change as we need to wait for a reply from the server.
 
-    Before:
+Before:
+
 ```
     t = sip.transport.create({address: "127.0.0.1", type: 'udp'})
     
@@ -17,8 +18,10 @@
     
     sip.stop()
 ```
+
 Now:  
-``````
+
+```
 
     t = await sip.transport.create({address: "127.0.0.1", type: 'udp'})
     
