@@ -2,7 +2,8 @@
 
 ## 1.45.0
   - Improvement [Consider running sip-lab as an external process](https://github.com/MayamaTakeshi/sip-lab/issues/55)
-    Now we run the the core as an external tcp server and and this implies a breaking change as we need to wait for a reply from the server.
+
+    Now we run the the core as an external tcp server and and implies a breaking change as we need to wait for a reply from the server.
 
     Before:
 ```
@@ -29,7 +30,7 @@ Now:
     
     await sip.stop()
 ```
-    
+
 
 ## 1.41.2
   - Bug Correction: [Corrections in bfsk detection by kiro-cli](https://github.com/MayamaTakeshi/sip-lab/issues/135)
