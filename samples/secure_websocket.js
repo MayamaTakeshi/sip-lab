@@ -36,7 +36,7 @@ async function test() {
     // Make the call from t1 to t2 over Secure WebSocket
     const oc = await sip.call.create(t1.id, {
         from_uri: 'sip:alice@test.com',
-        to_uri: 'sip:bob@127.0.0.1:6062',
+        to_uri: `sip:bob@127.0.0.1:${t2.port}`,
     })
 
     // Wait for the call to arrive at t2 and 100 Trying response at t1

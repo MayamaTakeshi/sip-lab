@@ -28,7 +28,7 @@ async function test() {
     const t1 = await sip.transport.create({
         address: "127.0.0.1",
         type: "wss",
-        ws_url: "wss://127.0.0.1:6062/sip",
+        ws_url: `wss://127.0.0.1:6062/sip`,
     })
 
     console.log("t1", t1)

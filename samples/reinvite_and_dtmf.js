@@ -73,11 +73,11 @@ async function test() {
               {
                 type: 'audio',
                 local: {
-                  port: 10000,
+                  port: m.nonzero,
                   mode: 'sendrecv'
                 },
                 remote: {
-                  port: 10002,
+                  port: m.nonzero,
                   mode: 'sendrecv'
                 },
                 fmt: [                                                                             
@@ -95,11 +95,11 @@ async function test() {
               {
                 type: 'audio',
                 local: {
-                  port: 10002,
+                  port: m.nonzero,
                   mode: 'sendrecv'
                 },
                 remote: {
-                  port: 10000,
+                  port: m.nonzero,
                   mode: 'sendrecv'
                 },
                 fmt: [                                                                             
@@ -178,11 +178,11 @@ async function test() {
                   {
                     type: 'audio',
                     local: {
-                      port: 10000,
+                      port: m.nonzero,
                       mode: 'sendrecv'
                     },
                     remote: {
-                      port: 10002,
+                      port: m.nonzero,
                       mode: 'sendrecv'
                     },
                     fmt: [                                                                             
@@ -200,11 +200,11 @@ async function test() {
                   {
                     type: 'audio',
                     local: {
-                      port: 10002,
+                      port: m.nonzero,
                       mode: 'sendrecv'
                     },
                     remote: {
-                      port: 10000,
+                      port: m.nonzero,
                       mode: 'sendrecv'
                     },
                     fmt: [                                                                             
@@ -258,11 +258,11 @@ async function test() {
                   {
                     type: 'audio',
                     local: {
-                      port: 10000,
+                      port: m.nonzero,
                       mode: 'sendrecv'
                     },
                     remote: {
-                      port: 10002,
+                      port: m.nonzero,
                       mode: 'sendrecv'
                     },
                     fmt: [                                                                             
@@ -280,11 +280,11 @@ async function test() {
                   {
                     type: 'audio',
                     local: {
-                      port: 10002,
+                      port: m.nonzero,
                       mode: 'sendrecv'
                     },
                     remote: {
-                      port: 10000,
+                      port: m.nonzero,
                       mode: 'sendrecv'
                     },
                     fmt: [                                                                             

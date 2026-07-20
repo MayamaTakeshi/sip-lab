@@ -24,8 +24,6 @@ async function test() {
     console.log(await sip.start((data) => { console.log(data)} ))
 
     // Here we create the SIP endpoints (transports).
-    // Since we don't specify the port, an available port will be allocated.
-    // Since we don't specify the type ('udp' or 'tcp' or 'tls'), 'udp' will be used by default.
     const t1 = await sip.transport.create({address: "127.0.0.1", port: 6060, type: 'tls', cert_file: 'samples/artifacts/tls/cacert.pem', key_file: 'samples/artifacts/tls/cakey.pem'})
     const t2 = await sip.transport.create({address: "127.0.0.1", port: 6061, type: 'tls', cert_file: 'samples/artifacts/tls/cacert.pem', key_file: 'samples/artifacts/tls/cakey.pem'})
 
