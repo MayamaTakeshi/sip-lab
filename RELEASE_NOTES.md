@@ -1,5 +1,8 @@
 ### Release Notes
 
+## 1.47.0
+  - New Feature: [Add bfsk_aggregation_on](https://github.com/MayamaTakeshi/sip-lab/issues/140)
+
 ## 1.45.1
   - Bug Correction: [Correction in bfsk detection by opencode](https://github.com/MayamaTakeshi/sip-lab/issues/138)
 
