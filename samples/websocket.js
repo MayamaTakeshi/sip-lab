@@ -150,7 +150,7 @@ async function test() {
     process.exit(0)
 }
 
-test().catch(e => {
+test().catch(async e => {
     console.error(e)
     process.exit(1)
 })

@@ -322,7 +322,7 @@ a=ptime:20`.replace(/\n/g, "\r\n")
 }
 
 test()
-.catch(e => {
+.catch(async e => {
     console.error(e)
     process.exit(1)
 })

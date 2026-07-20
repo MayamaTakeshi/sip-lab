@@ -205,7 +205,7 @@ async function test() {
 
 
 test()
-.catch(e => {
+.catch(async e => {
     console.error(e)
     process.exit(1)
 })

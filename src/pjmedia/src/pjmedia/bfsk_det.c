@@ -76,21 +76,28 @@
  * MIN_BELOW: number of consecutive below-threshold chunks required before
  * reporting a trailing edge.  With CHUNK_SIZE=16 (2 ms) and the default
  * signal_duration=10 ms, each tone burst is 5 chunks and each silence gap
- * is 5 chunks.  Requiring 3 consecutive below-threshold chunks filters out
- * brief glitches (common on VMs due to timer interrupt coalescing) while
- * still leaving 2 chunks of margin in the 5-chunk silence gap.
+ * is 5 chunks.  Requiring 2 consecutive below-threshold chunks is enough to
+ * filter out single-chunk glitches while leaving 3 chunks of margin in the
+ * 5-chunk silence gap.  This is important when an intermediary (e.g.
+ * FreeSWITCH) compresses the inter-bit gap — a higher MIN_BELOW would cause
+ * the first bit to be dropped because below_count never reaches the threshold
+ * before the next tone starts.
+ *
+ * The MIN_COOLDOWN mechanism handles the trailing-edge reactivation problem
+ * independently of MIN_BELOW.
  */
-#define MIN_BELOW 3
+#define MIN_BELOW 2
 
 /*
  * MIN_COOLDOWN: after reporting a bit, ignore new tone activations for this
  * many chunks.  This prevents a trailing-edge artifact (e.g. residual energy
  * from the tone generator or conference bridge mixing) from immediately
  * re-starting tone tracking and producing a spurious extra bit.  With
- * MIN_COOLDOWN=3 (6 ms), the cooldown expires well before the next bit's
- * on period begins (which starts 10 ms after the current bit's on period).
+ * MIN_COOLDOWN=7 (14 ms), the cooldown covers the full inter-bit silence gap
+ * (10 ms at the default signal_duration) with margin, preventing reactivation
+ * even when MIN_BELOW is reduced to 2.
  */
-#define MIN_COOLDOWN 5
+#define MIN_COOLDOWN 7
 
 /* Converted by ChatGPT from https://github.com/hackergrrl/goertzel/blob/master/index.js */
 
@@ -318,6 +325,28 @@ static pj_status_t bfsk_det_put_frame(pjmedia_port *this_port,
         /* Decrement cooldown counters every chunk. */
         if (dport->cooldown_zero > 0) dport->cooldown_zero--;
         if (dport->cooldown_one  > 0) dport->cooldown_one--;
+
+        /*
+         * Fast path: if tracking one tone and the other tone becomes
+         * dominant, the current tone has definitely ended.  Report it
+         * immediately and switch, rather than waiting for MIN_BELOW
+         * chunks of silence.  This eliminates the need for a silence gap
+         * between back-to-back tones, which is critical when an
+         * intermediary (e.g. FreeSWITCH) compresses or eliminates the
+         * inter-bit gap.
+         */
+        if (dport->zero_in_progress && one) {
+            dport->bfsk_cb((pjmedia_port*)dport, dport->bfsk_cb_user_data, 0);
+            dport->zero_in_progress = 0;
+            dport->below_count_zero = 0;
+            dport->cooldown_zero = MIN_COOLDOWN;
+        }
+        if (dport->one_in_progress && zero) {
+            dport->bfsk_cb((pjmedia_port*)dport, dport->bfsk_cb_user_data, 1);
+            dport->one_in_progress = 0;
+            dport->below_count_one = 0;
+            dport->cooldown_one = MIN_COOLDOWN;
+        }
 
         /* Report bit=0 on trailing edge of zero tone. */
         if (dport->zero_in_progress) {

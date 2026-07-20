@@ -76,16 +76,18 @@
  * MIN_BELOW: consecutive below-threshold blocks required before reporting
  * a trailing edge.  With SAMPLES_PER_BLOCK=16 (2 ms) and the default
  * signal_duration=10 ms, each tone burst is 5 blocks and each silence gap
- * is 5 blocks.  Requiring 3 consecutive below-threshold blocks filters out
- * brief glitches while leaving 2 blocks of margin in the 5-block silence gap.
+ * is 5 blocks.  Requiring 2 consecutive below-threshold blocks is enough to
+ * filter out single-block glitches while leaving 3 blocks of margin in the
+ * 5-block silence gap.  A lower MIN_BELOW is important when an intermediary
+ * (e.g. FreeSWITCH) compresses the inter-bit gap.
  */
-#define MIN_BELOW 3
+#define MIN_BELOW 2
 
 /*
  * MIN_COOLDOWN: after reporting a bit, ignore new tone activations for this
  * many blocks to prevent trailing-edge artifacts from producing spurious bits.
  */
-#define MIN_COOLDOWN 3
+#define MIN_COOLDOWN 7
 
 static pj_status_t bfsk_det2_put_frame(pjmedia_port *this_port, 
                                        pjmedia_frame *frame);
@@ -287,6 +289,24 @@ static pj_status_t bfsk_det2_put_frame(pjmedia_port *this_port,
         /* Decrement cooldown counters every block. */
         if (dport->cooldown_zero > 0) dport->cooldown_zero--;
         if (dport->cooldown_one  > 0) dport->cooldown_one--;
+
+        /*
+         * Fast path: if tracking one tone and the other tone becomes
+         * dominant, the current tone has definitely ended.  Report it
+         * immediately and switch.
+         */
+        if (dport->zero_in_progress && one) {
+            dport->bfsk_cb((pjmedia_port*)dport, dport->bfsk_cb_user_data, 0);
+            dport->zero_in_progress = 0;
+            dport->below_count_zero = 0;
+            dport->cooldown_zero = MIN_COOLDOWN;
+        }
+        if (dport->one_in_progress && zero) {
+            dport->bfsk_cb((pjmedia_port*)dport, dport->bfsk_cb_user_data, 1);
+            dport->one_in_progress = 0;
+            dport->below_count_one = 0;
+            dport->cooldown_one = MIN_COOLDOWN;
+        }
 
         /* Report bit=0 on trailing edge of zero tone. */
         if (dport->zero_in_progress) {
