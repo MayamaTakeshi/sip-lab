@@ -1224,6 +1224,46 @@ Napi::Value dtmf_aggregation_off(const Napi::CallbackInfo &info) {
   return env.Null();
 }
 
+Napi::Value bfsk_aggregation_on(const Napi::CallbackInfo &info) {
+  Napi::Env env = info.Env();
+
+  if (info.Length() != 1) {
+    Napi::Error::New(env,
+                     "Wrong number of arguments. Expected: inter_bit_timer")
+        .ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
+  if (!info[0].IsNumber()) {
+    Napi::TypeError::New(env, "inter_bit_timer must be number.")
+        .ThrowAsJavaScriptException();
+    return env.Null();
+  }
+  int inter_bit_timer = info[0].As<Napi::Number>().Int32Value();
+
+  int res = pjw_bfsk_aggregation_on(inter_bit_timer);
+
+  if (res != 0) {
+    Napi::Error::New(env, pjw_get_error()).ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
+  return env.Null();
+}
+
+Napi::Value bfsk_aggregation_off(const Napi::CallbackInfo &info) {
+  Napi::Env env = info.Env();
+
+  int res = pjw_bfsk_aggregation_off();
+
+  if (res != 0) {
+    Napi::Error::New(env, pjw_get_error()).ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
+  return env.Null();
+}
+
 Napi::Value get_codecs(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
 
@@ -1672,6 +1712,10 @@ Napi::Object init(Napi::Env env, Napi::Object exports) {
               Napi::Function::New(env, dtmf_aggregation_on));
   exports.Set("dtmf_aggregation_off",
               Napi::Function::New(env, dtmf_aggregation_off));
+  exports.Set("bfsk_aggregation_on",
+              Napi::Function::New(env, bfsk_aggregation_on));
+  exports.Set("bfsk_aggregation_off",
+              Napi::Function::New(env, bfsk_aggregation_off));
 
   exports.Set("get_codecs", Napi::Function::New(env, get_codecs));
   exports.Set("set_codecs", Napi::Function::New(env, set_codecs));

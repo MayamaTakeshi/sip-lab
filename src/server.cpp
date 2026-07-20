@@ -503,6 +503,23 @@ static void dispatch(int client_fd, const Document &doc) {
         return;
     }
 
+    /* ---- bfsk_aggregation_on -------------------------------------- */
+    if (strcmp(cmd, "bfsk_aggregation_on") == 0) {
+        REQUIRE_INT(doc, "inter_bit_timer", inter_bit_timer)
+        int res = pjw_bfsk_aggregation_on(inter_bit_timer);
+        if (res != 0) { send_error(client_fd, seq, pjw_get_error()); return; }
+        send_ok(client_fd, seq);
+        return;
+    }
+
+    /* ---- bfsk_aggregation_off ------------------------------------- */
+    if (strcmp(cmd, "bfsk_aggregation_off") == 0) {
+        int res = pjw_bfsk_aggregation_off();
+        if (res != 0) { send_error(client_fd, seq, pjw_get_error()); return; }
+        send_ok(client_fd, seq);
+        return;
+    }
+
     /* ---- get_codecs ---------------------------------------------- */
     if (strcmp(cmd, "get_codecs") == 0) {
         char out_codecs[4096];

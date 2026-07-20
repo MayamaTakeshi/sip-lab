@@ -277,7 +277,7 @@ int ms_timestamp();
 bool g_shutting_down;
 
 int g_dtmf_inter_digit_timer = 0;
-int g_bfsk_inter_bit_timer = 50;
+int g_bfsk_inter_bit_timer = 0;
 
 pj_str_t g_sip_ipaddress;
 
@@ -9738,7 +9738,7 @@ static int digit_buffer_thread(void *arg) {
 
   while (!g_shutting_down) {
     PJW_LOCK();
-    if (g_dtmf_inter_digit_timer > 0) {
+    if (g_dtmf_inter_digit_timer > 0 || g_bfsk_inter_bit_timer > 0) {
       g_now = ms_timestamp();
       g_call_ids.iterate(check_buffers);
     }
@@ -9792,6 +9792,30 @@ int pjw_dtmf_aggregation_off() {
   PJW_LOCK();
 
   g_dtmf_inter_digit_timer = 0;
+
+  PJW_UNLOCK();
+  return 0;
+}
+
+int pjw_bfsk_aggregation_on(int inter_bit_timer) {
+  PJW_LOCK();
+
+  if (inter_bit_timer <= 0) {
+    PJW_UNLOCK();
+    set_error("Invalid argument: inter_bit_timer must be greater than zero");
+    return -1;
+  }
+
+  g_bfsk_inter_bit_timer = inter_bit_timer;
+
+  PJW_UNLOCK();
+  return 0;
+}
+
+int pjw_bfsk_aggregation_off() {
+  PJW_LOCK();
+
+  g_bfsk_inter_bit_timer = 0;
 
   PJW_UNLOCK();
   return 0;

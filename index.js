@@ -274,6 +274,12 @@ addon.dtmf_aggregation_on = (inter_digit_timer) =>
 addon.dtmf_aggregation_off = () =>
   _cmd({ cmd: 'dtmf_aggregation_off' })
 
+addon.bfsk_aggregation_on = (inter_bit_timer) =>
+  _cmd({ cmd: 'bfsk_aggregation_on', inter_bit_timer })
+
+addon.bfsk_aggregation_off = () =>
+  _cmd({ cmd: 'bfsk_aggregation_off' })
+
 addon.get_codecs = () =>
   _cmd({ cmd: 'get_codecs' })
 
