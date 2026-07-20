@@ -1011,8 +1011,6 @@ static void on_inband_dtmf(pjmedia_port *port, void *user_data, char digit) {
 }
 
 static void on_bfsk_bit(pjmedia_port *port, void *user_data, int bit) {
-  printf("on_bfsk_bit: %i\n", bit);
-
   if (g_shutting_down)
     return;
 
@@ -5799,6 +5797,10 @@ bool restart_media_stream(Call *call, MediaEndpoint *me,
                           "");
     dispatch_event(evt);
     return false;
+  }
+
+  if (stream_info.param) {
+    stream_info.param->setting.vad = 0;
   }
 
   if (ae->med_stream) {

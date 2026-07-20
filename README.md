@@ -16,7 +16,7 @@ The npm package is built for Ubuntu/Debian and might work with other linux distr
 First install required apt packages:
 
 ```
-apt install libspeex-dev libopus-dev libavdevice-dev libtiff-dev libssl-dev uuid-dev flite-dev
+apt install libspeex-dev libopus-dev libavdevice-dev libtiff-dev libssl-dev uuid-dev flite-dev libwebp-dev
 ```
 
 Then:
