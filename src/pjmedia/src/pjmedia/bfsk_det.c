@@ -24,6 +24,7 @@
 #include <pj/assert.h>
 #include <pj/pool.h>
 #include <pj/string.h>
+#include <pj/log.h>
 
 #include <math.h>
 #include <stdio.h>
@@ -51,13 +52,17 @@
  *   - Smaller CHUNK_SIZE → poorer frequency resolution, more false detects.
  *
  * Default signal_duration (on_msec / off_msec) used by send_bfsk is 10 ms.
- * At 8000 Hz that is 80 samples per bit period.  We therefore need
- * CHUNK_SIZE well below 80 so that we see several chunks per tone burst.
- * 40 samples = 5 ms per chunk → resolution ~200 Hz, fits ~2 chunks per 10 ms
- * tone.  This is a reasonable compromise for typical FSK tone pairs that have
- * at least a few hundred Hz separation (e.g. 500/2000 Hz used in tests).
+ * At 8000 Hz that is 80 samples per bit period.  We need several chunks per
+ * tone burst for reliable detection and debouncing on VMs (where timer jitter
+ * is common).  16 samples = 2 ms per chunk gives 5 chunks per 10 ms tone,
+ * which provides ample margin for debouncing.
+ *
+ * Frequency alignment for common FSK pairs at CHUNK_SIZE=16 (8000 Hz):
+ *   500 Hz  → k = round(16 * 500 / 8000)  = 1 → bin center =  500 Hz (exact)
+ *  1000 Hz  → k = round(16 * 1000 / 8000) = 2 → bin center = 1000 Hz (exact)
+ *  2000 Hz  → k = round(16 * 2000 / 8000) = 4 → bin center = 2000 Hz (exact)
  */
-#define CHUNK_SIZE 40
+#define CHUNK_SIZE 16
 
 /*
  * THRESHOLD: normalized ratio of detected magnitude to reference magnitude.
@@ -66,6 +71,26 @@
  * positives in noisy environments, downward to detect weaker signals.
  */
 #define THRESHOLD 0.3
+
+/*
+ * MIN_BELOW: number of consecutive below-threshold chunks required before
+ * reporting a trailing edge.  With CHUNK_SIZE=16 (2 ms) and the default
+ * signal_duration=10 ms, each tone burst is 5 chunks and each silence gap
+ * is 5 chunks.  Requiring 3 consecutive below-threshold chunks filters out
+ * brief glitches (common on VMs due to timer interrupt coalescing) while
+ * still leaving 2 chunks of margin in the 5-chunk silence gap.
+ */
+#define MIN_BELOW 3
+
+/*
+ * MIN_COOLDOWN: after reporting a bit, ignore new tone activations for this
+ * many chunks.  This prevents a trailing-edge artifact (e.g. residual energy
+ * from the tone generator or conference bridge mixing) from immediately
+ * re-starting tone tracking and producing a spurious extra bit.  With
+ * MIN_COOLDOWN=3 (6 ms), the cooldown expires well before the next bit's
+ * on period begins (which starts 10 ms after the current bit's on period).
+ */
+#define MIN_COOLDOWN 5
 
 /* Converted by ChatGPT from https://github.com/hackergrrl/goertzel/blob/master/index.js */
 
@@ -167,12 +192,25 @@ struct bfsk_det
     /*
      * *_in_progress tracks whether the corresponding tone was above threshold
      * in the previous chunk.  A bit is reported on the trailing edge (when
-     * the tone drops below threshold) so that we emit exactly one event per
-     * burst.  Only one of zero_in_progress / one_in_progress should be set
-     * at a time; the dominant-frequency logic enforces this.
+     * the tone drops below threshold for MIN_BELOW consecutive chunks) so
+     * that we emit exactly one event per burst.  Only one of
+     * zero_in_progress / one_in_progress should be set at a time; the
+     * dominant-frequency logic enforces this.
      */
     int zero_in_progress;
     int one_in_progress;
+
+    int below_count_zero;
+    int below_count_one;
+
+    /*
+     * cooldown_*: after reporting a bit, the corresponding cooldown counter
+     * is set to MIN_COOLDOWN and decremented each chunk.  During cooldown
+     * the detector ignores new tone activations for that frequency, preventing
+     * spurious re-detection from trailing-edge artifacts.
+     */
+    int cooldown_zero;
+    int cooldown_one;
 
     goertzel_t *goertzel_zero;
     goertzel_t *goertzel_one;
@@ -265,23 +303,56 @@ static pj_status_t bfsk_det_put_frame(pjmedia_port *this_port,
             one  = 0;
         }
 
-        TRACE_((THIS_FILE, "zero_power=%f one_power=%f zero=%d one=%d",
-                zero_power, one_power, zero, one));
+        TRACE_((THIS_FILE, "chunk=%d zero_power=%.3f one_power=%.3f zero=%d one=%d zp=%d op=%d zbc=%d obc=%d",
+                i, zero_power, one_power, zero, one,
+                dport->zero_in_progress, dport->one_in_progress,
+                dport->below_count_zero, dport->below_count_one));
+
+        /*
+         * Report bit on trailing edge of tone, with debouncing.
+         * Require MIN_BELOW consecutive below-threshold chunks before
+         * reporting, to filter out single-chunk glitches that are common
+         * on VMs due to timer interrupt coalescing.
+         */
+
+        /* Decrement cooldown counters every chunk. */
+        if (dport->cooldown_zero > 0) dport->cooldown_zero--;
+        if (dport->cooldown_one  > 0) dport->cooldown_one--;
 
         /* Report bit=0 on trailing edge of zero tone. */
-        if (dport->zero_in_progress && !zero) {
-            dport->bfsk_cb((pjmedia_port*)dport, dport->bfsk_cb_user_data, 0);
-            dport->zero_in_progress = 0;
-        } else {
-            dport->zero_in_progress = zero;
+        if (dport->zero_in_progress) {
+            if (!zero) {
+                dport->below_count_zero++;
+                if (dport->below_count_zero >= MIN_BELOW) {
+                    dport->bfsk_cb((pjmedia_port*)dport, dport->bfsk_cb_user_data, 0);
+                    dport->zero_in_progress = 0;
+                    dport->below_count_zero = 0;
+                    dport->cooldown_zero = MIN_COOLDOWN;
+                }
+            } else {
+                dport->below_count_zero = 0;
+            }
+        } else if (zero && dport->cooldown_zero <= 0) {
+            dport->zero_in_progress = 1;
+            dport->below_count_zero = 0;
         }
 
         /* Report bit=1 on trailing edge of one tone. */
-        if (dport->one_in_progress && !one) {
-            dport->bfsk_cb((pjmedia_port*)dport, dport->bfsk_cb_user_data, 1);
-            dport->one_in_progress = 0;
-        } else {
-            dport->one_in_progress = one;
+        if (dport->one_in_progress) {
+            if (!one) {
+                dport->below_count_one++;
+                if (dport->below_count_one >= MIN_BELOW) {
+                    dport->bfsk_cb((pjmedia_port*)dport, dport->bfsk_cb_user_data, 1);
+                    dport->one_in_progress = 0;
+                    dport->below_count_one = 0;
+                    dport->cooldown_one = MIN_COOLDOWN;
+                }
+            } else {
+                dport->below_count_one = 0;
+            }
+        } else if (one && dport->cooldown_one <= 0) {
+            dport->one_in_progress = 1;
+            dport->below_count_one = 0;
         }
     }
 

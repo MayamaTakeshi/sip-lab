@@ -8057,7 +8057,6 @@ bool prepare_dtmfdet(Call *call, AudioEndpoint *ae) {
 }
 
 bool prepare_bfsk_det(Call *call, AudioEndpoint *ae, const int freq_zero, const int freq_one) {
-  printf("DEBUG prepare_bfsk_det\n");
   pj_status_t status;
 
   ConfBridgePort *fp = &ae->feature_cbps[FP_BFSK_DET];

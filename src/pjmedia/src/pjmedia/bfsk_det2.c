@@ -58,11 +58,12 @@
 
 /*
  * Number of samples fed to each Goertzel block.
- * 102 samples @ 8000 Hz = ~12.75 ms per block, ~78 Hz resolution.
- * This matches spandsp's DTMF detector block size and is a good trade-off
- * between latency and frequency selectivity for telephony FSK.
+ * 16 samples @ 8000 Hz = 2 ms per block, 500 Hz resolution.
+ * At the default signal_duration of 10 ms (80 samples), this gives
+ * 5 blocks per tone burst — enough margin for debouncing on VMs.
+ * For common FSK pairs (500/2000 Hz) the Goertzel bins align exactly.
  */
-#define SAMPLES_PER_BLOCK 102
+#define SAMPLES_PER_BLOCK 16
 
 /*
  * Detection threshold expressed as a fraction of the full-scale reference
@@ -70,6 +71,21 @@
  * to be declared present.  Increase toward 1.0 for noisier environments.
  */
 #define THRESHOLD_RATIO 0.05f
+
+/*
+ * MIN_BELOW: consecutive below-threshold blocks required before reporting
+ * a trailing edge.  With SAMPLES_PER_BLOCK=16 (2 ms) and the default
+ * signal_duration=10 ms, each tone burst is 5 blocks and each silence gap
+ * is 5 blocks.  Requiring 3 consecutive below-threshold blocks filters out
+ * brief glitches while leaving 2 blocks of margin in the 5-block silence gap.
+ */
+#define MIN_BELOW 3
+
+/*
+ * MIN_COOLDOWN: after reporting a bit, ignore new tone activations for this
+ * many blocks to prevent trailing-edge artifacts from producing spurious bits.
+ */
+#define MIN_COOLDOWN 3
 
 static pj_status_t bfsk_det2_put_frame(pjmedia_port *this_port, 
                                        pjmedia_frame *frame);
@@ -84,11 +100,18 @@ struct bfsk_det2
 
     /*
      * *_in_progress: set when the corresponding tone was above threshold in
-     * the previous block.  A bit is reported on the trailing edge.
+     * the previous block.  A bit is reported on the trailing edge (when the
+     * tone drops below threshold for MIN_BELOW consecutive blocks).
      * Mutual exclusion is enforced by the dominant-frequency logic.
      */
     int zero_in_progress;
     int one_in_progress;
+
+    int below_count_zero;
+    int below_count_one;
+
+    int cooldown_zero;
+    int cooldown_one;
 
     /* spandsp Goertzel descriptors (static configuration) and states. */
     goertzel_descriptor_t desc_zero;
@@ -261,20 +284,44 @@ static pj_status_t bfsk_det2_put_frame(pjmedia_port *this_port,
                 (double)zero_power, (double)one_power, (double)dport->threshold,
                 zero, one));
 
+        /* Decrement cooldown counters every block. */
+        if (dport->cooldown_zero > 0) dport->cooldown_zero--;
+        if (dport->cooldown_one  > 0) dport->cooldown_one--;
+
         /* Report bit=0 on trailing edge of zero tone. */
-        if (dport->zero_in_progress && !zero) {
-            dport->bfsk_cb((pjmedia_port*)dport, dport->bfsk_cb_user_data, 0);
-            dport->zero_in_progress = 0;
-        } else {
-            dport->zero_in_progress = zero;
+        if (dport->zero_in_progress) {
+            if (!zero) {
+                dport->below_count_zero++;
+                if (dport->below_count_zero >= MIN_BELOW) {
+                    dport->bfsk_cb((pjmedia_port*)dport, dport->bfsk_cb_user_data, 0);
+                    dport->zero_in_progress = 0;
+                    dport->below_count_zero = 0;
+                    dport->cooldown_zero = MIN_COOLDOWN;
+                }
+            } else {
+                dport->below_count_zero = 0;
+            }
+        } else if (zero && dport->cooldown_zero <= 0) {
+            dport->zero_in_progress = 1;
+            dport->below_count_zero = 0;
         }
 
         /* Report bit=1 on trailing edge of one tone. */
-        if (dport->one_in_progress && !one) {
-            dport->bfsk_cb((pjmedia_port*)dport, dport->bfsk_cb_user_data, 1);
-            dport->one_in_progress = 0;
-        } else {
-            dport->one_in_progress = one;
+        if (dport->one_in_progress) {
+            if (!one) {
+                dport->below_count_one++;
+                if (dport->below_count_one >= MIN_BELOW) {
+                    dport->bfsk_cb((pjmedia_port*)dport, dport->bfsk_cb_user_data, 1);
+                    dport->one_in_progress = 0;
+                    dport->below_count_one = 0;
+                    dport->cooldown_one = MIN_COOLDOWN;
+                }
+            } else {
+                dport->below_count_one = 0;
+            }
+        } else if (one && dport->cooldown_one <= 0) {
+            dport->one_in_progress = 1;
+            dport->below_count_one = 0;
         }
     }
 
