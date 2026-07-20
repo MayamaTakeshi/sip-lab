@@ -1,5 +1,8 @@
 ### Release Notes
 
+## 1.45.1
+  - Bug Correction: [Correction in bfsk detection by opencode](https://github.com/MayamaTakeshi/sip-lab/issues/138)
+
 ## 1.45.0
   - Improvement [Consider running sip-lab as an external process](https://github.com/MayamaTakeshi/sip-lab/issues/55)
 
