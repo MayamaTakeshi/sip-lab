@@ -277,7 +277,7 @@ int ms_timestamp();
 bool g_shutting_down;
 
 int g_dtmf_inter_digit_timer = 0;
-int g_bfsk_inter_bit_timer = 0;
+int g_bfsk_inter_bit_timer = 50;
 
 pj_str_t g_sip_ipaddress;
 
