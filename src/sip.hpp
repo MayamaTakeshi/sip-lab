@@ -19,6 +19,8 @@ int __pjw_poll(char *out_evt);
 int pjw_transport_create(const char *json, int *out_t_id, char *out_t_address,
                          int *out_port);
 
+int pjw_transport_destroy(int t_id);
+
 int pjw_transport_get_info(int t_id, char **out_sip_ipaddr, int *out_port);
 
 int pjw_account_create(int t_id, const char *json, int *out_acc_id);

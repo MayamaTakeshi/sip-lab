@@ -1,5 +1,8 @@
 ### Release Notes
 
+## 1.48.0
+  - New Feature: [Add transport.destroy](https://github.com/MayamaTakeshi/sip-lab/issues/142)
+
 ## 1.47.0
   - New Feature: [Add bfsk_aggregation_on](https://github.com/MayamaTakeshi/sip-lab/issues/140)
 

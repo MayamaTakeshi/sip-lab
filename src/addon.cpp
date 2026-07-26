@@ -82,6 +82,33 @@ Napi::Value transport_create(const Napi::CallbackInfo &info) {
   return obj;
 }
 
+Napi::Value transport_destroy(const Napi::CallbackInfo &info) {
+  Napi::Env env = info.Env();
+
+  if (info.Length() != 1) {
+    Napi::TypeError::New(env, "Wrong number of arguments. Expected transport_id")
+        .ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
+  if (!info[0].IsNumber()) {
+    Napi::TypeError::New(env,
+                         "Wrong argument type: transport_id must be a number.")
+        .ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
+  int t_id = info[0].As<Napi::Number>().Int32Value();
+  int res = pjw_transport_destroy(t_id);
+
+  if (res != 0) {
+    Napi::Error::New(env, pjw_get_error()).ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
+  return env.Undefined();
+}
+
 Napi::Value account_create(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
 
@@ -1659,6 +1686,7 @@ Napi::Object init(Napi::Env env, Napi::Object exports) {
   exports.Set("start", Napi::Function::New(env, start));
 
   exports.Set("transport_create", Napi::Function::New(env, transport_create));
+  exports.Set("transport_destroy", Napi::Function::New(env, transport_destroy));
 
   exports.Set("account_create", Napi::Function::New(env, account_create));
   exports.Set("account_register", Napi::Function::New(env, account_register));

@@ -160,6 +160,15 @@ static void dispatch(int client_fd, const Document &doc) {
         return;
     }
 
+    /* ---- transport_destroy ----------------------------------------- */
+    if (strcmp(cmd, "transport_destroy") == 0) {
+        REQUIRE_INT(doc, "transport_id", transport_id)
+        int res = pjw_transport_destroy(transport_id);
+        if (res != 0) { send_error(client_fd, seq, pjw_get_error()); return; }
+        send_ok(client_fd, seq);
+        return;
+    }
+
     /* ---- account_create ------------------------------------------ */
     if (strcmp(cmd, "account_create") == 0) {
         REQUIRE_INT(doc, "transport_id", transport_id)

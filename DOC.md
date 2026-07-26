@@ -215,6 +215,12 @@ Creates a new SIP transport.
   - `cert_file` (optional): The path to the TLS certificate file.
   - `key_file` (optional): The path to the TLS key file.
 
+#### `async destroy(t)`
+
+Destroys a SIP transport.
+
+- t: the transport object returned by sip.transport.create()
+
 ### `sip.call`
 
 #### `async create(transport_id, options)`

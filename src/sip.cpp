@@ -2246,6 +2246,41 @@ out:
   return 0;
 }
 
+int pjw_transport_destroy(int t_id) {
+  PJW_LOCK();
+  clear_error();
+
+  long val;
+  Transport *t;
+
+  if (!g_transport_ids.get(t_id, val)) {
+    set_error("Invalid transport_id");
+    goto out;
+  }
+  t = (Transport *)val;
+
+  if (t->type == PJSIP_TRANSPORT_UDP) {
+    pjsip_udp_transport_pause(t->sip_transport,
+                              PJSIP_UDP_TRANSPORT_DESTROY_SOCKET);
+  } else if (t->type == PJSIP_TRANSPORT_TCP || t->type == PJSIP_TRANSPORT_TLS) {
+    (t->tpfactory->destroy)(t->tpfactory);
+  } else {
+    pjsip_transport_shutdown(t->sip_transport);
+  }
+
+  g_transport_ids.remove(t_id, val);
+  g_TransportMap.erase(t->tag);
+
+  delete t;
+
+out:
+  PJW_UNLOCK();
+  if (pjw_errorstring[0]) {
+    return -1;
+  }
+  return 0;
+}
+
 int pjw_transport_get_info(int t_id, char *out_sip_ipaddr, int *out_port) {
   PJW_LOCK();
   clear_error();

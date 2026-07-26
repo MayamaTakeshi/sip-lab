@@ -175,6 +175,8 @@ addon.start = (_cb) => undefined
 addon.transport = {
   create: (params) =>
     _cmd({ cmd: 'transport_create', params: JSON.stringify(params) }),
+  destroy: (t) =>
+    _cmd({ cmd: 'transport_destroy', transport_id: t.id }),
 }
 
 addon.account = {

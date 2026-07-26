@@ -39,6 +39,7 @@ addon.stop = (clean_up = false) => {
 
 addon.transport = {
   create: (params) => { return addon.transport_create(JSON.stringify(params)) },
+  destroy: (t_id) => { return addon.transport_destroy(t_id) },
 }
 
 addon.account = {
