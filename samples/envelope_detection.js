@@ -97,14 +97,6 @@ async function test() {
     check_stride: 2,
   })
 
-  // the first tine the file is played, the envelope is not detected as the envelope detector is still prefilling its work buffer.
-  await z.wait([
-    {
-      event: 'end_of_file',
-      call_id: oc.id
-    },
-  ], 3000)
-
   for(var i=0 ; i<3 ; i++) {
       await z.wait([
         {

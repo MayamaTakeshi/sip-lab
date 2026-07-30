@@ -371,8 +371,8 @@ PJ_DEF(pj_status_t) chainlink_xcorr_det_create(
         pj_bzero(xd->ring_buffer, ring_capacity * sizeof(pj_int16_t));
     }
     xd->ring_pos = 0;
-    xd->samples_ingested = 0;
     xd->prefill_len = xd->ref_len + clock_rate / 2;
+    xd->samples_ingested = xd->prefill_len;
 
     {
         unsigned dec_len = xd->prefill_len / XCORR_DECIMATION;
