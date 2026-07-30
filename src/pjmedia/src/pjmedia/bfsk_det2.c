@@ -89,6 +89,23 @@
  */
 #define MIN_COOLDOWN 7
 
+/*
+ * MIN_CONFIRM: number of consecutive blocks the opposite tone must be
+ * dominant before the fast path fires.  2 blocks (4 ms) filters out
+ * single-block noise spikes at frequency transitions while still switching
+ * within the first half of the new tone.
+ */
+#define MIN_CONFIRM 2
+
+/*
+ * DOMINANCE_HYSTERESIS: when a tone is currently tracked (*_in_progress),
+ * the opposite tone must exceed the tracked tone's power by this
+ * multiplicative factor to be considered dominant.  Prevents rapid
+ * flip-flopping during frequency transitions when both frequencies carry
+ * residual energy.
+ */
+#define DOMINANCE_HYSTERESIS 1.25f
+
 static pj_status_t bfsk_det2_put_frame(pjmedia_port *this_port, 
                                        pjmedia_frame *frame);
 static pj_status_t bfsk_det2_on_destroy(pjmedia_port *this_port);
@@ -114,6 +131,14 @@ struct bfsk_det2
 
     int cooldown_zero;
     int cooldown_one;
+
+    /*
+     * confirm_*: consecutive blocks where the corresponding frequency has
+     * been the dominant active tone.  Gates the fast-path transition to
+     * prevent premature bit reports from single-block noise spikes.
+     */
+    int confirm_zero;
+    int confirm_one;
 
     /* spandsp Goertzel descriptors (static configuration) and states. */
     goertzel_descriptor_t desc_zero;
@@ -265,25 +290,78 @@ static pj_status_t bfsk_det2_put_frame(pjmedia_port *this_port,
          * state is ready for the next block without further action. */
 
         /*
-         * FSK: at most one frequency should be active at a time.
-         * When both exceed the threshold pick the stronger one.
+         * Determine which frequency is dominant, with hysteresis.
+         *
+         * When a tone is already being tracked (in_progress), the opposite
+         * tone must exceed it by DOMINANCE_HYSTERESIS to be considered
+         * dominant.  This prevents rapid flip-flopping when both frequencies
+         * carry energy (e.g. at the boundary between back-to-back bits).
+         *
+         * When neither tone is being tracked, use a simple comparison.
          */
-        int zero, one;
-        if (zero_power >= dport->threshold || one_power >= dport->threshold) {
-            if (zero_power >= one_power) {
-                zero = 1;
-                one  = 0;
+        int above_zero = zero_power >= dport->threshold;
+        int above_one  = one_power  >= dport->threshold;
+
+        int dominant_zero, dominant_one;
+
+        if (above_zero || above_one) {
+            if (dport->zero_in_progress) {
+                if (one_power > zero_power * DOMINANCE_HYSTERESIS) {
+                    dominant_zero = 0;
+                    dominant_one  = 1;
+                } else {
+                    dominant_zero = 1;
+                    dominant_one  = 0;
+                }
+            } else if (dport->one_in_progress) {
+                if (zero_power > one_power * DOMINANCE_HYSTERESIS) {
+                    dominant_zero = 1;
+                    dominant_one  = 0;
+                } else {
+                    dominant_zero = 0;
+                    dominant_one  = 1;
+                }
             } else {
-                zero = 0;
-                one  = 1;
+                if (zero_power >= one_power) {
+                    dominant_zero = 1;
+                    dominant_one  = 0;
+                } else {
+                    dominant_zero = 0;
+                    dominant_one  = 1;
+                }
             }
         } else {
-            zero = 0;
-            one  = 0;
+            dominant_zero = 0;
+            dominant_one  = 0;
         }
 
-        TRACE_((THIS_FILE, "zero_power=%f one_power=%f threshold=%f zero=%d one=%d",
+        if (dominant_zero) {
+            dport->confirm_zero++;
+            dport->confirm_one = 0;
+        } else if (dominant_one) {
+            dport->confirm_one++;
+            dport->confirm_zero = 0;
+        } else {
+            dport->confirm_zero = 0;
+            dport->confirm_one  = 0;
+        }
+
+        int confirmed_zero = dport->confirm_zero >= MIN_CONFIRM;
+        int confirmed_one  = dport->confirm_one  >= MIN_CONFIRM;
+
+        int zero, one;
+        if (confirmed_zero) {
+            zero = 1; one = 0;
+        } else if (confirmed_one) {
+            zero = 0; one = 1;
+        } else {
+            zero = 0; one = 0;
+        }
+
+        TRACE_((THIS_FILE, "zero_power=%f one_power=%f threshold=%f dz=%d do=%d cz=%d co=%d zero=%d one=%d",
                 (double)zero_power, (double)one_power, (double)dport->threshold,
+                dominant_zero, dominant_one,
+                dport->confirm_zero, dport->confirm_one,
                 zero, one));
 
         /* Decrement cooldown counters every block. */
@@ -291,17 +369,17 @@ static pj_status_t bfsk_det2_put_frame(pjmedia_port *this_port,
         if (dport->cooldown_one  > 0) dport->cooldown_one--;
 
         /*
-         * Fast path: if tracking one tone and the other tone becomes
-         * dominant, the current tone has definitely ended.  Report it
-         * immediately and switch.
+         * Fast path: if tracking one tone and the opposite tone has been
+         * confirmed dominant for MIN_CONFIRM consecutive blocks, report
+         * the current bit immediately.
          */
-        if (dport->zero_in_progress && one) {
+        if (dport->zero_in_progress && confirmed_one) {
             dport->bfsk_cb((pjmedia_port*)dport, dport->bfsk_cb_user_data, 0);
             dport->zero_in_progress = 0;
             dport->below_count_zero = 0;
             dport->cooldown_zero = MIN_COOLDOWN;
         }
-        if (dport->one_in_progress && zero) {
+        if (dport->one_in_progress && confirmed_zero) {
             dport->bfsk_cb((pjmedia_port*)dport, dport->bfsk_cb_user_data, 1);
             dport->one_in_progress = 0;
             dport->below_count_one = 0;
@@ -310,7 +388,7 @@ static pj_status_t bfsk_det2_put_frame(pjmedia_port *this_port,
 
         /* Report bit=0 on trailing edge of zero tone. */
         if (dport->zero_in_progress) {
-            if (!zero) {
+            if (!zero && !one) {
                 dport->below_count_zero++;
                 if (dport->below_count_zero >= MIN_BELOW) {
                     dport->bfsk_cb((pjmedia_port*)dport, dport->bfsk_cb_user_data, 0);
@@ -328,7 +406,7 @@ static pj_status_t bfsk_det2_put_frame(pjmedia_port *this_port,
 
         /* Report bit=1 on trailing edge of one tone. */
         if (dport->one_in_progress) {
-            if (!one) {
+            if (!zero && !one) {
                 dport->below_count_one++;
                 if (dport->below_count_one >= MIN_BELOW) {
                     dport->bfsk_cb((pjmedia_port*)dport, dport->bfsk_cb_user_data, 1);

@@ -99,6 +99,25 @@
  */
 #define MIN_COOLDOWN 7
 
+/*
+ * MIN_CONFIRM: number of consecutive chunks the opposite tone must be
+ * dominant before the fast path fires.  At the default signal_duration
+ * of 10 ms (5 chunks per tone), MIN_CONFIRM=2 (4 ms) filters out
+ * single-chunk noise spikes and spectral-leakage flip-flops at frequency
+ * transitions, while still switching within the first half of the new tone.
+ */
+#define MIN_CONFIRM 2
+
+/*
+ * DOMINANCE_HYSTERESIS: when a tone is currently tracked (*_in_progress),
+ * the opposite tone must exceed the tracked tone's power by this
+ * multiplicative factor to be considered dominant.  This prevents the
+ * rapid back-and-forth dominance flips that occur at frequency transitions
+ * when both frequencies carry residual energy (one decaying, one rising).
+ * A value of 1.25 means the new tone must be 25% stronger to overtake.
+ */
+#define DOMINANCE_HYSTERESIS 1.25f
+
 /* Converted by ChatGPT from https://github.com/hackergrrl/goertzel/blob/master/index.js */
 
 typedef struct {
@@ -219,6 +238,16 @@ struct bfsk_det
     int cooldown_zero;
     int cooldown_one;
 
+    /*
+     * confirm_*: consecutive chunks where the corresponding frequency has
+     * been the dominant active tone.  These counters gate the fast-path
+     * transition so that a single noisy chunk cannot trigger a premature
+     * bit report.  Reset to 0 whenever the other frequency is dominant or
+     * both are below threshold.
+     */
+    int confirm_zero;
+    int confirm_one;
+
     goertzel_t *goertzel_zero;
     goertzel_t *goertzel_one;
 
@@ -292,65 +321,129 @@ static pj_status_t bfsk_det_put_frame(pjmedia_port *this_port,
         float  one_power = goertzel_mag(dport->goertzel_one,  chunk);
 
         /*
-         * For FSK exactly one frequency should be active at a time.
-         * If both exceed the threshold, treat the stronger one as active
-         * and suppress the other to prevent simultaneous callbacks.
+         * Determine which frequency is dominant, with hysteresis.
+         *
+         * When a tone is already being tracked (in_progress), the opposite
+         * tone must exceed it by DOMINANCE_HYSTERESIS to be considered
+         * dominant.  This prevents rapid flip-flopping when both frequencies
+         * carry energy (e.g. at the boundary between back-to-back bits).
+         *
+         * When neither tone is being tracked, use a simple comparison.
          */
-        int zero, one;
-        if (zero_power >= THRESHOLD || one_power >= THRESHOLD) {
-            if (zero_power >= one_power) {
-                zero = 1;
-                one  = 0;
+        int above_zero = zero_power >= THRESHOLD;
+        int above_one  = one_power  >= THRESHOLD;
+
+        int dominant_zero, dominant_one;
+
+        if (above_zero || above_one) {
+            if (dport->zero_in_progress) {
+                /* Zero is tracked: one must exceed zero by the hysteresis margin */
+                if (one_power > zero_power * DOMINANCE_HYSTERESIS) {
+                    dominant_zero = 0;
+                    dominant_one  = 1;
+                } else {
+                    dominant_zero = 1;
+                    dominant_one  = 0;
+                }
+            } else if (dport->one_in_progress) {
+                /* One is tracked: zero must exceed one by the hysteresis margin */
+                if (zero_power > one_power * DOMINANCE_HYSTERESIS) {
+                    dominant_zero = 1;
+                    dominant_one  = 0;
+                } else {
+                    dominant_zero = 0;
+                    dominant_one  = 1;
+                }
             } else {
-                zero = 0;
-                one  = 1;
+                /* Neither tracked — simple comparison */
+                if (zero_power >= one_power) {
+                    dominant_zero = 1;
+                    dominant_one  = 0;
+                } else {
+                    dominant_zero = 0;
+                    dominant_one  = 1;
+                }
             }
         } else {
-            zero = 0;
-            one  = 0;
+            dominant_zero = 0;
+            dominant_one  = 0;
         }
 
-        TRACE_((THIS_FILE, "chunk=%d zero_power=%.3f one_power=%.3f zero=%d one=%d zp=%d op=%d zbc=%d obc=%d",
-                i, zero_power, one_power, zero, one,
-                dport->zero_in_progress, dport->one_in_progress,
-                dport->below_count_zero, dport->below_count_one));
+        /*
+         * Update confirmation counters.
+         * confirm_* counts consecutive chunks where the frequency is
+         * dominant.  Reset to 0 when the other frequency is dominant
+         * or neither is above threshold.
+         */
+        if (dominant_zero) {
+            dport->confirm_zero++;
+            dport->confirm_one = 0;
+        } else if (dominant_one) {
+            dport->confirm_one++;
+            dport->confirm_zero = 0;
+        } else {
+            dport->confirm_zero = 0;
+            dport->confirm_one  = 0;
+        }
+
+        int confirmed_zero = dport->confirm_zero >= MIN_CONFIRM;
+        int confirmed_one  = dport->confirm_one  >= MIN_CONFIRM;
 
         /*
-         * Report bit on trailing edge of tone, with debouncing.
-         * Require MIN_BELOW consecutive below-threshold chunks before
-         * reporting, to filter out single-chunk glitches that are common
-         * on VMs due to timer interrupt coalescing.
+         * For trajectory tracking (below_count), use the confirmed
+         * dominance — once a clear winner has emerged, the loser is
+         * considered "not present" even if its raw power briefly exceeds
+         * threshold.  This keeps the below_count from resetting due to
+         * residual energy from the previous tone.
          */
+        int zero, one;
+        if (confirmed_zero) {
+            zero = 1; one = 0;
+        } else if (confirmed_one) {
+            zero = 0; one = 1;
+        } else {
+            zero = 0; one = 0;
+        }
+
+        TRACE_((THIS_FILE, "chunk=%d zp=%.3f op=%.3f dz=%d do=%d cz=%d co=%d zero=%d one=%d zp=%d op=%d zbc=%d obc=%d",
+                i, zero_power, one_power,
+                dominant_zero, dominant_one,
+                dport->confirm_zero, dport->confirm_one,
+                zero, one,
+                dport->zero_in_progress, dport->one_in_progress,
+                dport->below_count_zero, dport->below_count_one));
 
         /* Decrement cooldown counters every chunk. */
         if (dport->cooldown_zero > 0) dport->cooldown_zero--;
         if (dport->cooldown_one  > 0) dport->cooldown_one--;
 
         /*
-         * Fast path: if tracking one tone and the other tone becomes
-         * dominant, the current tone has definitely ended.  Report it
-         * immediately and switch, rather than waiting for MIN_BELOW
-         * chunks of silence.  This eliminates the need for a silence gap
-         * between back-to-back tones, which is critical when an
-         * intermediary (e.g. FreeSWITCH) compresses or eliminates the
-         * inter-bit gap.
+         * Fast path: if tracking one tone and the opposite tone has been
+         * confirmed dominant for MIN_CONFIRM consecutive chunks, report
+         * the current bit immediately.  The confirmation window filters
+         * out single-chunk noise spikes that would otherwise trigger
+         * premature bit reports.
          */
-        if (dport->zero_in_progress && one) {
+        if (dport->zero_in_progress && confirmed_one) {
             dport->bfsk_cb((pjmedia_port*)dport, dport->bfsk_cb_user_data, 0);
             dport->zero_in_progress = 0;
             dport->below_count_zero = 0;
             dport->cooldown_zero = MIN_COOLDOWN;
         }
-        if (dport->one_in_progress && zero) {
+        if (dport->one_in_progress && confirmed_zero) {
             dport->bfsk_cb((pjmedia_port*)dport, dport->bfsk_cb_user_data, 1);
             dport->one_in_progress = 0;
             dport->below_count_one = 0;
             dport->cooldown_one = MIN_COOLDOWN;
         }
 
-        /* Report bit=0 on trailing edge of zero tone. */
+        /*
+         * Normal trailing-edge detection: when a tracked tone drops below
+         * threshold (both frequencies absent), increment below_count.
+         * Report after MIN_BELOW consecutive below-threshold chunks.
+         */
         if (dport->zero_in_progress) {
-            if (!zero) {
+            if (!zero && !one) {
                 dport->below_count_zero++;
                 if (dport->below_count_zero >= MIN_BELOW) {
                     dport->bfsk_cb((pjmedia_port*)dport, dport->bfsk_cb_user_data, 0);
@@ -366,9 +459,8 @@ static pj_status_t bfsk_det_put_frame(pjmedia_port *this_port,
             dport->below_count_zero = 0;
         }
 
-        /* Report bit=1 on trailing edge of one tone. */
         if (dport->one_in_progress) {
-            if (!one) {
+            if (!zero && !one) {
                 dport->below_count_one++;
                 if (dport->below_count_one >= MIN_BELOW) {
                     dport->bfsk_cb((pjmedia_port*)dport, dport->bfsk_cb_user_data, 1);
