@@ -87,7 +87,7 @@ async function test() {
 
   await z.sleep(100)
 
-  sip.call.start_play_wav(oc.id, {file: REF_WAV})
+  sip.call.start_play_wav(oc.id, {file: REF_WAV, end_of_file_event: true})
 
   console.log("Starting envelope detection")
   sip.call.start_envelope_detection(ic.id, {
@@ -97,8 +97,20 @@ async function test() {
     check_stride: 2,
   })
 
+  // the first tine the file is played, the envelope is not detected as the envelope detector is still prefilling its work buffer.
+  await z.wait([
+    {
+      event: 'end_of_file',
+      call_id: oc.id
+    },
+  ], 3000)
+
   for(var i=0 ; i<3 ; i++) {
       await z.wait([
+        {
+          event: 'end_of_file',
+          call_id: oc.id
+        },
         {
           event: 'envelope_match',
           call_id: ic.id,
