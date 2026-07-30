@@ -1,5 +1,8 @@
 ### Release Nrtes
 
+## 1.49.1
+  - Bug Correction: envelope detection was failing to detect the first occurrence of the pattern.
+
 ## 1.49.0
   - New Feature: [Add support for Speech Sample Cross-Correlation](https://github.com/MayamaTakeshi/sip-lab/issues/144)
 
