@@ -1,5 +1,8 @@
 ### Release Notes
 
+## 1.48.1
+  - Bug Correction: [Correction of bfsk detection](https://github.com/MayamaTakeshi/sip-lab/issues/143)
+
 ## 1.48.0
   - New Feature: [Add transport.destroy](https://github.com/MayamaTakeshi/sip-lab/issues/142)
 
