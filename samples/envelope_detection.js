@@ -85,14 +85,15 @@ async function test() {
     },
   ], 1000)
 
+  await z.sleep(100)
+
   sip.call.start_play_wav(oc.id, {file: REF_WAV})
 
-  await z.sleep(500)
-
+  console.log("Starting envelope detection")
   sip.call.start_envelope_detection(ic.id, {
     ref_file: REF_WAV,
     threshold: 0.3,
-    cooldown_ms: 2000,
+    cooldown_ms: 500,
     check_stride: 2,
   })
 
@@ -131,7 +132,7 @@ async function test() {
     },
   ], 1000)
 
-  await z.sleep(100)
+  await z.sleep(50)
 
   console.log('Success')
 
