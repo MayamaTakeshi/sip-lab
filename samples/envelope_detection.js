@@ -97,7 +97,7 @@ async function test() {
     check_stride: 2,
   })
 
-  for(var i=1 ; i<5 ; i++) {
+  for(var i=0 ; i<3 ; i++) {
       await z.wait([
         {
           event: 'envelope_match',
