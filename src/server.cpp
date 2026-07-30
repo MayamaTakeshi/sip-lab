@@ -453,6 +453,26 @@ static void dispatch(int client_fd, const Document &doc) {
         return;
     }
 
+    /* ---- call_start_envelope_detection --------------------------- */
+    if (strcmp(cmd, "call_start_envelope_detection") == 0) {
+        REQUIRE_INT(doc, "call_id", call_id)
+        REQUIRE_STRING(doc, "params", params_json)
+        int res = pjw_call_start_envelope_detection(call_id, params_json);
+        if (res != 0) { send_error(client_fd, seq, pjw_get_error()); return; }
+        send_ok(client_fd, seq);
+        return;
+    }
+
+    /* ---- call_stop_envelope_detection ---------------------------- */
+    if (strcmp(cmd, "call_stop_envelope_detection") == 0) {
+        REQUIRE_INT(doc, "call_id", call_id)
+        REQUIRE_STRING(doc, "params", params_json)
+        int res = pjw_call_stop_envelope_detection(call_id, params_json);
+        if (res != 0) { send_error(client_fd, seq, pjw_get_error()); return; }
+        send_ok(client_fd, seq);
+        return;
+    }
+
     /* ---- call_get_stream_stat ------------------------------------ */
     if (strcmp(cmd, "call_get_stream_stat") == 0) {
         REQUIRE_INT(doc, "call_id", call_id)

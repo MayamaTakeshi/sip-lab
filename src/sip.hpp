@@ -79,6 +79,10 @@ int pjw_call_start_bfsk_detection(long call_id, const char *json);
 
 int pjw_call_stop_bfsk_detection(long call_id, const char *json);
 
+int pjw_call_start_envelope_detection(long call_id, const char *json);
+
+int pjw_call_stop_envelope_detection(long call_id, const char *json);
+
 int pjw_call_get_stream_stat(long call_id, const char *json, char *out_stats);
 
 // int pjw_call_refer(long call_id, const char *json, long

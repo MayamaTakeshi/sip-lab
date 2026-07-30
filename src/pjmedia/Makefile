@@ -18,7 +18,7 @@ all: libchainlink.a
 
 #libchainlink.a: chainlink_wire_port.o chainlink_dtmfdet.o chainlink_tonegen.o chainlink_wav_player.o
 #libchainlink.a: chainlink_wire_port.o chainlink_dtmfdet.o chainlink_tonegen.o
-libchainlink.a: chainlink_wire_port.o chainlink_dtmfdet.o chainlink_wav_player.o chainlink_wav_writer.o chainlink_tonegen.o chainlink_fax.o
+libchainlink.a: chainlink_wire_port.o chainlink_dtmfdet.o chainlink_wav_player.o chainlink_wav_writer.o chainlink_tonegen.o chainlink_fax.o chainlink_xcorr_det.o
 	ar rcs $@ $^
 
 chainlink_wire_port.o: 
@@ -32,6 +32,8 @@ chainlink_wav_writer.o:
 chainlink_tonegen.o:
 
 chainlink_fax.o:
+
+chainlink_xcorr_det.o:
 
 clean:
 	rm -f *.o

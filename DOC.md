@@ -371,6 +371,26 @@ Starts BFSK detection.
   - `freq_zero`: The frequency for the '0' bit.
   - `freq_one`: The frequency for the '1' bit.
 
+#### `start_envelope_detection(call_id, options)`
+
+Starts envelope detection on a call leg. The detector plays a reference WAV file in a loop on one leg and detects it on the other leg by computing sliding normalized Pearson correlation between the decimated (8×) live audio and the reference. When the correlation exceeds the threshold, an `envelope_match` event is fired.
+
+Useful for codecs where DTMF or BFSK cannot be transmitted reliably (e.g. G.729, AMR).
+
+- `call_id`: The ID of the call to start detection on.
+- `options`: An object with the following properties:
+  - `ref_file`: Path to a reference WAV file (PCM 16-bit or μ-law 8-bit, mono).
+  - `threshold` (optional): Correlation threshold (0.0–1.0). Default 0.5.
+  - `cooldown_ms` (optional): Minimum interval between match events in ms. Default 0.
+  - `check_stride` (optional): Check every N frames (default 4). Lower values check more often.
+  - `media_id` (optional): The ID of the media stream to start detection on.
+
+#### `stop_envelope_detection(call_id)`
+
+Stops envelope detection.
+
+- `call_id`: The ID of the call to stop detection on.
+
 #### `send_mrcp_msg(call_id, options)`
 
 Sends an MRCP message.
@@ -472,6 +492,7 @@ Stops the sip engine
 - `media_update`: Fired when the media status of a call is updated.
 - `dtmf`: Fired when DTMF tones are received.
 - `bfsk`: Fired when BFSK bits are received.
+- `envelope_match`: Fired when envelope detection finds a correlation above the threshold. Payload includes `call_id` and `media_id`.
 - `fax_result`: Fired when a fax transmission is complete.
 - `mrcp_msg`: Fired when an MRCP message is received.
 - `speech`: Fired when speech is recognized.

@@ -137,3 +137,9 @@ int make_evt_ws_speech_event(char *dest, int size, long call_id, char *data, int
       "{\"event\": \"ws_speech_event\", \"call_id\": %ld, \"data\": %.*s}", call_id, data_len, data);
 }
 
+int make_evt_envelope_match(char *dest, int size, long call_id, int media_id) {
+  return snprintf(dest, size,
+                  "{\"event\": \"envelope_match\", \"call_id\": %ld, \"media_id\": %i}",
+                  call_id, media_id);
+}
+

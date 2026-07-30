@@ -236,6 +236,10 @@ addon.call = {
     _cmd({ cmd: 'call_start_bfsk_detection', call_id: c_id, params: JSON.stringify(params || {}) }),
   stop_bfsk_detection: (c_id, params) =>
     _cmd({ cmd: 'call_stop_bfsk_detection', call_id: c_id, params: JSON.stringify(params || {}) }),
+  start_envelope_detection: (c_id, params) =>
+    _cmd({ cmd: 'call_start_envelope_detection', call_id: c_id, params: JSON.stringify(params) }),
+  stop_envelope_detection: (c_id, params) =>
+    _cmd({ cmd: 'call_stop_envelope_detection', call_id: c_id, params: JSON.stringify(params || {}) }),
   start_speech_recog: (c_id, params) => {
     const ps = params ? { ...params } : {}
     delete ps.model_path  // handled via server env POCKETSPHINX_PATH

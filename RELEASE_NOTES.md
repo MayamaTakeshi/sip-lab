@@ -1,4 +1,7 @@
-### Release Notes
+### Release Nrtes
+
+## 1.49.0
+  - New Feature: [Add support for Speech Sample Cross-Correlation](https://github.com/MayamaTakeshi/sip-lab/issues/144)
 
 ## 1.48.1
   - Bug Correction: [Correction of bfsk detection](https://github.com/MayamaTakeshi/sip-lab/issues/143)

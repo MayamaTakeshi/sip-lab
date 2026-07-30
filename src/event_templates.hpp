@@ -47,4 +47,6 @@ int make_evt_tcp_msg(char *dest, int size, long call_id, const char *protocol, c
 
 int make_evt_ws_speech_event(char *dest, int size, long call_id, char *data, int data_len);
 
+int make_evt_envelope_match(char *dest, int size, long call_id, int media_id);
+
 #endif

@@ -799,6 +799,73 @@ Napi::Value call_stop_inband_dtmf_detection(const Napi::CallbackInfo &info) {
   return env.Null();
 }
 
+Napi::Value call_start_envelope_detection(const Napi::CallbackInfo &info) {
+  Napi::Env env = info.Env();
+
+  if (info.Length() != 2) {
+    Napi::Error::New(env,
+                     "Wrong number of arguments. Expected: call_id, params.")
+        .ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
+  if (!info[0].IsNumber()) {
+    Napi::TypeError::New(env, "call_id must be number.")
+        .ThrowAsJavaScriptException();
+    return env.Null();
+  }
+  int call_id = info[0].As<Napi::Number>().Int32Value();
+
+  if (!info[1].IsString()) {
+    Napi::TypeError::New(env, "params must be a JSON string.")
+        .ThrowAsJavaScriptException();
+    return env.Null();
+  }
+  const string json = info[1].As<Napi::String>().Utf8Value();
+
+  int res = pjw_call_start_envelope_detection(call_id, json.c_str());
+
+  if (res != 0) {
+    Napi::Error::New(env, pjw_get_error()).ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
+  return env.Null();
+}
+
+Napi::Value call_stop_envelope_detection(const Napi::CallbackInfo &info) {
+  Napi::Env env = info.Env();
+
+  if (info.Length() != 2) {
+    Napi::Error::New(env, "Wrong number of arguments. Expected: call_id, params")
+        .ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
+  if (!info[0].IsNumber()) {
+    Napi::TypeError::New(env, "call_id must be number.")
+        .ThrowAsJavaScriptException();
+    return env.Null();
+  }
+  int call_id = info[0].As<Napi::Number>().Int32Value();
+
+  if (!info[1].IsString()) {
+    Napi::TypeError::New(env, "params must be a JSON string.")
+        .ThrowAsJavaScriptException();
+    return env.Null();
+  }
+  const string json = info[1].As<Napi::String>().Utf8Value();
+
+  int res = pjw_call_stop_envelope_detection(call_id, json.c_str());
+
+  if (res != 0) {
+    Napi::Error::New(env, pjw_get_error()).ThrowAsJavaScriptException();
+    return env.Null();
+  }
+
+  return env.Null();
+}
+
 Napi::Value call_start_bfsk_detection(const Napi::CallbackInfo &info) {
   Napi::Env env = info.Env();
 
@@ -1712,6 +1779,7 @@ Napi::Object init(Napi::Env env, Napi::Object exports) {
   exports.Set("call_start_speech_recog", Napi::Function::New(env, call_start_speech_recog));
   exports.Set("call_start_inband_dtmf_detection", Napi::Function::New(env, call_start_inband_dtmf_detection));
   exports.Set("call_start_bfsk_detection", Napi::Function::New(env, call_start_bfsk_detection));
+  exports.Set("call_start_envelope_detection", Napi::Function::New(env, call_start_envelope_detection));
 
   exports.Set("call_stop_record_wav", Napi::Function::New(env, call_stop_record_wav));
   exports.Set("call_stop_play_wav", Napi::Function::New(env, call_stop_play_wav));
@@ -1720,6 +1788,7 @@ Napi::Object init(Napi::Env env, Napi::Object exports) {
   exports.Set("call_stop_speech_recog", Napi::Function::New(env, call_stop_speech_recog));
   exports.Set("call_stop_inband_dtmf_detection", Napi::Function::New(env, call_stop_inband_dtmf_detection));
   exports.Set("call_stop_bfsk_detection", Napi::Function::New(env, call_stop_bfsk_detection));
+  exports.Set("call_stop_envelope_detection", Napi::Function::New(env, call_stop_envelope_detection));
 
   exports.Set("call_get_stream_stat",
               Napi::Function::New(env, call_get_stream_stat));

@@ -37,6 +37,7 @@
 #include "flite_port.h"
 #include "pocketsphinx_port.h"
 #include "ws_speech_port.h"
+#include "chainlink/chainlink_xcorr_det.h"
 
 #include <ctime>
 
@@ -334,15 +335,16 @@ struct ConfBridgePort {
     short implementation;
 };
 
-#define FP_DTMFDET      0
-#define FP_WAV_PLAYER   1
-#define FP_WAV_WRITER   2
-#define FP_TONEGEN      3
-#define FP_FAX          4
-#define FP_SPEECH_SYNTH 5
-#define FP_SPEECH_RECOG 6
-#define FP_BFSK_DET     7
-#define MAX_FP          8
+#define FP_DTMFDET       0
+#define FP_WAV_PLAYER    1
+#define FP_WAV_WRITER    2
+#define FP_TONEGEN       3
+#define FP_FAX           4
+#define FP_SPEECH_SYNTH  5
+#define FP_SPEECH_RECOG  6
+#define FP_BFSK_DET      7
+#define FP_ENVELOPE_DET  8
+#define MAX_FP           9
 
 struct AudioEndpoint {
   pjmedia_transport *med_transport;
@@ -660,6 +662,7 @@ bool prepare_wav_writer(Call *call, AudioEndpoint *ae, const char *file);
 bool prepare_fax(Call *call, AudioEndpoint *ae, bool is_sender, const char *file, unsigned flags);
 bool prepare_speech_synth(Call *call, AudioEndpoint *ae, const char *server_url, const char *uuid, const char *engine, const char *voice, const char *language, const char *text, int times);
 bool prepare_speech_recog(Call *call, AudioEndpoint *ae, const char *server_url, const char *uuid, const char *engine, const char *language);
+bool prepare_xcorr_det(Call *call, AudioEndpoint *ae, const char *ref_file, double threshold, unsigned cooldown_ms, unsigned check_stride);
 
 void prepare_error_event(ostringstream *oss, char *scope, char *details);
 // void prepare_pjsipcall_error_event(ostringstream *oss, char *scope, char
@@ -681,6 +684,7 @@ pj_status_t audio_endpoint_stop_fax(Call *call, AudioEndpoint *ae);
 pj_status_t audio_endpoint_stop_speech_synth(Call *call, AudioEndpoint *ae);
 pj_status_t audio_endpoint_stop_speech_recog(Call *call, AudioEndpoint *ae);
 pj_status_t audio_endpoint_stop_inband_dtmf_detection(Call *call, AudioEndpoint *ae);
+pj_status_t audio_endpoint_stop_envelope_detection(Call *call, AudioEndpoint *ae);
 
 static pjsip_module mod_tester = {
     NULL,
@@ -1118,6 +1122,26 @@ static void on_speech_transcript(pjmedia_port*, void *user_data, char* transcrip
  
   char evt[1024];
   make_evt_speech(evt, sizeof(evt), call_id, transcript);
+  dispatch_event(evt);
+}
+
+static void on_envelope_match(pjmedia_port *port, void *user_data) {
+  if (g_shutting_down)
+    return;
+
+  long call_id;
+  if (!g_call_ids.get_id((long)user_data, call_id)) {
+    addon_log(L_DBG,
+        "on_envelope_match: Failed to get call_id. Event will not be notified.\n");
+    return;
+  }
+
+  Call *call = (Call *)user_data;
+  int media_id = find_endpoint_by_media_port(call, port, FP_ENVELOPE_DET);
+  assert(media_id >= 0);
+
+  char evt[1024];
+  make_evt_envelope_match(evt, sizeof(evt), call_id, media_id);
   dispatch_event(evt);
 }
 
@@ -5233,6 +5257,10 @@ pj_status_t audio_endpoint_stop_bfsk_detection(Call *call, AudioEndpoint *ae) {
   return audio_endpoint_remove_port(call, ae, &ae->feature_cbps[FP_BFSK_DET]);
 }
 
+pj_status_t audio_endpoint_stop_envelope_detection(Call *call, AudioEndpoint *ae) {
+  return audio_endpoint_remove_port(call, ae, &ae->feature_cbps[FP_ENVELOPE_DET]);
+}
+
 
 int pjw_call_stop_play_wav(long call_id, const char *json) {
   return audio_endpoint_stop_op(call_id, json, audio_endpoint_stop_play_wav);
@@ -5260,6 +5288,134 @@ int pjw_call_stop_inband_dtmf_detection(long call_id, const char *json) {
 
 int pjw_call_stop_bfsk_detection(long call_id, const char *json) {
   return audio_endpoint_stop_op(call_id, json, audio_endpoint_stop_bfsk_detection);
+}
+
+int pjw_call_start_envelope_detection(long call_id, const char *json) {
+  PJW_LOCK();
+  clear_error();
+
+  long val;
+  Call *call;
+  pj_status_t status;
+
+  char *ref_file = NULL;
+  double threshold = 0.5;
+  unsigned cooldown_ms = 0;
+  unsigned check_stride = 4;
+
+  MediaEndpoint *me;
+  AudioEndpoint *ae;
+  int ae_count;
+  int res;
+
+  int media_id = -1;
+
+  char buffer[MAX_JSON_INPUT];
+
+  const char *valid_params[] = {"ref_file", "threshold", "cooldown_ms",
+                                "check_stride", "media_id", ""};
+
+  Document document;
+
+  if (!g_call_ids.get(call_id, val)) {
+    set_error("Invalid call_id");
+    goto out;
+  }
+  call = (Call *)val;
+
+  ae_count = count_media_by_type(call, ENDPOINT_TYPE_AUDIO);
+
+  if (ae_count == 0) {
+    set_error("No audio endpoint");
+    goto out;
+  }
+
+  if (!parse_json(document, json, buffer, MAX_JSON_INPUT)) {
+    goto out;
+  }
+
+  if (!validate_params(document, valid_params)) {
+    goto out;
+  }
+
+  if (json_get_string_param(document, "ref_file", false, &ref_file) <= 0) {
+    goto out;
+  }
+
+  if (!ref_file[0]) {
+    set_error("ref_file cannot be blank string");
+    goto out;
+  }
+
+  if (document.HasMember("threshold")) {
+    if (!document["threshold"].IsDouble() && !document["threshold"].IsInt()) {
+      set_error("threshold must be a number");
+      goto out;
+    }
+    threshold = document["threshold"].IsDouble()
+                    ? document["threshold"].GetDouble()
+                    : (double)document["threshold"].GetInt();
+  }
+
+  if (json_get_uint_param(document, "cooldown_ms", true, &cooldown_ms) <= 0) {
+    goto out;
+  }
+
+  if (json_get_uint_param(document, "check_stride", true, &check_stride) <= 0) {
+    goto out;
+  }
+
+  res = json_get_int_param(document, "media_id", true, &media_id);
+  if (res <= 0) {
+    goto out;
+  }
+
+  if (NOT_FOUND_OPTIONAL == res) {
+    for (int i = 0; i < call->media_count; i++) {
+      MediaEndpoint *me = (MediaEndpoint *)call->media[i];
+      if (me->type == ENDPOINT_TYPE_AUDIO) {
+        AudioEndpoint *ae = (AudioEndpoint *)me->endpoint.audio;
+        status = audio_endpoint_stop_envelope_detection(call, ae);
+        if (status != PJ_SUCCESS) goto out;
+        if (!prepare_xcorr_det(call, ae, ref_file, threshold,
+                               cooldown_ms, check_stride))
+          goto out;
+      }
+    }
+  } else {
+    if (media_id >= call->media_count) {
+      set_error("invalid media_id");
+      goto out;
+    }
+
+    me = (MediaEndpoint *)call->media[media_id];
+    if (ENDPOINT_TYPE_AUDIO != me->type) {
+      set_error("media_endpoint is not audio endpoint");
+      goto out;
+    }
+
+    ae = (AudioEndpoint *)me->endpoint.audio;
+
+    status = audio_endpoint_stop_envelope_detection(call, ae);
+    if (status != PJ_SUCCESS) goto out;
+
+    if (!prepare_xcorr_det(call, ae, ref_file, threshold,
+                           cooldown_ms, check_stride)) {
+      goto out;
+    }
+  }
+
+out:
+  PJW_UNLOCK();
+  if (pjw_errorstring[0]) {
+    return -1;
+  }
+
+  return 0;
+}
+
+int pjw_call_stop_envelope_detection(long call_id, const char *json) {
+  return audio_endpoint_stop_op(call_id, json, audio_endpoint_stop_envelope_detection);
 }
 
 
@@ -8116,6 +8272,45 @@ bool prepare_bfsk_det(Call *call, AudioEndpoint *ae, const int freq_zero, const 
   }
   
   status = pjmedia_conf_add_port(ae->conf, call->inv->pool, fp->port, NULL, &fp->slot);
+  if (status != PJ_SUCCESS) {
+    set_error("pjmedia_conf_add_port failed");
+    return false;
+  }
+
+  fp->connection_mode = CONNECTION_MODE_SINK;
+
+  return connect_feature_port_to_stream_port(call, ae, fp);
+}
+
+
+bool prepare_xcorr_det(Call *call, AudioEndpoint *ae, const char *ref_file,
+                       double threshold, unsigned cooldown_ms,
+                       unsigned check_stride) {
+  pj_status_t status;
+
+  ConfBridgePort *fp = &ae->feature_cbps[FP_ENVELOPE_DET];
+
+  if (fp->port) {
+    printf("xcorr_det already prepared\n");
+    return true;
+  }
+
+  status = chainlink_xcorr_det_create(
+      call->inv->pool,
+      PJMEDIA_PIA_SRATE(&ae->stream_cbp.port->info),
+      PJMEDIA_PIA_CCNT(&ae->stream_cbp.port->info),
+      PJMEDIA_PIA_SPF(&ae->stream_cbp.port->info),
+      PJMEDIA_PIA_BITS(&ae->stream_cbp.port->info),
+      ref_file, threshold, cooldown_ms, check_stride,
+      on_envelope_match, call, &fp->port);
+
+  if (status != PJ_SUCCESS) {
+    set_error("chainlink_xcorr_det_create failed");
+    return false;
+  }
+
+  status = pjmedia_conf_add_port(ae->conf, call->inv->pool, fp->port, NULL,
+                                 &fp->slot);
   if (status != PJ_SUCCESS) {
     set_error("pjmedia_conf_add_port failed");
     return false;
