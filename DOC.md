@@ -16,6 +16,7 @@ It permits to:
 - do speech synth using flite
 - do speech recog using pocketsphinx (but only works well with sampling rate of 16000)
 - do speech synth/recog using ws_speech_server (this permits to use google/amazon/azure/etc speech services)
+- do speech envelope detection for Speech Sample Cross-Correlation testing (useful to check audio in case of low bit-rate codecs like G.729 and GSM)
   
 TODO:
 
@@ -373,9 +374,9 @@ Starts BFSK detection.
 
 #### `start_envelope_detection(call_id, options)`
 
-Starts envelope detection on a call leg. The detector plays a reference WAV file in a loop on one leg and detects it on the other leg by computing sliding normalized Pearson correlation between the decimated (8×) live audio and the reference. When the correlation exceeds the threshold, an `envelope_match` event is fired.
+Starts envelope detection on a call leg. The detector gets a reference WAV file and use it to detect a match in the incoming audio. This is done by computing sliding normalized Pearson correlation between the decimated (8×) live audio and the reference. When the correlation exceeds the threshold, an `envelope_match` event is fired.
 
-Useful for codecs where DTMF or BFSK cannot be transmitted reliably (e.g. G.729, AMR).
+Useful for codecs where DTMF or BFSK cannot be transmitted reliably (e.g. G.729, GSM).
 
 - `call_id`: The ID of the call to start detection on.
 - `options`: An object with the following properties:
